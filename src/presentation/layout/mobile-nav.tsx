@@ -4,16 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BellRing,
-  BookOpen,
   CreditCard,
-  History,
   Layers,
   LayoutDashboard,
   Lock,
   MoreHorizontal,
   Radar,
-  Star,
   UserCog,
   X,
 } from "lucide-react";
@@ -23,16 +19,12 @@ import { usePlan } from "@/presentation/features/access/plan-provider";
 const PRIMARY = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/patterns", label: "Signals", icon: Layers },
-  { href: "/watchlist", label: "Watchlist", icon: Star },
-  { href: "/alerts", label: "Alerts", icon: BellRing },
 ];
 
 /** Everything else, reachable through the overflow sheet. */
 const SECONDARY = [
-  { href: "/history", label: "History", icon: History },
   { href: "/scanner", label: "Scanner", icon: Radar },
   { href: "/pricing", label: "Pricing", icon: CreditCard },
-  { href: "/tutorials", label: "Tutorials", icon: BookOpen },
   { href: "/account", label: "Akun", icon: UserCog },
 ];
 

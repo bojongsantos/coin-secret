@@ -9,7 +9,6 @@ import { SupplyDemandSection } from "@/presentation/features/dashboard/supply-de
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useTopSetups } from "@/presentation/hooks/use-scanner";
 import { MIN_DASHBOARD_CONFIDENCE } from "@/core/domain/analysis/signal-display";
-import { useWatchlistMembership } from "@/presentation/hooks/use-watchlist-membership";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Loader2 } from "lucide-react";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
@@ -18,7 +17,6 @@ export function DashboardClient() {
   // The API applies the confidence floor before ranking, so this list and the
   // Signals tables cannot disagree on the same screen.
   const { top, loading: topLoading, error: topError } = useTopSetups(5);
-  const membership = useWatchlistMembership();
   const [symbol, setSymbol] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
   const [range, setRange] = useState<HistoryRange>("3M");
@@ -34,10 +32,14 @@ export function DashboardClient() {
     range,
   );
 
-  const pick = (value: string) => {
+  const pick = (value: string, setupTimeframe?: Timeframe) => {
     const normalized = normalizeUsdtSymbol(value);
     if (!isValidBinanceSymbol(normalized)) return;
     setSymbol(normalized);
+    // The scanner reports which interval it found the setup on. Landing on a
+    // different one shows an empty plan for a symbol the strip just called a
+    // setup, which reads as a bug rather than as a different timeframe.
+    if (setupTimeframe) setTimeframe(setupTimeframe);
   };
 
   const selectFromSection = (value: string) => setSymbol(value.toUpperCase());
@@ -46,7 +48,7 @@ export function DashboardClient() {
     <AppShell analysis={analysis}>
       <div className="flex flex-col gap-4 p-3 sm:p-6">
         {/* Supply & Demand Zones — new top section */}
-        <SupplyDemandSection onSelect={selectFromSection} membership={membership} />
+        <SupplyDemandSection onSelect={selectFromSection} />
 
         {loading && (
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-2">
@@ -60,7 +62,6 @@ export function DashboardClient() {
         <section className="rounded-xl border border-border bg-surface p-3">
           <div className="mb-2.5 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-wide">Top 5 setup hari ini</p>
-            <span className="text-[10px] text-muted-2">diurutkan berdasarkan confidence</span>
           </div>
 
           {topLoading && (
@@ -85,7 +86,7 @@ export function DashboardClient() {
                   <button
                     key={t.hit.symbol}
                     type="button"
-                    onClick={() => pick(t.hit.symbol)}
+                    onClick={() => pick(t.hit.symbol, t.hit.timeframe)}
                     className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors ${
                       activeCard
                         ? "border-accent/50 bg-accent/10"

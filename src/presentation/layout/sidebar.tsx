@@ -3,16 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bell,
-  BookOpen,
   CreditCard,
-  History,
   Layers,
   LayoutDashboard,
   Lock,
   PanelLeftClose,
   PanelLeftOpen,
-  Star,
 } from "lucide-react";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useSidebarState } from "@/presentation/hooks/use-ui-preference";
@@ -29,11 +25,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
   { id: "signals", label: "Signals", href: "/patterns", icon: Layers },
-  { id: "watchlist", label: "Watchlist", href: "/watchlist", icon: Star },
-  { id: "alerts", label: "Alerts", href: "/alerts", icon: Bell },
-  { id: "history", label: "History", href: "/history", icon: History },
   { id: "pricing", label: "Pricing", href: "/pricing", icon: CreditCard },
-  { id: "tutorials", label: "Tutorials", href: "/tutorials", icon: BookOpen },
 ];
 
 export function Sidebar() {

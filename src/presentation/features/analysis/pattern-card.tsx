@@ -6,7 +6,6 @@ import { formatPercent, formatPrice } from "@/shared/lib/format";
 import { ProgressBar } from "@/presentation/ui/progress-bar";
 import { Badge } from "@/presentation/ui/badge";
 import { LockedOverlay } from "@/presentation/ui/locked-overlay";
-import { SaveSetupButton } from "@/presentation/features/watchlist/save-setup-button";
 
 interface PatternCardProps {
   pattern: PatternSummary;
@@ -110,7 +109,6 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
         </LockedOverlay>
       </div>
 
-      <SaveSetupButton pattern={pattern} />
     </section>
   );
 }

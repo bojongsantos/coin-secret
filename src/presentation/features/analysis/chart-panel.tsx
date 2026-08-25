@@ -44,7 +44,7 @@ class ZoneLabelPrimitive implements IPanePrimitive<Time> {
   private _priceSeries: ISeriesApi<"Candlestick"> | null = null;
   private _text: string;
   private _color: string;
-  private _font = "600 11px Inter, system-ui, sans-serif";
+  private _font = "italic 700 11px Inter, system-ui, sans-serif";
   private _timeFrom: Time;
   private _timeTo: Time;
   private _priceTop: number;
@@ -136,6 +136,17 @@ interface ChartPanelProps {
   /** Filled with a chart snapshot function so the header can build a share image. */
   captureRef?: MutableRefObject<(() => HTMLCanvasElement | null) | null>;
 }
+
+/**
+ * Zone box colours.
+ *
+ * Grey rather than green/red so the band reads as a marked region rather than
+ * an instruction. The label sits above it in near-white, which stays readable
+ * on the box in both themes because the box is drawn over the chart's own dark
+ * plot area either way.
+ */
+const ZONE_FILL = "#8a8a99";
+const ZONE_LABEL = "#e8e8f0";
 
 /** How many future candles the setup zone extends. */
 const ZONE_EXTEND_BARS = 12;
@@ -427,7 +438,9 @@ export function ChartPanel({
     for (const zone of zones) {
       if (!isSetupZone(zone)) continue;
       const isDemand = zone.type === "demand";
-      const color = isDemand ? "#22c55e" : "#f43f5e";
+      // Neutral grey: the band marks where the zone is, not what to do about
+      // it. Direction is already stated by the plan panel and the level lines.
+      const color = ZONE_FILL;
 
       // Broken zones: no fill, only a faint dashed outline.
       if (zone.strength === "broken") {
@@ -465,7 +478,7 @@ export function ChartPanel({
       // Horizontal band between [zone.bottom, zone.top] using BaselineSeries:
       // the baseline sits at zone.bottom and the line data at zone.top, so the
       // fill is bounded by the PRICE range, not the chart height.
-      const opacity = zone.strength === "fresh" ? "40" : "1f"; // 0.25 vs 0.12
+      const opacity = zone.strength === "fresh" ? "59" : "33"; // 0.35 vs 0.20
       const band = chart.addSeries(BaselineSeries, {
         baseValue: { type: "price", price: zone.bottom },
         lineVisible: false,
@@ -487,7 +500,7 @@ export function ChartPanel({
       // a chart-level pane primitive so it renders on top and over the future.
       const label = new ZoneLabelPrimitive(
         `${isDemand ? "DEMAND" : "SUPPLY"} ${zone.strength.toUpperCase()}`,
-        color,
+        ZONE_LABEL,
         fromTime,
         toTime,
         zone.top,

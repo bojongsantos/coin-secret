@@ -14,6 +14,17 @@ interface SignalsApiPayload {
   top: TopSetup[];
 }
 
+/**
+ * How often the scan lists re-read the market.
+ *
+ * Matches the server's own cache window, so a refresh is nearly free while the
+ * screen stays truthful. Fetching once on mount left the tables and the top-5
+ * strip frozen at the moment the page opened while the chart beside them kept
+ * streaming — click a setup listed minutes ago and the chart, correctly, shows
+ * nothing there any more.
+ */
+const SCAN_REFRESH_MS = 60_000;
+
 async function postScan<T>(path: string, body: Record<string, unknown>, useWatchlist = true): Promise<T> {
   const symbols = useWatchlist ? await fetchEnabledWatchlist() : undefined;
   const response = await fetch(path, {
@@ -62,7 +73,11 @@ export function useScanner(): {
   const refresh = useCallback(() => void execute(true), [execute]);
   useEffect(() => {
     const timer = window.setTimeout(() => void execute(false), 0);
-    return () => window.clearTimeout(timer);
+    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+    };
   }, [execute]);
 
   return { opportunities, total, loading, error, lastRun, refresh };
@@ -102,7 +117,11 @@ export function useSdScan(enabled = true): {
   useEffect(() => {
     if (!enabled) return;
     const timer = window.setTimeout(() => void execute(false), 0);
-    return () => window.clearTimeout(timer);
+    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+    };
   }, [execute, enabled]);
 
   return { result, loading, error, lastRun, refresh };
@@ -134,7 +153,11 @@ export function useTopSetups(limit = 5): {
   const refresh = useCallback(() => void execute(true), [execute]);
   useEffect(() => {
     const timer = window.setTimeout(() => void execute(false), 0);
-    return () => window.clearTimeout(timer);
+    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+    };
   }, [execute]);
 
   return { top, loading, error, refresh };

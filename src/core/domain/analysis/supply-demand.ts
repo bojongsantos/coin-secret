@@ -264,11 +264,9 @@ export function detectSupplyDemand(
   if (symbol && lockStore) {
     const locked = lockStore.load(symbol, timeframe);
     if (locked) {
-      const isLong = locked.direction === "long";
-      // Terminal checks use current price against the locked levels.
-      if (isLong ? price <= locked.stopLoss : price >= locked.stopLoss) {
-        lockStore.clear(symbol, timeframe);
-      } else if (isLong ? price >= locked.target2 : price <= locked.target2) {
+      // Terminal checks read the candles that closed while the lock was held.
+      // The spot price alone misses a wick that pierced the stop and recovered.
+      if (lockedSetupOutcome(candles, locked, price) !== null) {
         lockStore.clear(symbol, timeframe);
       } else {
         const zone: SdZone = {
@@ -384,6 +382,44 @@ export function detectSupplyDemand(
   }
 
   return { zones, setup, bias, support, resistance };
+}
+
+/**
+ * Whether a locked setup has already been decided by price.
+ *
+ * Reads the candles that closed while the lock was held, not just the current
+ * price. Comparing the spot price alone meant a wick that pierced the stop and
+ * recovered before the next read left the setup reporting "Running" forever —
+ * the trade was over and the screen still said it was live.
+ *
+ * A stop takes precedence over a target reached in the same window: intrabar
+ * order is unknowable, so the losing outcome is the honest one to assume.
+ */
+export function lockedSetupOutcome(
+  candles: Candle[],
+  locked: Pick<SetupLockedSnapshot, "direction" | "stopLoss" | "target2" | "runningSince">,
+  price: number,
+): "stopped" | "target" | null {
+  const isLong = locked.direction === "long";
+  const since = Math.floor(locked.runningSince / 1_000);
+
+  let stopped = isLong ? price <= locked.stopLoss : price >= locked.stopLoss;
+  let target = isLong ? price >= locked.target2 : price <= locked.target2;
+
+  for (const candle of candles) {
+    if (candle.time < since) continue;
+    if (isLong) {
+      if (candle.low <= locked.stopLoss) stopped = true;
+      if (candle.high >= locked.target2) target = true;
+    } else {
+      if (candle.high >= locked.stopLoss) stopped = true;
+      if (candle.low <= locked.target2) target = true;
+    }
+  }
+
+  if (stopped) return "stopped";
+  if (target) return "target";
+  return null;
 }
 
 /**

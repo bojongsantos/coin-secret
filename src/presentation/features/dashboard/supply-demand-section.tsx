@@ -9,8 +9,6 @@ import { useSdScan } from "@/presentation/hooks/use-scanner";
 import { Badge } from "@/presentation/ui/badge";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { LockedOverlay } from "@/presentation/ui/locked-overlay";
-import { WatchlistToggleButton } from "@/presentation/ui/watchlist-toggle-button";
-import type { WatchlistMembership } from "@/presentation/hooks/use-watchlist-membership";
 import { formatCompact } from "@/shared/lib/format";
 
 const FREE_VISIBLE = 3;
@@ -50,13 +48,11 @@ function ZoneRow({
   color,
   maxVol,
   onSelect,
-  membership,
 }: {
   hit: SdScanHit;
   color: string;
   maxVol: number;
   onSelect?: (symbol: string) => void;
-  membership: WatchlistMembership;
 }) {
   return (
     <tr
@@ -97,9 +93,6 @@ function ZoneRow({
           </div>
         </div>
       </td>
-      <td className="px-1.5 py-2 text-right">
-        <WatchlistToggleButton symbol={hit.symbol} membership={membership} nextPath="/" />
-      </td>
     </tr>
   );
 }
@@ -110,14 +103,12 @@ function ZoneCard({
   totalCount,
   tone,
   onSelect,
-  membership,
 }: {
   title: string;
   hits: SdScanHit[];
   totalCount?: number;
   tone: "green" | "red";
   onSelect?: (symbol: string) => void;
-  membership: WatchlistMembership;
 }) {
   const router = useRouter();
   const { canAccess } = usePlan();
@@ -160,12 +151,11 @@ function ZoneCard({
               <th className="px-1.5 py-2 font-semibold">Volume 24H</th>
               <th className="px-1.5 py-2 font-semibold">Status</th>
               <th className="px-1.5 py-2 text-right font-semibold">Confidence</th>
-              <th className="px-1.5 py-2"><span className="sr-only">Watchlist</span></th>
             </tr>
           </thead>
           <tbody>
             {visible.map((hit) => (
-              <ZoneRow key={hit.symbol} hit={hit} color={color} maxVol={maxVol} onSelect={onSelect} membership={membership} />
+              <ZoneRow key={hit.symbol} hit={hit} color={color} maxVol={maxVol} onSelect={onSelect} />
             ))}
           </tbody>
         </table>
@@ -198,7 +188,7 @@ function ZoneCard({
   );
 }
 
-export function SupplyDemandSection({ onSelect, membership }: { onSelect?: (symbol: string) => void; membership: WatchlistMembership }) {
+export function SupplyDemandSection({ onSelect }: { onSelect?: (symbol: string) => void }) {
   const { result, loading, error, refresh } = useSdScan();
 
   // Rows and totals both arrive already filtered by the API. A free plan is
@@ -231,11 +221,6 @@ export function SupplyDemandSection({ onSelect, membership }: { onSelect?: (symb
         </div>
       )}
 
-      {membership.error && (
-        <div className="rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-[12px] text-negative">
-          {membership.error}
-        </div>
-      )}
 
       {loading && !result && (
         <div className="flex h-48 items-center justify-center text-muted-2">
@@ -251,7 +236,6 @@ export function SupplyDemandSection({ onSelect, membership }: { onSelect?: (symb
             totalCount={result.demandTotal}
             tone="green"
             onSelect={onSelect}
-            membership={membership}
           />
           <ZoneCard
             title="Supply Zones (Sell)"
@@ -259,7 +243,6 @@ export function SupplyDemandSection({ onSelect, membership }: { onSelect?: (symb
             totalCount={result.supplyTotal}
             tone="red"
             onSelect={onSelect}
-            membership={membership}
           />
         </div>
       )}

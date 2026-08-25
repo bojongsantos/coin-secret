@@ -46,6 +46,11 @@ enum AlertStatus {
   PAUSED
 }
 
+enum SetupCaptureKind {
+  ENTRY
+  RESULT
+}
+
 enum NotificationKind {
   ALERT_TRIGGERED
   SETUP_RESOLVED
@@ -278,6 +283,59 @@ model SetupJournalEntry {
   @@unique([userId, signature])
   @@index([userId, createdAt])
   @@index([outcome, symbol])
+}
+
+/// A setup the scanner is following so status changes can be noticed.
+///
+/// Status is derived fresh on every scan, so a transition is only visible by
+/// remembering what it was last time. Without this row the sweep would see
+/// "Filled" and have no way to tell a fill that just happened from one it has
+/// already photographed a hundred times.
+model TrackedSetup {
+  id         String   @id @default(cuid())
+  symbol     String
+  timeframe  String
+  direction  String
+  entry      Float
+  target1    Float
+  target2    Float
+  stopLoss   Float
+  riskReward Float
+  confidence Int
+  zoneTop    Float
+  zoneBottom Float
+  status     String
+  /// Identity of the setup itself, so the same zone is one row across sweeps.
+  signature  String   @unique
+  /// Set once both snapshots exist and the proof image can be rendered.
+  resultAt   DateTime?
+  firstSeenAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  snapshots SetupSnapshot[]
+
+  @@index([symbol, updatedAt])
+  @@index([resultAt])
+}
+
+/// One photograph of a setup at a moment worth keeping.
+///
+/// Stores the numbers the picture is drawn from rather than the drawing. The
+/// composed image repeats both snapshots inside it, so keeping rendered SVG
+/// would store the same candles three times over — and a change to the layout
+/// would leave every archived image stuck in the old design.
+model SetupSnapshot {
+  id        String           @id @default(cuid())
+  kind      SetupCaptureKind
+  status    String
+  price     Float
+  payload   Json
+  capturedAt DateTime        @default(now())
+  setupId   String
+  setup     TrackedSetup     @relation(fields: [setupId], references: [id], onDelete: Cascade)
+
+  @@unique([setupId, kind])
+  @@index([capturedAt])
 }
 
 model AppSetting {

@@ -11,6 +11,7 @@ import {
   Users,
   CreditCard,
   ScrollText,
+  ImageIcon,
 } from "lucide-react";
 import { BrandLockup } from "@/presentation/ui/brand-logo";
 
@@ -21,6 +22,7 @@ const NAV = [
   { id: "audit", label: "Audit Log", href: "/admin/audit", icon: ScrollText },
   { id: "watchlist", label: "Watchlist", href: "/admin/watchlist", icon: ListOrdered },
   { id: "scanner", label: "Scanner Log", href: "/admin/scanner", icon: Activity },
+  { id: "results", label: "Setup Results", href: "/admin/results", icon: ImageIcon },
   { id: "gating", label: "Plan & Gating", href: "/admin/gating", icon: Lock },
   { id: "health", label: "API Health", href: "/admin/health", icon: Gauge },
 ];

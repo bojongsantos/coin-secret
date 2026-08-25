@@ -1,4 +1,5 @@
 import { runMarketWatch } from "@/infrastructure/monitoring/market-watch-service";
+import { runSetupCapture } from "@/infrastructure/monitoring/setup-capture-service";
 import { apiError, HttpError } from "@/shared/server/http";
 
 export const runtime = "nodejs";
@@ -34,7 +35,13 @@ export async function GET(request: Request) {
   try {
     authorize(request);
     const report = await runMarketWatch();
-    return Response.json(report, { headers: { "Cache-Control": "no-store" } });
+    // Runs after the alert sweep, and its failures are reported rather than
+    // thrown: the archive is a marketing asset, and losing one photograph is
+    // not a reason to fail the run that also evaluates users' price alerts.
+    const capture = await runSetupCapture().catch((error: unknown) => ({
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    return Response.json({ ...report, capture }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiError(error);
   }

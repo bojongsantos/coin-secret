@@ -38,7 +38,7 @@ npm run db:seed
 npm run dev
 ```
 
-Salin `.env.example` menjadi `.env` dan ganti seluruh secret. Database lokal tersedia pada port `54329`.
+Salin `.env.example` menjadi `.env` dan ganti seluruh secret. Database lokal tersedia pada port `5433`.
 
 Seed development membuat:
 

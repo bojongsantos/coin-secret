@@ -12,8 +12,12 @@ services:
       POSTGRES_USER: coinsecret
       POSTGRES_PASSWORD: coinsecret_dev
       POSTGRES_DB: coinsecret
+    # 5433 rather than a high port: Windows reserves large dynamic ranges for
+    # Hyper-V, and a port that falls inside one fails to bind with a permissions
+    # error that says nothing about the real cause. Check with
+    # `netsh interface ipv4 show excludedportrange protocol=tcp` before moving it.
     ports:
-      - "54329:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U coinsecret -d coinsecret"]
       interval: 3s

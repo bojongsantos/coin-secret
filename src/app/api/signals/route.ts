@@ -2,6 +2,7 @@ import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 import { parseScanSymbols } from "@/core/application/scanner/scan-request";
 import { rankTopSetups, runSdScanCached } from "@/core/application/scanner/supply-demand-scan-service";
+import { visibleSignalsFor } from "@/core/domain/analysis/signal-display";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { canUserAccessFeature } from "@/infrastructure/auth/entitlements";
@@ -22,14 +23,24 @@ export async function POST(request: Request) {
     const fullAccess = await canUserAccessFeature(user, "signals");
     // Anonymous callers stay on the default list; see the scanner route.
     const requested = user ? parseScanSymbols(body.symbols) : undefined;
-    const symbols = (requested ?? DEFAULT_WATCHLIST).slice(0, fullAccess ? 200 : 20);
+    // Every plan scans the same default universe. Capping the default list by
+    // plan meant free and premium were looking at two different scans, and once
+    // a confidence floor was added the shorter one routinely came back empty —
+    // the plan looked broken rather than limited. Sharing one symbol key also
+    // shares the scan cache. A caller-supplied list is still capped by plan,
+    // which is where the fan-out guard actually matters.
+    const symbols = requested ? requested.slice(0, fullAccess ? 200 : 20) : DEFAULT_WATCHLIST;
     const limit = typeof body.limit === "number" ? Math.min(10, Math.max(1, Math.trunc(body.limit))) : 5;
 
-    const full = await runSdScanCached(marketData, symbols, user !== null && body.force === true);
+    const scanned = await runSdScanCached(marketData, symbols, user !== null && body.force === true);
+
+    // Filtering happens here, before the free-plan truncation, and not in the
+    // browser. Ranking reads the filtered set so the top-5 strip and the
+    // tables cannot disagree on the same screen.
+    const visible = visibleSignalsFor(scanned, fullAccess);
+    const full = { ...scanned, ...visibleSignalsFor(scanned, true) };
     const top = rankTopSetups(full, limit);
-    const result = fullAccess
-      ? full
-      : { ...full, demand: full.demand.slice(0, 3), supply: full.supply.slice(0, 3) };
+    const result = { ...scanned, ...visible };
     return Response.json({ result, top }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Signals unavailable";

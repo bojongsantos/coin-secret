@@ -8,18 +8,16 @@ import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { SupplyDemandSection } from "@/presentation/features/dashboard/supply-demand-section";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useTopSetups } from "@/presentation/hooks/use-scanner";
-import { isDashboardSignal, MIN_DASHBOARD_CONFIDENCE } from "@/core/domain/analysis/signal-display";
+import { MIN_DASHBOARD_CONFIDENCE } from "@/core/domain/analysis/signal-display";
 import { useWatchlistMembership } from "@/presentation/hooks/use-watchlist-membership";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Loader2 } from "lucide-react";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 
 export function DashboardClient() {
-  const { top: rankedTop, loading: topLoading, error: topError } = useTopSetups(5);
-
-  // Same floor as the Signals tables. Listing a 20% setup here while the table
-  // below refuses to show it would contradict itself on the same screen.
-  const top = rankedTop.filter((entry) => isDashboardSignal(entry.hit));
+  // The API applies the confidence floor before ranking, so this list and the
+  // Signals tables cannot disagree on the same screen.
+  const { top, loading: topLoading, error: topError } = useTopSetups(5);
   const membership = useWatchlistMembership();
   const [symbol, setSymbol] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");

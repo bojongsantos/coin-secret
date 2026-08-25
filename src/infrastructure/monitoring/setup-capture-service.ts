@@ -3,7 +3,7 @@ import "server-only";
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { runSdScan, SD_SCAN_TIMEFRAME } from "@/core/application/scanner/supply-demand-scan-service";
 import type { SetupStatus } from "@/core/domain/analysis/supply-demand";
-import { setupSignature } from "@/core/domain/journal/setup-outcome";
+import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { captureTriggerFor } from "@/core/domain/promo/capture-trigger";
 import type { SnapshotInput } from "@/core/domain/promo/result-image";

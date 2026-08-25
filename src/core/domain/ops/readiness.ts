@@ -64,9 +64,9 @@ const CAPABILITIES: Capability[] = [
   },
   {
     id: "alerts",
-    name: "Sweep alert terjadwal",
+    name: "Sweep terjadwal",
     requires: ["CRON_SECRET"],
-    impact: "Endpoint cron membalas 503, sehingga alert harga tidak pernah dievaluasi.",
+    impact: "Endpoint cron membalas 503, sehingga arsip bukti hasil setup tidak pernah terisi.",
   },
 ];
 

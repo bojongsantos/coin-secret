@@ -6,8 +6,8 @@ Role dan paket tidak dicampur:
 
 - Role `USER` memakai aplikasi biasa.
 - Role `ADMIN` dapat membuka backoffice.
-- Plan `FREE` memiliki watchlist maksimal 20 simbol.
-- Plan `PREMIUM` memiliki watchlist maksimal 200 simbol dan fitur premium.
+- Plan `FREE` melihat tiga setup per sisi pada tabel sinyal; sisanya buram.
+- Plan `PREMIUM` melihat seluruh setup beserta fitur premium lainnya.
 
 Hak akses fitur diputuskan dalam tiga tingkat oleh `resolveFeatureAccess`. Grant per pengguna menang mutlak, termasuk ketika bernilai menolak, karena penolakan eksplisit adalah cara memutus satu akun tanpa menyentuh akun lain. Berikutnya gate global yang membuka atau menutup fitur bagi seluruh paket tanpa rilis. Bila keduanya tidak tercatat, bawaan statis paket yang berlaku.
 
@@ -15,7 +15,7 @@ Premium yang masa berlakunya habis diturunkan pada permintaan berikutnya, bukan 
 
 Admin tidak dapat menurunkan role dirinya sendiri. Tanpa aturan tersebut seorang operator dapat mengunci dirinya keluar dari backoffice dalam satu klik, sementara hanya admin yang dapat mengembalikan role itu. Menurunkan admin lain tetap diizinkan dan tidak dapat mengosongkan ruang, sebab pelakunya selalu mempertahankan rolenya sendiri.
 
-Seluruh endpoint mutasi memeriksa session pada server. Resource watchlist selalu difilter berdasarkan `userId` untuk mencegah IDOR. Panel admin melakukan pemeriksaan role pada layout dan setiap route API.
+Seluruh endpoint mutasi memeriksa session pada server. Resource per pengguna selalu difilter berdasarkan `userId` untuk mencegah IDOR. Panel admin melakukan pemeriksaan role pada layout dan setiap route API.
 
 ## Auth
 
@@ -95,18 +95,16 @@ Tiap adapter dipecah menjadi dua berkas. Berkas protokol memuat skema wire, tand
 
 `underpaid` disimpan sebagai `PENDING`. Uang masuk namun tidak sesuai nominal, sehingga pesanan bukan lunas dan bukan gagal, dan menuntut keputusan tersendiri berupa refund, top-up, atau pelepasan manual.
 
-## Alerts, notifikasi, dan riwayat setup
+## Arsip hasil setup
 
-`PriceAlert` menyimpan level harga per pengguna. Plan `FREE` memiliki lima alert aktif, `PREMIUM` memiliki seratus. Alert yang sudah `TRIGGERED` tidak menghitung kuota.
+Alert harga, riwayat setup tersimpan, watchlist, dan notifikasi in-app telah dihapus. Ketiganya menuntut pengguna merawat daftar secara manual, sementara sinyal produk ini bergerak sendiri setiap pemindaian; daftar yang harus dijaga tangan justru menua lebih cepat daripada isinya. Notifikasi ikut dilepas karena satu-satunya yang memproduksinya adalah alert dan penyelesaian setup, sehingga loncengnya tidak akan pernah berisi apa pun.
 
-`SetupJournalEntry` menyimpan setup yang disimpan pengguna. Kolom `signature` membuat penyimpanan berulang atas rencana yang sama menjadi satu baris. Plan `FREE` dibatasi lima puluh entri, `PREMIUM` lima ratus. Batas ini juga bersifat operasional: setiap entri `OPEN` menambah pekerjaan sweep terjadwal, sehingga jurnal tanpa batas memungkinkan satu akun memperlambat sweep bagi seluruh pengguna.
+Yang tersisa pada jadwal adalah arsip bukti. Sweep memindai daftar bawaan, mengingat status setiap setup, lalu memotret dua momen: saat harga mencapai entry, dan saat setup menyentuh target kedua. Rinciannya ada pada bagian berikutnya.
 
-`Notification` menampung pemberitahuan hasil evaluasi. Seluruh query difilter berdasarkan `userId`. Sweep memangkas feed setiap pengguna hingga dua ratus notifikasi terbaru agar tabel tidak tumbuh tanpa henti.
-
-Evaluasi berjalan pada endpoint cron:
+Endpoint cron:
 
 ```text
-GET https://DOMAIN/api/cron/market-watch
+GET https://DOMAIN/api/cron/setup-capture
 ```
 
 Handler memerlukan header `Authorization: Bearer $CRON_SECRET`. Tanpa `CRON_SECRET` endpoint menolak seluruh permintaan dengan status 503, bukan terbuka.
@@ -114,19 +112,27 @@ Handler memerlukan header `Authorization: Bearer $CRON_SECRET`. Tanpa `CRON_SECR
 Penjadwalan memakai dua sumber karena paket Vercel Hobby hanya mengizinkan satu eksekusi cron per hari:
 
 - `vercel.json` menjadwalkan satu sweep harian sebagai jaring pengaman.
-- `.github/workflows/market-watch.yml` memanggil endpoint yang sama setiap tiga puluh menit. Interval tersebut menjaga penggunaan tetap berada dalam kuota GitHub Actions gratis untuk repositori privat.
+- `.github/workflows/setup-capture.yml` memanggil endpoint yang sama setiap tiga puluh menit. Interval itu menjaga penggunaan tetap berada dalam kuota GitHub Actions gratis, dan cukup rapat untuk menangkap setup pada saat ia terisi.
 
-Workflow memerlukan dua repository secret, yaitu `PRODUCTION_URL` dan `CRON_SECRET`. Bila salah satu belum diisi, workflow berhenti bersih disertai peringatan, karena kondisi belum terkonfigurasi merupakan langkah persiapan yang belum dijalankan dan bukan kerusakan. Setelah keduanya terisi, endpoint yang membalas non-2xx sengaja menggagalkan run secara nyaring: sweep yang berhenti diam-diam berarti alert tidak lagi dievaluasi tanpa ada yang mengetahui.
+Workflow memerlukan dua repository secret, yaitu `PRODUCTION_URL` dan `CRON_SECRET`. Bila salah satu belum diisi, workflow berhenti bersih disertai peringatan, karena kondisi belum terkonfigurasi merupakan langkah persiapan yang belum dijalankan dan bukan kerusakan.
 
 Setelah proyek berpindah ke Vercel Pro, workflow tersebut dapat dihapus dan jadwal dikembalikan ke `vercel.json`.
 
-Alert dievaluasi terhadap harga ticker terkini. Setup dievaluasi terhadap rentang harga harian sejak setup disimpan. Bila target dan stop tersentuh pada rentang yang sama, hasil dicatat sebagai `STOPPED_OUT` karena urutan intrabar tidak dapat dipastikan. Sweep bersifat idempotent sehingga eksekusi ganda tidak menduplikasi notifikasi.
+## Penangkapan bukti hasil setup
+
+Status setup dihitung ulang pada setiap pemindaian, sehingga satu-satunya cara mengetahui adanya perubahan adalah mengingat keadaan sebelumnya. `TrackedSetup` menyimpan ingatan itu, satu baris per identitas setup.
+
+`SetupSnapshot` menyimpan angka pembentuk gambar, bukan gambarnya. Komposisi akhir mengulang kedua snapshot di dalamnya, sehingga menyimpan SVG berarti menyimpan candle yang sama tiga kali, dan perubahan tata letak akan mengunci seluruh arsip pada desain lama. Gambar dirender saat diminta pada endpoint admin.
+
+Setup yang pertama kali terlihat sudah terisi sengaja tidak dipotret: tidak ada gambar sebelum untuk dipasangkan, dan bukti yang disusun darinya akan menyiratkan pemindai memanggil entry lebih dulu padahal tidak. Bagian hasil diselesaikan dari candle, bukan dari pemindai, sebab setup yang sudah mencapai target kedua tidak lagi aktif dan pemindai berhenti melaporkannya.
+
+Kerugian dan setup yang terlewat tidak diarsipkan. Ini materi promosi, dan hanya setup yang mencapai target kedua yang menghasilkan bukti.
 
 ## Pembatasan endpoint mahal
 
 `/api/scanner` dan `/api/signals` mengubah satu permintaan masuk menjadi banyak permintaan ke bursa. Dua lapis pengaman diterapkan:
 
-1. Pemanggil anonim selalu memakai `DEFAULT_WATCHLIST`. Daftar simbol dari body hanya dihormati untuk pengguna yang login. Tanpa ini, memvariasikan daftar simbol akan melewati cache hasil dan mengubah endpoint menjadi amplifier terhadap kuota bursa milik server.
+1. Seluruh paket memindai daftar bawaan yang sama. Peramban tidak lagi mengirim daftar simbol sejak watchlist dihapus, sehingga satu kunci simbol dipakai bersama dan cache hasil tidak dapat dilewati dengan memvariasikan daftar.
 2. Fixed-window rate limit dua puluh permintaan per menit per pengguna atau per IP, membalas `429` beserta header `Retry-After`.
 
 Rate limit disimpan di memori proses. Pada beberapa instance, batas berlaku per instance, bukan global.
@@ -169,11 +175,11 @@ Ambil environment production ke lokasi di luar direktori proyek saat menjalankan
 
 Laporan menyebutkan nama variabel, tidak pernah nilainya, sehingga aman dicatat pada log. Setiap kemampuan menyatakan dampaknya bagi pengguna, bukan sekadar nama kunci yang hilang, karena kunci yang kosong tidak memunculkan galat apa pun sampai ada pengguna yang menabraknya.
 
-Kemampuan yang dipantau: database, autentikasi, email transaksional, sweep alert terjadwal, dan pembayaran. Laporan pembayaran mengikuti `PAYMENT_PROVIDER`, sehingga panel menuntut kunci penyedia yang benar-benar dipakai. Penyedia yang tidak dikenali dilaporkan terhalang pada `PAYMENT_PROVIDER` itu sendiri, sebab tanpa daftar kunci untuk diperiksa sebuah salah ketik akan tampak siap sepenuhnya sementara setiap checkout membalas 503.
+Kemampuan yang dipantau: database, autentikasi, email transaksional, sweep terjadwal, dan pembayaran. Laporan pembayaran mengikuti `PAYMENT_PROVIDER`, sehingga panel menuntut kunci penyedia yang benar-benar dipakai. Penyedia yang tidak dikenali dilaporkan terhalang pada `PAYMENT_PROVIDER` itu sendiri, sebab tanpa daftar kunci untuk diperiksa sebuah salah ketik akan tampak siap sepenuhnya sementara setiap checkout membalas 503.
 
 ## Operasional
 
-- Audit log merekam perubahan watchlist, admin, dan billing.
+- Audit log merekam perubahan admin dan billing.
 - Feature gate global berada di tabel `FeatureGate`.
 - Grant per pengguna tersedia melalui `UserFeatureGrant`.
 - Expired subscription diturunkan ke Free saat session berikutnya dibaca.

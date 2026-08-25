@@ -13,7 +13,7 @@ export async function GET(request: Request) {
       take: 100,
       select: {
         id: true, name: true, email: true, emailVerified: true, role: true, plan: true, createdAt: true,
-        _count: { select: { watchlist: true, sessions: true, payments: true } },
+        _count: { select: { sessions: true, payments: true } },
         subscription: { select: { status: true, currentPeriodEnd: true } },
       },
     });

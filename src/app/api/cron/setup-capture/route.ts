@@ -1,4 +1,3 @@
-import { runMarketWatch } from "@/infrastructure/monitoring/market-watch-service";
 import { runSetupCapture } from "@/infrastructure/monitoring/setup-capture-service";
 import { apiError, HttpError } from "@/shared/server/http";
 
@@ -34,14 +33,10 @@ function authorize(request: Request): void {
 export async function GET(request: Request) {
   try {
     authorize(request);
-    const report = await runMarketWatch();
-    // Runs after the alert sweep, and its failures are reported rather than
-    // thrown: the archive is a marketing asset, and losing one photograph is
-    // not a reason to fail the run that also evaluates users' price alerts.
-    const capture = await runSetupCapture().catch((error: unknown) => ({
-      error: error instanceof Error ? error.message : String(error),
-    }));
-    return Response.json({ ...report, capture }, { headers: { "Cache-Control": "no-store" } });
+    // The sweep once evaluated price alerts and saved setups too. Those are
+    // gone, so the schedule now exists solely to keep the result archive fed.
+    const capture = await runSetupCapture();
+    return Response.json(capture, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiError(error);
   }

@@ -7,7 +7,6 @@ import type {
   TopSetup,
 } from "@/core/application/scanner/supply-demand-scan-service";
 import type { ScannerOpportunity } from "@/core/domain/models";
-import { fetchEnabledWatchlist } from "@/infrastructure/persistence/watchlist-api-client";
 
 interface SignalsApiPayload {
   result: SdScanResult;
@@ -25,12 +24,18 @@ interface SignalsApiPayload {
  */
 const SCAN_REFRESH_MS = 60_000;
 
-async function postScan<T>(path: string, body: Record<string, unknown>, useWatchlist = true): Promise<T> {
-  const symbols = useWatchlist ? await fetchEnabledWatchlist() : undefined;
+/**
+ * Posts a scan request.
+ *
+ * No symbol list travels with it any more: the browser used to send the user's
+ * saved watchlist, and with that gone every caller gets the server's default
+ * universe — which is also the only way the scan cache can be shared.
+ */
+async function postScan<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, ...(symbols ? { symbols } : {}) }),
+    body: JSON.stringify(body),
   });
   const payload = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
@@ -98,7 +103,7 @@ export function useSdScan(enabled = true): {
   const execute = useCallback(async (force: boolean) => {
     setLoading(true);
     try {
-      const payload = await postScan<SignalsApiPayload>("/api/signals", { force }, false);
+      const payload = await postScan<SignalsApiPayload>("/api/signals", { force });
       setResult(payload.result);
       setError(
         payload.result.errors.length
@@ -140,7 +145,7 @@ export function useTopSetups(limit = 5): {
   const execute = useCallback(async (force: boolean) => {
     setLoading(true);
     try {
-      const payload = await postScan<SignalsApiPayload>("/api/signals", { force, limit }, false);
+      const payload = await postScan<SignalsApiPayload>("/api/signals", { force, limit });
       setTop(payload.top);
       setError(null);
     } catch (caught) {

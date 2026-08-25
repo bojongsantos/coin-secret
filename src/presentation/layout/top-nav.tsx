@@ -14,11 +14,9 @@ import {
 } from "@/core/domain/market/symbol";
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
-import { fetchEnabledWatchlist } from "@/infrastructure/persistence/watchlist-api-client";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { authClient, notifyAuthStateChanged } from "@/infrastructure/auth/auth-client";
 import type { CurrentUserDto } from "@/core/domain/identity";
-import { NotificationBell } from "@/presentation/features/notifications/notification-bell";
 
 export function TopNav() {
   const router = useRouter();
@@ -34,8 +32,8 @@ export function TopNav() {
   const searchBoxRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    void Promise.all([fetchEnabledWatchlist(), fetchSearchableSymbols()])
-      .then(([preferred, all]) => setCatalog(mergeSearchableSymbols(preferred, all)))
+    void fetchSearchableSymbols()
+      .then((all) => setCatalog(mergeSearchableSymbols([], all)))
       .catch(() => setCatalog(DEFAULT_WATCHLIST));
     fetch("/api/me", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
@@ -191,7 +189,6 @@ export function TopNav() {
 
       <div className="ml-auto flex items-center gap-3">
         <ThemeToggle />
-        <NotificationBell authenticated={currentUser !== null} />
 
         {!userResolved ? (
           <div className="h-9 w-28 animate-pulse rounded-lg border border-border bg-surface-3" aria-label="Memuat sesi" />

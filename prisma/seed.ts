@@ -26,7 +26,6 @@ async function upsertUser(input: SeedUser) {
     create: { userId: user.id, provider: "seed", plan: input.plan, status: input.plan === "PREMIUM" ? "ACTIVE" : "INACTIVE" },
     update: { provider: "seed", plan: input.plan, status: input.plan === "PREMIUM" ? "ACTIVE" : "INACTIVE" },
   });
-  await prisma.watchlistItem.deleteMany({ where: { userId: user.id } });
 }
 
 async function main() {

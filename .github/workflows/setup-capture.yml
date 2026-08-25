@@ -1,7 +1,8 @@
-name: Market watch
+name: Setup capture
 
-# Vercel Hobby allows only one cron run per day, which is far too slow for
-# price alerts. This workflow drives the same endpoint on a useful interval.
+# Vercel Hobby allows only one cron run per day, which is far too slow to
+# catch a setup at the moment it fills. This workflow drives the same endpoint
+# on a useful interval.
 # Delete it once the project moves to Vercel Pro and vercel.json can carry a
 # frequent schedule on its own.
 #
@@ -17,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: market-watch
+  group: setup-capture
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Trigger the market watch sweep
+      - name: Trigger the setup capture sweep
         env:
           APP_URL: ${{ secrets.PRODUCTION_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -43,7 +44,7 @@ jobs:
           status=$(curl -sS -o response.json -w "%{http_code}" \
             --max-time 120 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/market-watch")
+            "$APP_URL/api/cron/setup-capture")
 
           echo "HTTP $status"
           cat response.json

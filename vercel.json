@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/market-watch",
+      "path": "/api/cron/setup-capture",
       "schedule": "0 1 * * *"
     }
   ]

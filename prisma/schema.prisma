@@ -35,34 +35,9 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum AlertCondition {
-  PRICE_ABOVE
-  PRICE_BELOW
-}
-
-enum AlertStatus {
-  ACTIVE
-  TRIGGERED
-  PAUSED
-}
-
 enum SetupCaptureKind {
   ENTRY
   RESULT
-}
-
-enum NotificationKind {
-  ALERT_TRIGGERED
-  SETUP_RESOLVED
-  BILLING
-  SYSTEM
-}
-
-enum SetupOutcome {
-  OPEN
-  TARGET_HIT
-  STOPPED_OUT
-  CANCELED
 }
 
 model User {
@@ -78,14 +53,10 @@ model User {
 
   sessions       Session[]
   accounts       Account[]
-  watchlist      WatchlistItem[]
   subscription   Subscription?
   payments       Payment[]
   featureGrants  UserFeatureGrant[]
   auditEvents    AuditLog[] @relation("AuditActor")
-  priceAlerts    PriceAlert[]
-  notifications  Notification[]
-  journalEntries SetupJournalEntry[]
 }
 
 model Session {
@@ -139,32 +110,6 @@ model RateLimit {
   key         String @unique
   count       Int
   lastRequest BigInt
-}
-
-model WatchlistItem {
-  id        String   @id @default(cuid())
-  symbol    String
-  enabled   Boolean  @default(true)
-  position  Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// Snapshot of the setup saved alongside the symbol. All null until the user
-  /// saves one, so a plain watchlist entry stays exactly as it was.
-  setupTimeframe  String?
-  setupDirection  String?
-  setupEntry      Float?
-  setupTarget1    Float?
-  setupTarget2    Float?
-  setupStopLoss   Float?
-  setupRiskReward Float?
-  setupConfidence Int?
-  setupSavedAt    DateTime?
-
-  @@unique([userId, symbol])
-  @@index([userId, enabled, position])
 }
 
 model Subscription {
@@ -223,66 +168,6 @@ model UserFeatureGrant {
 
   @@unique([userId, feature])
   @@index([userId])
-}
-
-model PriceAlert {
-  id             String         @id @default(cuid())
-  symbol         String
-  condition      AlertCondition
-  threshold      Float
-  status         AlertStatus    @default(ACTIVE)
-  note           String?
-  triggeredAt    DateTime?
-  triggeredPrice Float?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  userId         String
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status, createdAt])
-  // Drives the cron sweep, which reads every active alert across all users.
-  @@index([status, symbol])
-}
-
-model Notification {
-  id        String           @id @default(cuid())
-  kind      NotificationKind @default(SYSTEM)
-  title     String
-  body      String
-  link      String?
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, readAt])
-}
-
-model SetupJournalEntry {
-  id          String       @id @default(cuid())
-  symbol      String
-  timeframe   String
-  direction   String
-  entry       Float
-  target1     Float
-  target2     Float
-  stopLoss    Float
-  riskReward  Float
-  confidence  Int
-  outcome     SetupOutcome @default(OPEN)
-  closedPrice Float?
-  closedAt    DateTime?
-  /** Identity of the setup itself, so saving it twice does not duplicate it. */
-  signature   String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, signature])
-  @@index([userId, createdAt])
-  @@index([outcome, symbol])
 }
 
 /// A setup the scanner is following so status changes can be noticed.

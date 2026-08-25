@@ -1,6 +1,6 @@
 # Coin Secret
 
-Coin Secret adalah aplikasi analisis teknikal kripto berbasis aturan. Sistem menyediakan supply/demand scanner, watchlist pengguna, paket Free/Premium, panel admin, dan pembayaran. Coin Secret tidak mengeksekusi transaksi.
+Coin Secret adalah aplikasi analisis teknikal kripto berbasis aturan. Sistem menyediakan supply/demand scanner, paket Free/Premium, panel admin, arsip bukti hasil setup, dan pembayaran. Coin Secret tidak mengeksekusi transaksi.
 
 ## Stack
 
@@ -51,17 +51,11 @@ Password hanya berasal dari `SEED_USER_PASSWORD` dan `SEED_ADMIN_PASSWORD`. Jang
 ## Route utama
 
 - `/login`, `/register` — autentikasi.
-- `/watchlist` — watchlist tersimpan per pengguna.
-- `/alerts` — alert harga per pengguna.
-- `/history` — riwayat setup tersimpan beserta hasilnya.
 - `/pricing` — perbandingan Free dan Premium.
-- `/tutorials` — panduan membaca keluaran Coin Secret.
 - `/account` — profil, paket, dan checkout Premium.
-- `/admin` — backoffice khusus role ADMIN.
+- `/admin` — backoffice khusus role ADMIN, termasuk arsip bukti hasil setup.
 - `/api/auth/*` — endpoint Better Auth.
-- `/api/watchlist/*` — CRUD watchlist dengan ownership check.
-- `/api/alerts/*`, `/api/notifications/*`, `/api/history/*` — CRUD dengan ownership check.
-- `/api/cron/market-watch` — evaluasi alert dan setup, dilindungi `CRON_SECRET`.
+- `/api/cron/setup-capture` — memotret hasil setup untuk arsip backoffice, dilindungi `CRON_SECRET`.
 - `/api/billing/*` — checkout, histori, dan webhook tiap penyedia pembayaran.
 - `/api/admin/*` — user, role, plan, feature gate, audit, dan statistik.
 
@@ -78,4 +72,4 @@ npm run check
 npm audit
 ```
 
-Status setup chart tetap disimpan lokal per browser. Identitas, session, watchlist, paket, pembayaran, feature gate, dan audit log disimpan di PostgreSQL.
+Status setup chart tetap disimpan lokal per browser. Identitas, session, paket, pembayaran, feature gate, audit log, dan arsip bukti hasil setup disimpan di PostgreSQL.

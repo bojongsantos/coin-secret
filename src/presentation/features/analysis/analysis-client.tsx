@@ -6,7 +6,6 @@ import type { HistoryRange } from "@/core/application/market-data/history-plan";
 import type { Timeframe } from "@/core/domain/models";
 import { isValidBinanceSymbol, mergeSearchableSymbols, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
-import { fetchEnabledWatchlist } from "@/infrastructure/persistence/watchlist-api-client";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { AppShell } from "@/presentation/layout/app-shell";
@@ -24,14 +23,10 @@ export function AnalysisClient({ initialSymbol }: { initialSymbol: string }) {
     range,
   );
 
-  // Keep favorites first while retaining the complete market catalog.
+  // The saved-favourites list is gone, so the catalogue is simply the market.
   useEffect(() => {
     const timer = window.setTimeout(async () => {
-      const [preferred, catalog] = await Promise.all([
-        fetchEnabledWatchlist(),
-        fetchSearchableSymbols(),
-      ]);
-      setSymbols(mergeSearchableSymbols(preferred, catalog));
+      setSymbols(mergeSearchableSymbols([], await fetchSearchableSymbols()));
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);

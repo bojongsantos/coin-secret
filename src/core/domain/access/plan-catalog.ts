@@ -1,10 +1,4 @@
-import { getAlertLimit } from "@/core/domain/alerts/alert-rules";
-import { FREE_JOURNAL_LIMIT, PREMIUM_JOURNAL_LIMIT } from "@/core/domain/access/journal";
 import { hasFeature, type FeatureKey } from "@/core/domain/access/gating";
-import {
-  FREE_WATCHLIST_LIMIT,
-  PREMIUM_WATCHLIST_LIMIT,
-} from "@/core/domain/access/watchlist";
 
 export interface PlanCapability {
   label: string;
@@ -43,22 +37,6 @@ function forFeature(feature: FeatureKey): PlanCapability {
  * grant.
  */
 export const PLAN_CAPABILITIES: PlanCapability[] = [
-  {
-    label: "Watchlist tersimpan",
-    free: `${FREE_WATCHLIST_LIMIT} simbol`,
-    premium: `${PREMIUM_WATCHLIST_LIMIT} simbol`,
-  },
-  {
-    label: "Alert harga aktif",
-    free: `${getAlertLimit("free")} alert`,
-    premium: `${getAlertLimit("premium")} alert`,
-    hint: "Dievaluasi di server, tetap berjalan saat browser ditutup.",
-  },
-  {
-    label: "Setup tersimpan di History",
-    free: `${FREE_JOURNAL_LIMIT} setup`,
-    premium: `${PREMIUM_JOURNAL_LIMIT} setup`,
-  },
   forFeature("entryBreakdown"),
   forFeature("convictionDetail"),
   forFeature("scannerExtended"),
@@ -68,11 +46,6 @@ export const PLAN_CAPABILITIES: PlanCapability[] = [
     free: true,
     premium: true,
     hint: "Interval dan rentang histori terpisah; ALL tersedia di semua interval.",
-  },
-  {
-    label: "Notifikasi in-app",
-    free: true,
-    premium: true,
   },
 ];
 

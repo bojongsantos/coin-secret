@@ -6,6 +6,7 @@ import {
   isFilledStatus,
   isTerminalStatus,
 } from "@/core/domain/promo/capture-trigger";
+import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import {
   CHART_H,
   CHART_Y,
@@ -50,6 +51,24 @@ const snapshot = (status: string): SnapshotInput => ({
     zoneTop: 105,
     zoneBottom: 101,
   },
+});
+
+test("a setup keeps one identity while its plan is replanned", () => {
+  // The bug this pins, and it is the reason the archive stayed empty: the
+  // protective stop is placed beyond the latest confirmed swing, so it moves
+  // as bars arrive. Hashing the levels minted a new identity nearly every
+  // sweep — one symbol held eleven rows for one setup — and a row that has
+  // never been seen before has no previous status to have changed from.
+  const zone = { symbol: "ALLOUSDT", timeframe: "15m" as const, direction: "long" as const, zoneBaseTime: 1_787_700_000 };
+  const monday = setupSignature(zone);
+  const laterThatHour = setupSignature({ ...zone });
+  assert.equal(monday, laterThatHour);
+
+  // A different zone is a different setup, even on the same pair and side.
+  assert.notEqual(monday, setupSignature({ ...zone, zoneBaseTime: 1_787_700_900 }));
+  assert.notEqual(monday, setupSignature({ ...zone, direction: "short" }));
+  assert.notEqual(monday, setupSignature({ ...zone, symbol: "ENAUSDT" }));
+  assert.notEqual(monday, setupSignature({ ...zone, timeframe: "1H" }));
 });
 
 test("the entry photograph is taken when the limit order stops being one", () => {

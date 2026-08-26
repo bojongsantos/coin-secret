@@ -20,7 +20,12 @@ export interface SdScanHit {
   direction: "long" | "short";
   entry: number;
   target1: number;
+  target2: number;
   stopLoss: number;
+  /** Open time of the bar the zone formed on — the setup's stable identity. */
+  zoneBaseTime: number;
+  zoneTop: number;
+  zoneBottom: number;
   change24h: number;
   volume24h: number;
   zones: number;
@@ -89,7 +94,11 @@ export async function runSdScan(
           direction: setup.direction,
           entry: setup.entry,
           target1: setup.target1,
+          target2: setup.target2,
           stopLoss: setup.stopLoss,
+          zoneBaseTime: setup.zone.baseTime,
+          zoneTop: setup.zone.top,
+          zoneBottom: setup.zone.bottom,
           change24h: ticker?.priceChangePercent ?? 0,
           volume24h: ticker?.quoteVolume ?? 0,
           zones: sd.zones.length,

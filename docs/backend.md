@@ -150,6 +150,10 @@ Setup yang pertama kali terlihat sudah terisi sengaja tidak dipotret: tidak ada 
 
 Pemicu ENTRY berlaku untuk perpindahan dari `Limit Order` ke status terisi mana pun, bukan hanya ke `Filled`. Sweep berjalan sekitar sejam sekali terhadap grafik lima belas menit, sehingga sebuah setup umumnya sudah melewati `Filled` saat dilihat kembali. Ketika pemicunya masih menuntut status perantara itu, satu hari penuh sapuan hidup menghasilkan `entrySnapshots: 0` pada setiap larinya.
 
+Identitas setup memakai bar pembentuk zonanya, bukan level rencananya. Stop loss ditempatkan di luar swing terkonfirmasi terakhir, sehingga ia bergeser setiap ada bar baru — zona yang sama, rencana yang dihitung ulang. Selama identitas ikut memuat level, hampir setiap sapuan mencetak baris baru: satu simbol menyimpan sebelas baris untuk satu setup, dan baris yang baru lahir tidak punya status sebelumnya untuk dibandingkan. Itulah sebab arsip tidak pernah terisi meski sweep berjalan normal.
+
+Level pada baris `TrackedSetup` dibekukan saat pertama dibuat dan tidak diperbarui, hanya statusnya. Snapshot adalah foto dari rencana itu; membiarkan stop bergeser akan memindahkan garis finis di bawah bukti yang sudah terlanjur diambil.
+
 Antrean penyelesaian hasil diurutkan dari yang paling lama tidak diperiksa (`resultCheckedAt`), bukan dari yang paling baru diperbarui. Setup yang sudah mencapai target justru berhenti muncul di pemindaian, sehingga urutan lama menenggelamkannya di belakang setup yang masih hidup dan tidak pernah memeriksanya lagi.
 
 Setup yang tersentuh stop ditutup memakai aturan yang sama dengan sisa aplikasi, yaitu stop menang atas target dalam jendela yang sama. Tanpa itu, setup yang sudah tertahan lalu belakangan melintasi target akan terarsip sebagai kemenangan.

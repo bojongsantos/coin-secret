@@ -115,8 +115,7 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
       symbol: hit.symbol,
       timeframe: hit.timeframe,
       direction: hit.direction,
-      entry: hit.entry,
-      stopLoss: hit.stopLoss,
+      zoneBaseTime: hit.zoneBaseTime,
     }),
     status: (hit.status ?? "Limit Order") as SetupStatus,
   }));
@@ -143,16 +142,21 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
           direction: hit.direction,
           entry: hit.entry,
           target1: hit.target1,
-          // The scan carries one target; the second is the same distance again,
-          // which is how the detector lays them out.
-          target2: hit.target1 + (hit.target1 - hit.entry),
+          target2: hit.target2,
           stopLoss: hit.stopLoss,
           riskReward: 2,
           confidence: Math.round(hit.confidence),
-          zoneTop: Math.max(hit.entry, hit.stopLoss),
-          zoneBottom: Math.min(hit.entry, hit.stopLoss),
+          // The zone's own bounds. Deriving them from the entry and the stop
+          // drew a band reaching down to the stop, which is not where the zone
+          // is — the stop sits beyond it, on the far side of a swing.
+          zoneTop: hit.zoneTop,
+          zoneBottom: hit.zoneBottom,
           status,
         },
+        // Only the status is refreshed. The levels are the plan as it stood
+        // when the setup was first seen, and the snapshots are photographs of
+        // that plan; letting the stop drift here would move the goalposts
+        // under a proof that has already been taken.
         update: { status },
         select: { id: true },
       });

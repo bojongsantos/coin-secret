@@ -128,11 +128,25 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
   });
   const previous = new Map(known.map((row) => [row.signature, row]));
 
+  // Triggers are decided before anything is written, so the sweep knows which
+  // fills it can afford this run. A fill it cannot photograph now keeps its
+  // stored status, and the next sweep sees the same transition again —
+  // otherwise recording the new status would consume the only chance to
+  // notice it, and the setup would be filed as having been filled without a
+  // picture of the moment.
+  const triggered = new Set<string>();
+  for (const { signature, status } of signed) {
+    const before = (previous.get(signature)?.status ?? null) as SetupStatus | null;
+    if (captureTriggerFor(before, status) === "ENTRY") triggered.add(signature);
+  }
+  const capturing = new Set([...triggered].slice(0, MAX_CAPTURES_PER_RUN));
+
   const entryCaptures: { setupId: string; symbol: string; status: SetupStatus }[] = [];
 
   await mapConcurrent(
     signed,
     async ({ hit, signature, status }) => {
+      const deferred = triggered.has(signature) && !capturing.has(signature);
       const record = await prisma.trackedSetup.upsert({
         where: { signature },
         create: {
@@ -157,21 +171,19 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
         // when the setup was first seen, and the snapshots are photographs of
         // that plan; letting the stop drift here would move the goalposts
         // under a proof that has already been taken.
-        update: { status },
+        update: deferred ? {} : { status },
         select: { id: true },
       });
       report.tracked++;
 
-      const before = (previous.get(signature)?.status ?? null) as SetupStatus | null;
-      if (captureTriggerFor(before, status) === "ENTRY") {
+      if (capturing.has(signature)) {
         entryCaptures.push({ setupId: record.id, symbol: hit.symbol, status });
       }
     },
     8,
   );
 
-  // Newest fills first when there are more than one sweep can afford.
-  for (const capture of entryCaptures.slice(0, MAX_CAPTURES_PER_RUN)) {
+  for (const capture of entryCaptures) {
     const setup = await prisma.trackedSetup.findUnique({ where: { id: capture.setupId } });
     if (!setup) continue;
     const candles = await marketData

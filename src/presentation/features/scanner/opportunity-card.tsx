@@ -52,7 +52,7 @@ export function OpportunityCard({ data }: OpportunityCardProps) {
 
       {data.status && (
         <div className="-mt-1">
-          <Badge tone={data.status === "Running" || data.status === "Target 2 reached" ? "positive" : data.status === "Filled" ? "blue" : data.status === "Limit Order" ? "warning" : "neutral"} className="text-[10px]">
+          <Badge tone={data.status === "Running" || data.status === "Target 1 reached" || data.status === "Target 2 reached" ? "positive" : data.status === "Filled" ? "blue" : data.status === "Limit Order" ? "warning" : "neutral"} className="text-[10px]">
             {data.status}
           </Badge>
         </div>

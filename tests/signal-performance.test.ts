@@ -27,22 +27,88 @@ function candles(spec: Array<[number, number, number]>): Candle[] {
 
 const at = (index: number) => START + index * BAR;
 
+/**
+ * The three bars the impulse occupies, priced well away from every level.
+ *
+ * `buildSignalPerformance` starts measuring where the status machine starts —
+ * after the impulse that formed the zone. A fixture that begins at the signal
+ * bar would be measuring bars the product itself ignores.
+ */
+const IMPULSE: Array<[number, number, number]> = [
+  [100, 100, 100],
+  [100, 100, 100],
+  [100, 100, 100],
+];
+
+/** Signal bar plus the bars that followed, with the impulse prepended. */
+function after(spec: Array<[number, number, number]>): Candle[] {
+  return candles([...IMPULSE, ...spec]);
+}
+
+/** Index of the signal bar: the impulse is skipped, so it is bar 0. */
+const SIGNAL = at(0);
+
 test("nothing is measured while the signal has no history yet", () => {
-  const bars = candles([[100, 101, 99]]);
-  // Detected on the only bar there is: no follow-through to report.
-  assert.equal(buildSignalPerformance({ candles: bars, signalTime: at(0), direction: "long", target1: 110, target2: 120, stopLoss: 95 }), null);
-  assert.equal(buildSignalPerformance({ candles: [], signalTime: at(0), direction: "long", target1: 110, target2: 120, stopLoss: 95 }), null);
-  assert.equal(buildSignalPerformance({ candles: bars, signalTime: Number.NaN, direction: "long", target1: 110, target2: 120, stopLoss: 95 }), null);
+  const bars = after([[100, 101, 99]]);
+  // One bar after the impulse: no follow-through to report.
+  const plan = { direction: "long" as const, entry: 100, target1: 110, target2: 120, stopLoss: 95 };
+  assert.equal(buildSignalPerformance({ candles: bars, signalTime: SIGNAL, ...plan }), null);
+  assert.equal(buildSignalPerformance({ candles: [], signalTime: SIGNAL, ...plan }), null);
+  assert.equal(buildSignalPerformance({ candles: bars, signalTime: Number.NaN, ...plan }), null);
   // A signal older than every candle loaded has no bar to anchor to.
   assert.equal(
-    buildSignalPerformance({ candles: bars, signalTime: START - BAR, direction: "long", target1: 110, target2: 120, stopLoss: 95 }),
+    buildSignalPerformance({ candles: bars, signalTime: START - BAR, ...plan }),
     null,
   );
 });
 
+test("the impulse that formed the zone is not counted as market history", () => {
+  // The bug this pins: the impulse candle runs straight through the entry, so
+  // measuring from the zone's base bar marked every setup filled — and let the
+  // export claim a target on a plan the panel still showed as a limit order.
+  const bars = candles([
+    [100, 130, 70], // the impulse: sweeps entry, target and stop in one bar
+    [100, 100, 100],
+    [100, 100, 100],
+    [100, 100, 100],
+    [101, 101, 100],
+  ]);
+  const perf = buildSignalPerformance({
+    candles: bars,
+    signalTime: at(0),
+    direction: "long",
+    entry: 90,
+    target1: 120,
+    target2: 130,
+    stopLoss: 80,
+  });
+  assert.ok(perf);
+  assert.equal(perf.filled, false, "the impulse must not count as a fill");
+  assert.equal(perf.hitTarget1, false);
+  assert.equal(perf.hitStop, false);
+});
+
+test("a fill on the first measured bar still counts as a fill", () => {
+  // The off-by-one this pins: excursions correctly skip the first bar of the
+  // window, and the level checks used to skip it too. A setup that filled and
+  // took target 1 on that very bar showed "Target 1 reached" in the plan next
+  // to a block claiming the order had never triggered.
+  const bars = after([
+    [96, 101, 95], // first measured bar: trades through entry and target 1
+    [96, 97, 95],
+  ]);
+  const perf = buildSignalPerformance({ candles: bars, signalTime: SIGNAL, direction: "short", entry: 100, target1: 96, target2: 90, stopLoss: 105 });
+  assert.ok(perf);
+  assert.equal(perf.filled, true);
+  assert.equal(perf.hitTarget1, true);
+  // The excursion still skips that bar: its own high is not a drawdown from
+  // its own close. Counting it would report -5.21% here instead of -1.04%.
+  assert.equal(perf.worstPct, -1.04);
+});
+
 test("a long reports the move from the signal bar", () => {
-  const bars = candles([[100, 100, 100], [104, 105, 99], [110, 112, 103]]);
-  const perf = buildSignalPerformance({ candles: bars, signalTime: at(0), direction: "long", target1: 112, target2: 130, stopLoss: 95 });
+  const bars = after([[100, 100, 100], [104, 105, 99], [110, 112, 103]]);
+  const perf = buildSignalPerformance({ candles: bars, signalTime: SIGNAL, direction: "long", entry: 100, target1: 112, target2: 130, stopLoss: 95 });
   assert.ok(perf);
   assert.equal(perf.barsSince, 2);
   assert.equal(perf.priceAtSignal, 100);
@@ -50,17 +116,28 @@ test("a long reports the move from the signal bar", () => {
   assert.equal(perf.changePct, 10);
   assert.equal(perf.bestPct, 12);
   assert.equal(perf.worstPct, -1);
+  assert.equal(perf.filled, true);
   assert.equal(perf.hitTarget1, true);
   assert.equal(perf.hitTarget2, false);
   assert.equal(perf.hitStop, false);
   assert.deepEqual(perf.series, [100, 104, 110]);
 });
 
+test("a target price never traded to is not reported as reached", () => {
+  // Price ran to the target without ever coming back to the limit. There is
+  // no position, so there is nothing for the target to have paid out on.
+  const bars = after([[100, 100, 100], [104, 105, 101], [110, 112, 103]]);
+  const perf = buildSignalPerformance({ candles: bars, signalTime: SIGNAL, direction: "long", entry: 99, target1: 112, target2: 130, stopLoss: 90 });
+  assert.ok(perf);
+  assert.equal(perf.filled, false, "the entry was never touched");
+  assert.equal(perf.hitTarget1, false, "an unfilled order cannot reach a target");
+});
+
 test("a profitable short reports a positive move, not a negative one", () => {
   // The whole point of signing by direction: price fell, and for a short that
   // is a gain. Reporting -5% here would read as a loss at a glance.
-  const bars = candles([[100, 100, 100], [95, 101, 94]]);
-  const perf = buildSignalPerformance({ candles: bars, signalTime: at(0), direction: "short", target1: 94, target2: 80, stopLoss: 105 });
+  const bars = after([[100, 100, 100], [95, 101, 94]]);
+  const perf = buildSignalPerformance({ candles: bars, signalTime: SIGNAL, direction: "short", entry: 100, target1: 94, target2: 80, stopLoss: 105 });
   assert.ok(perf);
   assert.equal(perf.changePct, 5);
   assert.equal(perf.bestPct, 6);
@@ -70,18 +147,19 @@ test("a profitable short reports a positive move, not a negative one", () => {
 });
 
 test("a short is stopped out when price rises through the stop", () => {
-  const bars = candles([[100, 100, 100], [103, 106, 102]]);
-  const perf = buildSignalPerformance({ candles: bars, signalTime: at(0), direction: "short", target1: 94, target2: 80, stopLoss: 105 });
+  const bars = after([[100, 100, 100], [103, 106, 102]]);
+  const perf = buildSignalPerformance({ candles: bars, signalTime: SIGNAL, direction: "short", entry: 100, target1: 94, target2: 80, stopLoss: 105 });
   assert.ok(perf);
   assert.equal(perf.hitStop, true);
   assert.equal(perf.changePct, -3);
 });
 
 test("the signal anchors to the bar that had already opened", () => {
-  const bars = candles([[100, 100, 100], [110, 110, 110], [120, 120, 120]]);
-  // Detected midway through bar 1: bar 1 is the signal bar, not bar 2.
-  const midBar1 = START + BAR + 300;
-  const perf = buildSignalPerformance({ candles: bars, signalTime: midBar1, direction: "long", target1: 999, target2: 999, stopLoss: 1 });
+  const bars = after([[100, 100, 100], [110, 110, 110], [120, 120, 120]]);
+  // Detected midway through bar 1: bar 1 is the anchor, not bar 2, so the
+  // measured window starts one bar later than it would for bar 0.
+  const midBar1 = at(1) + 300;
+  const perf = buildSignalPerformance({ candles: bars, signalTime: midBar1, direction: "long", entry: 100, target1: 999, target2: 999, stopLoss: 1 });
   assert.ok(perf);
   assert.equal(perf.priceAtSignal, 110);
   assert.equal(perf.barsSince, 1);

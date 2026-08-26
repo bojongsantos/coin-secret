@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-interface Stats { users: number; premiumUsers: number; activeSubscriptions: number; revenueIdr: number; pendingPayments: number; watchlistItems: number }
+interface Stats { users: number; premiumUsers: number; activeSubscriptions: number; revenueIdr: number; pendingPayments: number }
 
 export function Overview() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -15,7 +15,6 @@ export function Overview() {
     ["Active Subscriptions", stats.activeSubscriptions.toLocaleString("id-ID")],
     ["Revenue", new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(stats.revenueIdr)],
     ["Pending Payments", stats.pendingPayments.toLocaleString("id-ID")],
-    ["Watchlist Items", stats.watchlistItems.toLocaleString("id-ID")],
   ];
   return <div className="p-6"><h2 className="text-lg font-bold">Overview Backend</h2><p className="mt-1 text-xs text-muted">Data langsung dari PostgreSQL.</p><div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([label, value]) => <section key={label} className="card p-5"><p className="text-xs uppercase tracking-wide text-muted-2">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></section>)}</div></div>;
 }

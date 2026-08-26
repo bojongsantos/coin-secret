@@ -95,6 +95,28 @@ Tiap adapter dipecah menjadi dua berkas. Berkas protokol memuat skema wire, tand
 
 `underpaid` disimpan sebagai `PENDING`. Uang masuk namun tidak sesuai nominal, sehingga pesanan bukan lunas dan bukan gagal, dan menuntut keputusan tersendiri berupa refund, top-up, atau pelepasan manual.
 
+## Satu bacaan setup untuk semua tampilan
+
+`detectSupplyDemand` kini hanya menerima candle. Sebelumnya ia juga menerima simbol, timeframe, dan sebuah kunci per-peramban yang membekukan level setup begitu berstatus Running.
+
+Kunci itu tinggal di `localStorage`, sehingga tabel sinyal (dihitung server) dan grafik analisis (dihitung peramban) bisa menyebut pasangan yang sama dengan arah berbeda — MET tampil di tabel Demand sementara grafiknya sendiri menyebutnya Supply Zone. Pembaca di perangkat lain melihat versi ketiga. Level yang stabil tidak sebanding dengan tiga jawaban untuk satu pertanyaan.
+
+Yang tersisa deterministik: 300 bar terakhir masuk, satu setup keluar. `tests/zone-consistency.test.ts` menjaga tanda tangan fungsinya tetap satu argumen, supaya jawaban per-pemanggil tidak bisa muncul kembali.
+
+Status setup bertambah satu, yaitu `Target 1 reached`. Target pertama adalah realisasi sebagian, bukan penutupan, sehingga status ini tergolong aktif dan tetap tampil di tabel.
+
+Blok performa pada gambar ekspor mengukur dari bar yang sama dengan mesin status, dan hanya menghitung target setelah harga benar-benar menyentuh entry. Tanpa keduanya, panel bisa menulis "Limit Order" sementara blok di bawahnya mengaku sudah menyentuh Target 1.
+
+## Wilayah eksekusi
+
+Fungsi dijalankan di `sin1` (Singapura), dipasang lewat `regions` pada `vercel.json`.
+
+Bawaan Vercel menempatkan fungsi di `iad1` (Washington), dan dari sana `fapi.binance.com` menjawab **HTTP 451**: Binance menutup API futures untuk alamat IP Amerika Serikat. Itulah sebab funding rate dan open interest selalu kosong, bukan karena kode pengambilnya.
+
+Wilayah Singapura juga jauh lebih dekat ke bursa dan ke pengguna. Pemeriksaan kesehatan mencatat 601 ms ke `data-api.binance.vision` dari `iad1`; satu sapuan pemindai memanggil endpoint itu hampir dua ratus kali.
+
+Bila latensi basis data ikut memburuk setelah perpindahan, periksa wilayah instans Postgres terlebih dahulu — bukan kembalikan wilayah fungsi, karena `iad1` membuat data futures mustahil diambil.
+
 ## Arsip hasil setup
 
 Alert harga, riwayat setup tersimpan, watchlist, dan notifikasi in-app telah dihapus. Ketiganya menuntut pengguna merawat daftar secara manual, sementara sinyal produk ini bergerak sendiri setiap pemindaian; daftar yang harus dijaga tangan justru menua lebih cepat daripada isinya. Notifikasi ikut dilepas karena satu-satunya yang memproduksinya adalah alert dan penyelesaian setup, sehingga loncengnya tidak akan pernah berisi apa pun.
@@ -126,6 +148,12 @@ Status setup dihitung ulang pada setiap pemindaian, sehingga satu-satunya cara m
 
 Setup yang pertama kali terlihat sudah terisi sengaja tidak dipotret: tidak ada gambar sebelum untuk dipasangkan, dan bukti yang disusun darinya akan menyiratkan pemindai memanggil entry lebih dulu padahal tidak. Bagian hasil diselesaikan dari candle, bukan dari pemindai, sebab setup yang sudah mencapai target kedua tidak lagi aktif dan pemindai berhenti melaporkannya.
 
+Pemicu ENTRY berlaku untuk perpindahan dari `Limit Order` ke status terisi mana pun, bukan hanya ke `Filled`. Sweep berjalan sekitar sejam sekali terhadap grafik lima belas menit, sehingga sebuah setup umumnya sudah melewati `Filled` saat dilihat kembali. Ketika pemicunya masih menuntut status perantara itu, satu hari penuh sapuan hidup menghasilkan `entrySnapshots: 0` pada setiap larinya.
+
+Antrean penyelesaian hasil diurutkan dari yang paling lama tidak diperiksa (`resultCheckedAt`), bukan dari yang paling baru diperbarui. Setup yang sudah mencapai target justru berhenti muncul di pemindaian, sehingga urutan lama menenggelamkannya di belakang setup yang masih hidup dan tidak pernah memeriksanya lagi.
+
+Setup yang tersentuh stop ditutup memakai aturan yang sama dengan sisa aplikasi, yaitu stop menang atas target dalam jendela yang sama. Tanpa itu, setup yang sudah tertahan lalu belakangan melintasi target akan terarsip sebagai kemenangan.
+
 Kerugian dan setup yang terlewat tidak diarsipkan. Ini materi promosi, dan hanya setup yang mencapai target kedua yang menghasilkan bukti.
 
 ## Pembatasan endpoint mahal
@@ -148,6 +176,12 @@ Hal ini pernah terjadi pada `CRON_SECRET`: endpoint produksi menerima secret yan
 ## Sumber data pasar
 
 Binance menjadi provider utama karena menyediakan websocket publik untuk data realtime. Bybit menjadi cadangan melalui `MarketDataPort` yang sama. Provider yang gagal dijeda selama enam puluh detik lalu dicoba kembali. Keduanya publik dan tidak memerlukan API key.
+
+Funding rate dan open interest memakai rantai cadangannya sendiri: Binance futures, lalu Bybit, lalu OKX. Ketiganya dicoba berurutan, bukan bersamaan, sehingga pada jalur normal hanya yang pertama dipanggil. Parser tiap bursa berada di `core/domain/market/derivatives.ts` agar bentuk jawaban masing-masing dapat diuji langsung.
+
+Sebuah sumber yang hanya menjawab separuh diperlakukan sebagai tidak menjawab. Satu angka nyata di sebelah tanda hubung terbaca sebagai "pasar tidak punya open interest", bukan sebagai "sumber ini tidak menjawab". Angka di luar rentang wajar juga ditolak, karena sumber yang mengirim persen ketika yang diharapkan pecahan terlihat lebih meyakinkan daripada sumber yang diam.
+
+Daftar simbol disaring di `config/symbol-filters.ts`. Stablecoin, aset terbungkus, dan listing yang bukan simbol dagang dibuang di satu tempat, sebab pemindai membaca pergerakan harga sementara aset yang dipatok tidak punya pergerakan untuk dibaca — dan detektor akan tetap menemukan "zona" di dalam derau tersebut lalu memberinya skor.
 
 ## Deployment Vercel
 

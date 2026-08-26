@@ -369,7 +369,7 @@ export async function composeShareImage(input: ShareImageInput): Promise<Blob | 
   const panelBottom = chartTop + panelHeight;
   const perf = input.performance;
   if (cursor + 74 <= panelBottom - 10) {
-    text(ctx, "PERFORMA SEJAK SINYAL", innerX, cursor, {
+    text(ctx, "PERFORMA SIGNAL", innerX, cursor, {
       size: 10,
       weight: "600",
       color: COLOR.muted2,
@@ -402,11 +402,17 @@ export async function composeShareImage(input: ShareImageInput): Promise<Blob | 
       sparkline(ctx, perf.series, innerX, cursor + 20, innerWidth, 24, moveColor);
 
       // Which levels the market actually reached, in the order they matter.
+      // Only a filled setup can reach anything: an order that never triggered
+      // has no position to take a target with, however far price travelled.
       const reached: string[] = [];
       if (perf.hitTarget2) reached.push("Target 2 ✓");
       else if (perf.hitTarget1) reached.push("Target 1 ✓");
       if (perf.hitStop) reached.push("Stop ✓");
-      const marks = reached.length > 0 ? reached.join("  ·  ") : "Belum menyentuh target/stop";
+      const marks = !perf.filled
+        ? "Entry belum tersentuh"
+        : reached.length > 0
+          ? reached.join("  ·  ")
+          : "Belum menyentuh target/stop";
       text(ctx, `${perf.barsSince} bar`, innerX, cursor + 58, {
         size: 10,
         color: COLOR.muted2,

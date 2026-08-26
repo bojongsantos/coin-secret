@@ -8,7 +8,6 @@ import type {
   TradeLevel,
 } from "@/core/domain/models";
 import type { MarketTicker } from "@/core/domain/models";
-import type { SetupLockPort } from "@/core/domain/analysis/setup-lock";
 import { detectSupplyDemand } from "@/core/domain/analysis/supply-demand";
 import { formatPrice } from "@/shared/lib/format";
 
@@ -332,13 +331,12 @@ export function buildAnalysisResult(
   exchange: string,
   candles: Candle[],
   ticker: MarketTicker,
-  lockStore?: SetupLockPort,
 ): AnalysisResult {
   const price = ticker.lastPrice;
   const now = new Date();
   const analyzedAt = now.toISOString();
 
-  const sd = detectSupplyDemand(candles, symbol, timeframe, lockStore);
+  const sd = detectSupplyDemand(candles);
   const setup = sd.setup;
   const performance = buildPerformance(candles);
 
@@ -358,8 +356,7 @@ export function buildAnalysisResult(
     }));
 
   // Always include the setup zone (the limit-order reference zone) so the chart
-  // draws it full-width. A locked setup may carry an id like "supply-locked"
-  // that is not present in sd.zones — append it explicitly.
+  // draws it full-width, even when it fell outside the first eight zones.
   if (setup && !zoneShape.some((z) => z.id === setup.zone.id)) {
     zoneShape.push({
       id: setup.zone.id,

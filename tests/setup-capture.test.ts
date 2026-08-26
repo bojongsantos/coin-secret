@@ -1,10 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canComposeResult, captureTriggerFor } from "@/core/domain/promo/capture-trigger";
 import {
+  canComposeResult,
+  captureTriggerFor,
+  isFilledStatus,
+  isTerminalStatus,
+} from "@/core/domain/promo/capture-trigger";
+import {
+  CHART_H,
+  CHART_Y,
   composeResultImage,
   escapeXml,
+  PANEL,
   renderSnapshotSvg,
+  SNAPSHOT_WIDTH,
   type SnapshotInput,
 } from "@/core/domain/promo/result-image";
 import type { Candle } from "@/core/domain/models";
@@ -43,11 +52,18 @@ const snapshot = (status: string): SnapshotInput => ({
   },
 });
 
-test("the entry photograph is taken only on the fill itself", () => {
+test("the entry photograph is taken when the limit order stops being one", () => {
   assert.equal(captureTriggerFor("Limit Order", "Filled"), "ENTRY");
+  // The sweep runs about hourly against a fifteen-minute chart, so a setup is
+  // usually past "Filled" by the time it is seen again. Insisting on that one
+  // status meant the archive recorded almost nothing.
+  assert.equal(captureTriggerFor("Limit Order", "Running"), "ENTRY");
+  assert.equal(captureTriggerFor("Limit Order", "Target 1 reached"), "ENTRY");
   // Seen again in the same state on the next sweep: nothing new happened.
   assert.equal(captureTriggerFor("Filled", "Filled"), null);
   assert.equal(captureTriggerFor("Running", "Filled"), null);
+  // Already past the entry when first tracked; the picture would be a lie.
+  assert.equal(captureTriggerFor("Filled", "Running"), null);
 });
 
 test("a setup first seen already filled is not photographed", () => {
@@ -65,8 +81,20 @@ test("reaching the second target is photographed once", () => {
 
 test("losses and misses are not promoted", () => {
   assert.equal(captureTriggerFor("Filled", "Invalidated (SL hit)"), null);
+  // Never filled, so there is nothing to photograph either side of.
   assert.equal(captureTriggerFor("Limit Order", "Missed"), null);
-  assert.equal(captureTriggerFor("Limit Order", "Running"), null);
+  assert.equal(isFilledStatus("Missed"), false);
+  assert.equal(isFilledStatus("Limit Order"), false);
+});
+
+test("a finished setup is recognised as finished", () => {
+  // The sweep stops re-checking a setup once this is true, so a status that
+  // failed to register here would be looked up forever.
+  assert.equal(isTerminalStatus("Target 2 reached"), true);
+  assert.equal(isTerminalStatus("Invalidated (SL hit)"), true);
+  assert.equal(isTerminalStatus("Missed"), true);
+  assert.equal(isTerminalStatus("Target 1 reached"), false, "the first target is a partial");
+  assert.equal(isTerminalStatus("Running"), false);
 });
 
 test("a proof needs both halves", () => {
@@ -124,4 +152,89 @@ test("the chart scale makes room for targets price has not reached", () => {
   const svg = renderSnapshotSvg(far);
   const t2 = svg.match(/T2 400/);
   assert.ok(t2, "the far target is still drawn");
+});
+
+/**
+ * The plan panel's stacked blocks, top to bottom.
+ *
+ * Written out as rectangles so the layout can be checked rather than looked
+ * at. Two of these offsets were once absolute page coordinates while the rest
+ * were relative to the panel, and the result was a heading printed straight
+ * through the confidence tile and two price rows sitting on top of it.
+ */
+function panelBlocks(): Array<{ name: string; top: number; bottom: number }> {
+  const blocks = [
+    { name: "heading", top: CHART_Y + PANEL.heading - 12, bottom: CHART_Y + PANEL.heading + 4 },
+    { name: "title", top: CHART_Y + PANEL.title - 16, bottom: CHART_Y + PANEL.title + 4 },
+    { name: "trend", top: CHART_Y + PANEL.trend - 9, bottom: CHART_Y + PANEL.trend + 3 },
+    { name: "stats", top: CHART_Y + PANEL.statTop, bottom: CHART_Y + PANEL.statTop + PANEL.statHeight },
+    { name: "breakdown", top: CHART_Y + PANEL.breakdown - 8, bottom: CHART_Y + PANEL.breakdown + 3 },
+  ];
+  for (let i = 0; i < 4; i++) {
+    const top = CHART_Y + PANEL.rowsTop + i * PANEL.rowStride;
+    blocks.push({ name: `row-${i}`, top, bottom: top + PANEL.rowHeight });
+  }
+  return blocks;
+}
+
+test("nothing in the plan panel is drawn on top of anything else", () => {
+  const blocks = panelBlocks();
+  for (let i = 1; i < blocks.length; i++) {
+    const above = blocks[i - 1];
+    const below = blocks[i];
+    assert.ok(
+      below.top >= above.bottom,
+      `${below.name} (from ${below.top}) starts before ${above.name} ends (${above.bottom})`,
+    );
+  }
+});
+
+test("the plan panel finishes inside the panel it is drawn in", () => {
+  const last = panelBlocks()[panelBlocks().length - 1];
+  assert.ok(
+    last.bottom <= CHART_Y + CHART_H,
+    `the last row ends at ${last.bottom}, past the panel bottom ${CHART_Y + CHART_H}`,
+  );
+  assert.ok(panelBlocks()[0].top >= CHART_Y, "the heading starts inside the panel");
+});
+
+test("the price pills sit beside the candles, never over them", () => {
+  const svg = renderSnapshotSvg(snapshot("Filled"));
+  // Every dashed level line stops at the same x, and every pill starts after
+  // it. Drawn over the plot, four stacked pills hid the most recent bars —
+  // which are the bars the picture exists to show.
+  const lineEnds = [...svg.matchAll(/stroke-dasharray="4 4"[^>]*\/>/g)];
+  assert.ok(lineEnds.length >= 4, "all four levels are drawn");
+
+  const plotEnd = Number(
+    /<line x1="16" y1="[\d.]+" x2="(\d+)"[^>]*stroke-dasharray/.exec(svg)?.[1],
+  );
+  assert.ok(Number.isFinite(plotEnd), "the level lines have a plot edge");
+
+  const pillXs = [...svg.matchAll(/<rect x="([\d.]+)" y="[\d.-]+" width="90"/g)].map((m) =>
+    Number(m[1]),
+  );
+  assert.equal(pillXs.length, 4, "one pill per level");
+  for (const x of pillXs) {
+    assert.ok(x >= plotEnd, `a pill starts at ${x}, inside the plot that ends at ${plotEnd}`);
+  }
+  assert.ok(plotEnd < SNAPSHOT_WIDTH, "the plot leaves room for the gutter");
+});
+
+test("candle bodies stay wide enough to read", () => {
+  const svg = renderSnapshotSvg(snapshot("Filled"));
+  const widths = [...svg.matchAll(/<rect x="[\d.-]+" y="[\d.-]+" width="([\d.]+)" height="[\d.]+" fill="#(?:089981|f23645)"/g)]
+    .map((m) => Number(m[1]));
+  assert.equal(widths.length, 90, "one body per candle");
+  for (const width of widths) {
+    assert.ok(width >= 2.5, `a candle body is ${width}px wide`);
+  }
+});
+
+test("a losing status is not printed in the winning colour", () => {
+  const lost = snapshot("Invalidated (SL hit)");
+  const svg = renderSnapshotSvg(lost);
+  const status = /fill="([^"]+)"[^>]*>Invalidated \(SL hit\)</.exec(svg);
+  assert.ok(status, "the status is drawn");
+  assert.notEqual(status[1], "#22c55e", "a stop-out must not be green");
 });

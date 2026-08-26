@@ -1,3 +1,4 @@
+import { ZONE_IMPULSE_BARS } from "@/core/domain/analysis/supply-demand";
 import type { Candle } from "@/core/domain/models";
 
 /**
@@ -24,6 +25,8 @@ export interface SignalPerformance {
   /** Best and worst the trade has been, in the same favour-signed terms. */
   bestPct: number;
   worstPct: number;
+  /** Whether price ever traded through the entry after the zone formed. */
+  filled: boolean;
   hitTarget1: boolean;
   hitTarget2: boolean;
   hitStop: boolean;
@@ -43,6 +46,16 @@ export interface SignalPerformanceInput {
    */
   signalTime: number;
   direction: "long" | "short";
+  /**
+   * The limit price.
+   *
+   * Targets only count once price has actually traded through it. Without
+   * this, a setup whose entry was never touched still reported "Target 1 ✓"
+   * because price happened to sweep past that level on its way somewhere
+   * else — the export claimed a win on a trade that was never opened, beside
+   * a plan that still read "Limit Order".
+   */
+  entry: number;
   target1: number;
   target2: number;
   stopLoss: number;
@@ -65,7 +78,7 @@ function favourPct(from: number, to: number, direction: "long" | "short"): numbe
  * early to say".
  */
 export function buildSignalPerformance(input: SignalPerformanceInput): SignalPerformance | null {
-  const { candles, direction, target1, target2, stopLoss } = input;
+  const { candles, direction, entry, target1, target2, stopLoss } = input;
   if (candles.length === 0) return null;
 
   if (!Number.isFinite(input.signalTime)) return null;
@@ -81,7 +94,11 @@ export function buildSignalPerformance(input: SignalPerformanceInput): SignalPer
   }
   if (startIndex < 0) return null;
 
-  const window = candles.slice(startIndex);
+  // Start where the status machine starts. The impulse candle that forms a
+  // zone runs straight through the entry, so measuring from the base bar made
+  // every setup look filled the moment it was detected — and left the plan
+  // panel and this block describing two different trades.
+  const window = candles.slice(startIndex + ZONE_IMPULSE_BARS);
   if (window.length < 2) return null;
 
   const priceAtSignal = window[0].close;
@@ -89,26 +106,36 @@ export function buildSignalPerformance(input: SignalPerformanceInput): SignalPer
 
   let best = 0;
   let worst = 0;
+  let filled = false;
   let hitTarget1 = false;
   let hitTarget2 = false;
   let hitStop = false;
 
-  // Bar 0 is the signal bar itself; excursions are measured from its close.
-  for (let i = 1; i < window.length; i++) {
+  for (let i = 0; i < window.length; i++) {
     const candle = window[i];
-    const favourHigh = favourPct(priceAtSignal, direction === "long" ? candle.high : candle.low, direction);
-    const favourLow = favourPct(priceAtSignal, direction === "long" ? candle.low : candle.high, direction);
-    if (favourHigh > best) best = favourHigh;
-    if (favourLow < worst) worst = favourLow;
 
+    // Excursions skip bar 0: a bar cannot have moved away from its own close,
+    // and counting it would report a swing that never happened.
+    if (i > 0) {
+      const favourHigh = favourPct(priceAtSignal, direction === "long" ? candle.high : candle.low, direction);
+      const favourLow = favourPct(priceAtSignal, direction === "long" ? candle.low : candle.high, direction);
+      if (favourHigh > best) best = favourHigh;
+      if (favourLow < worst) worst = favourLow;
+    }
+
+    // Level checks do not skip it. The status machine counts every bar from
+    // here on, and a fill that landed on this one had the panel reporting
+    // "Target 1 reached" beside a block insisting the order never triggered.
     if (direction === "long") {
-      if (candle.high >= target1) hitTarget1 = true;
-      if (candle.high >= target2) hitTarget2 = true;
-      if (candle.low <= stopLoss) hitStop = true;
+      if (candle.low <= entry) filled = true;
+      if (filled && candle.high >= target1) hitTarget1 = true;
+      if (filled && candle.high >= target2) hitTarget2 = true;
+      if (filled && candle.low <= stopLoss) hitStop = true;
     } else {
-      if (candle.low <= target1) hitTarget1 = true;
-      if (candle.low <= target2) hitTarget2 = true;
-      if (candle.high >= stopLoss) hitStop = true;
+      if (candle.high >= entry) filled = true;
+      if (filled && candle.low <= target1) hitTarget1 = true;
+      if (filled && candle.low <= target2) hitTarget2 = true;
+      if (filled && candle.high >= stopLoss) hitStop = true;
     }
   }
 
@@ -119,6 +146,7 @@ export function buildSignalPerformance(input: SignalPerformanceInput): SignalPer
     changePct: Number(favourPct(priceAtSignal, priceNow, direction).toFixed(2)),
     bestPct: Number(best.toFixed(2)),
     worstPct: Number(worst.toFixed(2)),
+    filled,
     hitTarget1,
     hitTarget2,
     hitStop,

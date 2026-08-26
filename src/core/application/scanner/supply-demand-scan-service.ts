@@ -66,7 +66,7 @@ export async function runSdScan(
       try {
         const candles = await marketData.fetchKlines({ symbol, timeframe: SD_SCAN_TIMEFRAME, limit: ZONE_SCAN_WINDOW });
         sparklineMap.set(symbol, candles.slice(-96).map((candle) => candle.close));
-        const sd: SdResult = detectSupplyDemand(candles, symbol, SD_SCAN_TIMEFRAME);
+        const sd: SdResult = detectSupplyDemand(candles);
         if (!sd.setup) return;
 
         const setup = sd.setup;
@@ -133,7 +133,7 @@ export interface TopSetup {
 export function rankTopSetups(result: SdScanResult, limit = 5): TopSetup[] {
   const all = [...result.demand, ...result.supply];
   const live = (hit: SdScanHit) =>
-    hit.status === "Limit Order" || hit.status === "Filled" || hit.status === "Running";
+    ACTIVE_SETUP_STATUSES.includes(hit.status as (typeof ACTIVE_SETUP_STATUSES)[number]);
   const qualified = all.filter((hit) => live(hit) && hit.strength === "fresh");
   const livePool = qualified.length > 0 ? qualified : all.filter(live);
   const ranked = livePool.length > 0 ? livePool : all;

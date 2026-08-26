@@ -1,5 +1,4 @@
-import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
-import type { SetupLockedSnapshot, SetupLockPort } from "@/core/domain/analysis/setup-lock";
+import type { Candle, SetupDirection } from "@/core/domain/models";
 import { formatPrice } from "@/shared/lib/format";
 
 export type ZoneType = "supply" | "demand";
@@ -35,10 +34,6 @@ export interface SdSetup {
   confidence: number;
   status: string;
   reasoning: string[];
-  /** Values frozen the first time the setup turned Running. Null until then. */
-  lockedSnapshot: SetupLockedSnapshot | null;
-  /** Timestamp (ms) when the setup first entered Running. Null until then. */
-  runningSince: number | null;
 }
 
 export interface SdResult {
@@ -53,12 +48,25 @@ export type SetupStatus =
   | "Limit Order"
   | "Filled"
   | "Running"
+  | "Target 1 reached"
   | "Target 2 reached"
   | "Invalidated (SL hit)"
   | "Missed";
 
-/** Statuses that are still actionable and belong in the scanner table. */
-export const ACTIVE_SETUP_STATUSES: SetupStatus[] = ["Limit Order", "Filled", "Running"];
+/**
+ * Statuses that are still actionable and belong in the scanner table.
+ *
+ * "Target 1 reached" is among them: the first target is a partial, and the
+ * position is still open and working toward the second. Treating it as
+ * terminal would drop a live trade off the board the moment it started
+ * winning.
+ */
+export const ACTIVE_SETUP_STATUSES: SetupStatus[] = [
+  "Limit Order",
+  "Filled",
+  "Running",
+  "Target 1 reached",
+];
 export const TERMINAL_SETUP_STATUSES: SetupStatus[] = [
   "Target 2 reached",
   "Invalidated (SL hit)",
@@ -79,6 +87,17 @@ const SWING_LOOKBACK = 50;
  * up; supplying more is harmless and leaves the extra bars for the chart.
  */
 export const ZONE_SCAN_WINDOW = 300;
+
+/**
+ * Bars skipped after a zone's base before price action counts.
+ *
+ * The impulse candle that creates a zone passes straight through the entry —
+ * that is what makes it an impulse — so counting it would mark every setup
+ * filled the instant it was detected. Exported because anything measuring the
+ * same setup has to start from the same bar or the two will contradict each
+ * other on screen.
+ */
+export const ZONE_IMPULSE_BARS = 3;
 const STOP_BUFFER_RATIO = 0.001;
 
 /**
@@ -148,14 +167,16 @@ export function buildRiskTargets(
  * A setup moves through a state machine:
  *   Limit Order -> Filled -> Running -> (Target 2 reached | Invalidated)
  *   Limit Order -> Missed (price ran through T1 without ever filling entry)
- * When a lock adapter is provided, Running levels remain stable until terminal.
+ *
+ * The result is a pure function of the candles handed in. It used to consult a
+ * per-browser lock that froze a Running setup's levels, which meant the same
+ * symbol could show one plan on the chart and a different one in the signals
+ * table on the very same screen — and a third to anyone on another device.
+ * One deterministic reading is worth more than frozen levels — which is also
+ * why it no longer takes a symbol or a timeframe: nothing about the answer may
+ * depend on which caller is asking.
  */
-export function detectSupplyDemand(
-  candles: Candle[],
-  symbol?: string,
-  timeframe: Timeframe = "15m",
-  lockStore?: SetupLockPort,
-): SdResult {
+export function detectSupplyDemand(candles: Candle[]): SdResult {
   const zones: SdZone[] = [];
 
   // Average candle range used to detect an "impulse" (expansion) candle.
@@ -259,53 +280,6 @@ export function detectSupplyDemand(
   const bias =
     price - support > resistance - price ? "bullish" : price - support < resistance - price ? "bearish" : "neutral";
 
-  // Locked setups (already Running) take priority: reuse the frozen numbers,
-  // never recompute the zone, and only update the terminal flags.
-  if (symbol && lockStore) {
-    const locked = lockStore.load(symbol, timeframe);
-    if (locked) {
-      // Terminal checks read the candles that closed while the lock was held.
-      // The spot price alone misses a wick that pierced the stop and recovered.
-      if (lockedSetupOutcome(candles, locked, price) !== null) {
-        lockStore.clear(symbol, timeframe);
-      } else {
-        const zone: SdZone = {
-          id: `${locked.zoneType}-locked`,
-          type: locked.zoneType,
-          top: locked.zoneTop,
-          bottom: locked.zoneBottom,
-          baseIndex: -1,
-          baseTime: locked.baseTime,
-          touches: locked.touches ?? 1,
-          strength: locked.strength ?? "tested",
-          active: true,
-          confidence: locked.confidence,
-          narrowness: locked.narrowness ?? 0,
-        };
-        const risk = Math.abs(locked.entry - locked.stopLoss);
-        const riskReward = Math.min(9, Math.max(0.3, Math.abs(locked.target2 - locked.entry) / Math.max(1e-9, risk)));
-        const setup: SdSetup = {
-          direction: locked.direction,
-          zone,
-          entry: locked.entry,
-          target1: locked.target1,
-          target2: locked.target2,
-          stopLoss: locked.stopLoss,
-          riskReward: Number(riskReward.toFixed(2)),
-          confidence: locked.confidence,
-          status: "Running",
-          reasoning: [
-            `Setup ${locked.direction === "long" ? "demand" : "supply"} terkunci dan berjalan sejak ${new Date(locked.runningSince).toLocaleString()}, dengan level yang dibekukan pada entry ${formatPrice(locked.entry)}.`,
-            `Target berada di ${formatPrice(locked.target1)} dengan rasio 1:1 dan ${formatPrice(locked.target2)} dengan rasio 1:2, sedangkan invalidation ada di ${formatPrice(locked.stopLoss)}.`,
-          ],
-          lockedSnapshot: locked,
-          runningSince: locked.runningSince,
-        };
-        return { zones, setup, bias, support, resistance };
-      }
-    }
-  }
-
   // Best actionable setup: nearest fresh/active zone. Skip zones that already
   // ran (TP hit / SL hit / entry never reached) so the plan rolls over to the
   // next best live zone instead of re-serving a finished one.
@@ -330,33 +304,6 @@ export function detectSupplyDemand(
       continue;
     }
 
-    // First transition to Running freezes the levels for every future scan.
-    let lockedSnapshot: SetupLockedSnapshot | null = null;
-    let runningSince: number | null = null;
-    if (status === "Running" && symbol && lockStore) {
-      runningSince = Date.now();
-      lockedSnapshot = {
-        algorithmVersion: 2,
-        symbol,
-        timeframe,
-        zoneType: zone.type,
-        direction,
-        baseTime: zone.baseTime,
-        entry,
-        stopLoss,
-        target1,
-        target2,
-        confidence: zone.confidence,
-        zoneTop: zone.top,
-        zoneBottom: zone.bottom,
-        narrowness: zone.narrowness,
-        strength: zone.strength,
-        touches: zone.touches,
-        runningSince,
-      };
-      lockStore.save(lockedSnapshot);
-    }
-
     const rawRr = Math.abs(target2 - entry) / Math.max(1e-9, Math.abs(entry - stopLoss));
     const riskReward = Math.min(9, Math.max(0.3, rawRr));
 
@@ -375,8 +322,6 @@ export function detectSupplyDemand(
         `Harga saat ini ${zone.active ? "berada di dalam" : "mendekati"} zona, sehingga ${isLong ? "beli" : "jual"} dilakukan di ${isLong ? "atas zona" : "bawah zona"} pada harga ${formatPrice(entry)}.`,
         `Stop loss berada di luar swing ${isLong ? "low" : "high"} terakhir pada ${formatPrice(stopLoss)}. Target pertama ${formatPrice(target1)} memakai rasio 1:1 dan target kedua ${formatPrice(target2)} memakai rasio 1:2.`,
       ],
-      lockedSnapshot,
-      runningSince,
     };
     break;
   }
@@ -384,36 +329,47 @@ export function detectSupplyDemand(
   return { zones, setup, bias, support, resistance };
 }
 
+/** A setup that price has already decided, one way or the other. */
+export interface DecidedSetup {
+  direction: SetupDirection;
+  stopLoss: number;
+  target2: number;
+  /** Epoch milliseconds; candles that closed before it are not this setup's. */
+  runningSince: number;
+}
+
 /**
- * Whether a locked setup has already been decided by price.
+ * Whether price has already decided a setup.
  *
- * Reads the candles that closed while the lock was held, not just the current
- * price. Comparing the spot price alone meant a wick that pierced the stop and
- * recovered before the next read left the setup reporting "Running" forever —
- * the trade was over and the screen still said it was live.
+ * Reads the candles that closed since the setup started running, not just the
+ * current price. Comparing the spot price alone meant a wick that pierced the
+ * stop and recovered before the next read left the setup reporting "Running"
+ * forever — the trade was over and the screen still said it was live.
  *
  * A stop takes precedence over a target reached in the same window: intrabar
- * order is unknowable, so the losing outcome is the honest one to assume.
+ * order is unknowable, so the losing outcome is the honest one to assume. That
+ * ordering is what keeps a stopped-out setup from being filed as a win in the
+ * result archive.
  */
-export function lockedSetupOutcome(
+export function setupOutcomeSince(
   candles: Candle[],
-  locked: Pick<SetupLockedSnapshot, "direction" | "stopLoss" | "target2" | "runningSince">,
+  setup: DecidedSetup,
   price: number,
 ): "stopped" | "target" | null {
-  const isLong = locked.direction === "long";
-  const since = Math.floor(locked.runningSince / 1_000);
+  const isLong = setup.direction === "long";
+  const since = Math.floor(setup.runningSince / 1_000);
 
-  let stopped = isLong ? price <= locked.stopLoss : price >= locked.stopLoss;
-  let target = isLong ? price >= locked.target2 : price <= locked.target2;
+  let stopped = isLong ? price <= setup.stopLoss : price >= setup.stopLoss;
+  let target = isLong ? price >= setup.target2 : price <= setup.target2;
 
   for (const candle of candles) {
     if (candle.time < since) continue;
     if (isLong) {
-      if (candle.low <= locked.stopLoss) stopped = true;
-      if (candle.high >= locked.target2) target = true;
+      if (candle.low <= setup.stopLoss) stopped = true;
+      if (candle.high >= setup.target2) target = true;
     } else {
-      if (candle.high >= locked.stopLoss) stopped = true;
-      if (candle.low <= locked.target2) target = true;
+      if (candle.high >= setup.stopLoss) stopped = true;
+      if (candle.low <= setup.target2) target = true;
     }
   }
 
@@ -428,6 +384,7 @@ export function lockedSetupOutcome(
  * - Limit Order: entry never touched since the zone formed.
  * - Filled: entry touched, price still at/behind the entry (no confirmation).
  * - Running: entry touched and price moved past entry toward the targets.
+ * - Target 1 reached: the first target paid; the position works on toward T2.
  * - Target 2 reached / Invalidated (SL hit): terminal outcomes.
  * - Missed: entry never touched but price already ran through target 1.
  */
@@ -445,22 +402,25 @@ export function computeSetupStatus(
   // before any target/SL could be "reached".
   let entryFilled = false;
   let slHit = false;
+  let t1Hit = false;
   let t2Hit = false;
   // If entry never filled but price still ran through target 1 at any point,
   // the setup is cancelled and replaced with a new one.
   let ranToT1 = false;
   // Walk candles AFTER the impulse (zone formation) only: the base candles
   // themselves sit below/above the entry and must not count as "filled".
-  for (let i = Math.min(candles.length - 1, zone.baseIndex + 3); i < candles.length; i++) {
+  for (let i = Math.min(candles.length - 1, zone.baseIndex + ZONE_IMPULSE_BARS); i < candles.length; i++) {
     const c = candles[i];
     if (isLong) {
       if (c.low <= entry) entryFilled = true;
       if (entryFilled && c.low <= stopLoss) slHit = true;
+      if (entryFilled && c.high >= target1) t1Hit = true;
       if (entryFilled && c.high >= target2) t2Hit = true;
       if (!entryFilled && c.high > target1) ranToT1 = true;
     } else {
       if (c.high >= entry) entryFilled = true;
       if (entryFilled && c.high >= stopLoss) slHit = true;
+      if (entryFilled && c.low <= target1) t1Hit = true;
       if (entryFilled && c.low <= target2) t2Hit = true;
       if (!entryFilled && c.low < target1) ranToT1 = true;
     }
@@ -474,6 +434,11 @@ export function computeSetupStatus(
   }
   if (slHit) return "Invalidated (SL hit)";
   if (t2Hit) return "Target 2 reached";
+  // The first target is a partial, not an exit, so it is a state the setup
+  // passes through rather than a result. Reported explicitly because the plan
+  // saying "Running" while the export said the market had already paid out at
+  // target 1 read as two different opinions about the same trade.
+  if (t1Hit) return "Target 1 reached";
   // Entry filled: Filled until price confirms direction past the entry.
   const moved = isLong ? price > entry : price < entry;
   if (!moved) return "Filled";

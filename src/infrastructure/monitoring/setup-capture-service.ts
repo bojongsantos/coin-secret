@@ -2,13 +2,18 @@ import "server-only";
 
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { runSdScan, SD_SCAN_TIMEFRAME } from "@/core/application/scanner/supply-demand-scan-service";
-import type { SetupStatus } from "@/core/domain/analysis/supply-demand";
+import {
+  setupOutcomeSince,
+  TERMINAL_SETUP_STATUSES,
+  type SetupStatus,
+} from "@/core/domain/analysis/supply-demand";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { captureTriggerFor } from "@/core/domain/promo/capture-trigger";
 import type { SnapshotInput } from "@/core/domain/promo/result-image";
 import { prisma } from "@/infrastructure/database/prisma";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
+import { mapConcurrent } from "@/shared/lib/async";
 
 export interface SetupCaptureReport {
   scanned: number;
@@ -29,6 +34,15 @@ const SNAPSHOT_BARS = 90;
 
 /** Ceiling on candle fetches per run, so one sweep cannot fan out unbounded. */
 const MAX_CAPTURES_PER_RUN = 8;
+
+/**
+ * How many pending setups get their outcome checked per sweep.
+ *
+ * Higher than the entry ceiling because a check is one klines call and most of
+ * them resolve to "not yet". The queue is drained oldest-check-first, so this
+ * is a rate, not a cap on how many setups can ever be resolved.
+ */
+const MAX_RESULT_CHECKS_PER_RUN = 24;
 
 function snapshotPayload(input: {
   symbol: string;
@@ -95,53 +109,65 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
   report.skippedSymbols = scan.errors.map((entry) => entry.split(":")[0]);
 
   const now = new Date();
-  const entryCaptures: { setupId: string; symbol: string; status: SetupStatus }[] = [];
-
-  for (const hit of hits) {
-    const signature = setupSignature({
+  const signed = hits.map((hit) => ({
+    hit,
+    signature: setupSignature({
       symbol: hit.symbol,
       timeframe: hit.timeframe,
       direction: hit.direction,
       entry: hit.entry,
       stopLoss: hit.stopLoss,
-    });
-    const status = (hit.status ?? "Limit Order") as SetupStatus;
-    const existing = await prisma.trackedSetup.findUnique({
-      where: { signature },
-      select: { id: true, status: true },
-    });
+    }),
+    status: (hit.status ?? "Limit Order") as SetupStatus,
+  }));
 
-    const record = await prisma.trackedSetup.upsert({
-      where: { signature },
-      create: {
-        signature,
-        symbol: hit.symbol,
-        timeframe: hit.timeframe,
-        direction: hit.direction,
-        entry: hit.entry,
-        target1: hit.target1,
-        // The scan carries one target; the second is the same distance again,
-        // which is how the detector lays them out.
-        target2: hit.target1 + (hit.target1 - hit.entry),
-        stopLoss: hit.stopLoss,
-        riskReward: 2,
-        confidence: Math.round(hit.confidence),
-        zoneTop: Math.max(hit.entry, hit.stopLoss),
-        zoneBottom: Math.min(hit.entry, hit.stopLoss),
-        status,
-      },
-      update: { status },
-      select: { id: true },
-    });
-    report.tracked++;
+  // One query for what the last sweep saw, rather than one per setup. At a
+  // hundred live setups the round trips alone were most of the run.
+  const known = await prisma.trackedSetup.findMany({
+    where: { signature: { in: signed.map((entry) => entry.signature) } },
+    select: { id: true, signature: true, status: true },
+  });
+  const previous = new Map(known.map((row) => [row.signature, row]));
 
-    const trigger = captureTriggerFor((existing?.status ?? null) as SetupStatus | null, status);
-    if (trigger === "ENTRY" && entryCaptures.length < MAX_CAPTURES_PER_RUN) {
-      entryCaptures.push({ setupId: record.id, symbol: hit.symbol, status });
-    }
-  }
+  const entryCaptures: { setupId: string; symbol: string; status: SetupStatus }[] = [];
 
-  for (const capture of entryCaptures) {
+  await mapConcurrent(
+    signed,
+    async ({ hit, signature, status }) => {
+      const record = await prisma.trackedSetup.upsert({
+        where: { signature },
+        create: {
+          signature,
+          symbol: hit.symbol,
+          timeframe: hit.timeframe,
+          direction: hit.direction,
+          entry: hit.entry,
+          target1: hit.target1,
+          // The scan carries one target; the second is the same distance again,
+          // which is how the detector lays them out.
+          target2: hit.target1 + (hit.target1 - hit.entry),
+          stopLoss: hit.stopLoss,
+          riskReward: 2,
+          confidence: Math.round(hit.confidence),
+          zoneTop: Math.max(hit.entry, hit.stopLoss),
+          zoneBottom: Math.min(hit.entry, hit.stopLoss),
+          status,
+        },
+        update: { status },
+        select: { id: true },
+      });
+      report.tracked++;
+
+      const before = (previous.get(signature)?.status ?? null) as SetupStatus | null;
+      if (captureTriggerFor(before, status) === "ENTRY") {
+        entryCaptures.push({ setupId: record.id, symbol: hit.symbol, status });
+      }
+    },
+    8,
+  );
+
+  // Newest fills first when there are more than one sweep can afford.
+  for (const capture of entryCaptures.slice(0, MAX_CAPTURES_PER_RUN)) {
     const setup = await prisma.trackedSetup.findUnique({ where: { id: capture.setupId } });
     if (!setup) continue;
     const candles = await marketData
@@ -193,15 +219,27 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
  *
  * Only setups that already have an entry snapshot are considered: a result
  * without its before-picture would be a claim with nothing behind it.
+ *
+ * The queue is drained oldest-check-first. Ordering by `updatedAt` put the
+ * most recently *seen* setups at the front — precisely the ones still live in
+ * the scan and therefore least likely to be finished — while a setup that had
+ * dropped off the board, which is what reaching a target does, sank behind
+ * them and was never looked at again.
  */
 async function resolveResults(now: Date): Promise<number> {
   const pending = await prisma.trackedSetup.findMany({
     where: {
       resultAt: null,
+      status: { notIn: TERMINAL_SETUP_STATUSES },
       snapshots: { some: { kind: "ENTRY" } },
     },
-    orderBy: { updatedAt: "desc" },
-    take: MAX_CAPTURES_PER_RUN,
+    // Nulls first: a setup never checked before takes priority over one
+    // checked an hour ago.
+    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }],
+    take: MAX_RESULT_CHECKS_PER_RUN,
+    include: {
+      snapshots: { where: { kind: "ENTRY" }, select: { capturedAt: true } },
+    },
   });
   if (pending.length === 0) return 0;
 
@@ -212,11 +250,40 @@ async function resolveResults(now: Date): Promise<number> {
       .catch(() => [] as Candle[]);
     if (candles.length === 0) continue;
 
-    const long = setup.direction === "long";
-    const reached = candles.some((candle) =>
-      long ? candle.high >= setup.target2 : candle.low <= setup.target2,
+    const price = candles[candles.length - 1].close;
+    // Measured from the moment the entry was photographed, not from now, and
+    // decided by the same rule the rest of the app uses — which is what stops
+    // a setup that was stopped out and only later drifted through its target
+    // from being filed as a win.
+    const outcome = setupOutcomeSince(
+      candles,
+      {
+        direction: setup.direction as SetupDirection,
+        stopLoss: setup.stopLoss,
+        target2: setup.target2,
+        runningSince: (setup.snapshots[0]?.capturedAt ?? setup.firstSeenAt).getTime(),
+      },
+      price,
     );
-    if (!reached) continue;
+
+    if (outcome === null) {
+      await prisma.trackedSetup.update({
+        where: { id: setup.id },
+        data: { resultCheckedAt: now },
+      });
+      continue;
+    }
+
+    if (outcome === "stopped") {
+      // Closed, and closed as a loss. Recorded so the sweep stops re-checking
+      // it, and left without a result image: the archive is proof of setups
+      // that worked, and a losing trade is not that.
+      await prisma.trackedSetup.update({
+        where: { id: setup.id },
+        data: { status: "Invalidated (SL hit)", resultCheckedAt: now },
+      });
+      continue;
+    }
 
     const payload = snapshotPayload({
       symbol: setup.symbol,
@@ -232,7 +299,7 @@ async function resolveResults(now: Date): Promise<number> {
       status: "Target 2 reached",
       zoneTop: setup.zoneTop,
       zoneBottom: setup.zoneBottom,
-      price: candles[candles.length - 1].close,
+      price,
       capturedAt: now,
     });
 
@@ -250,7 +317,7 @@ async function resolveResults(now: Date): Promise<number> {
       }),
       prisma.trackedSetup.update({
         where: { id: setup.id },
-        data: { status: "Target 2 reached", resultAt: now },
+        data: { status: "Target 2 reached", resultAt: now, resultCheckedAt: now },
       }),
     ]);
     captured++;

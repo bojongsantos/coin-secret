@@ -1,4 +1,12 @@
-export const DEFAULT_WATCHLIST = [
+import { tradableSignalSymbols } from "@/config/symbol-filters";
+
+/**
+ * The board as it comes off the exchange's volume ranking.
+ *
+ * Kept whole so the source of the list stays obvious; the filter below is what
+ * the app actually scans.
+ */
+const RANKED_BOARD = [
   "BTCUSDT",
   "ETHUSDT",
   "BNBUSDT",
@@ -200,3 +208,12 @@ export const DEFAULT_WATCHLIST = [
   "POWRUSDT",
   "EULUSDT",
 ];
+
+/**
+ * The symbols every scan runs over.
+ *
+ * Stablecoins, wrapped assets, and unfetchable listings are dropped here
+ * rather than in each consumer, so the scanner, the capture sweep, and the
+ * symbol search cannot disagree about which pairs exist.
+ */
+export const DEFAULT_WATCHLIST = tradableSignalSymbols(RANKED_BOARD);

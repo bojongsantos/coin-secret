@@ -29,14 +29,26 @@ const COLOR = {
 
 const FONT = "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
-export const SNAPSHOT_WIDTH = 900;
-export const SNAPSHOT_HEIGHT = 320;
+export const SNAPSHOT_WIDTH = 1000;
+export const SNAPSHOT_HEIGHT = 340;
 const CHART_X = 16;
-const CHART_Y = 44;
-const CHART_W = 580;
-const CHART_H = 258;
-const PANEL_X = 612;
-const PANEL_W = 272;
+export const CHART_Y = 46;
+export const CHART_H = 278;
+const PANEL_W = 280;
+const PANEL_X = SNAPSHOT_WIDTH - 16 - PANEL_W;
+const CHART_W = PANEL_X - 16 - CHART_X;
+
+/**
+ * Right-hand gutter reserved for the price pills.
+ *
+ * The pills used to be drawn inside the plot, over the last fifteen or so
+ * bars — which are the bars a reader actually looks at, since that is where
+ * price is now. Four of them stacked hid the whole approach into the zone.
+ * Giving them their own column costs chart width and gives back the part of
+ * the chart the image exists to show.
+ */
+const AXIS_W = 96;
+const PLOT_W = CHART_W - AXIS_W;
 
 /** Escapes the five characters that would otherwise break the markup. */
 export function escapeXml(value: string): string {
@@ -116,13 +128,19 @@ function priceScale(candles: Candle[], setup: SnapshotSetup) {
     low,
     high,
     y: (price: number) => CHART_Y + CHART_H - ((price - low) / span) * CHART_H,
+    inside: (price: number) => {
+      const y = CHART_Y + CHART_H - ((price - low) / span) * CHART_H;
+      return Number.isFinite(y) && y >= CHART_Y - 2 && y <= CHART_Y + CHART_H + 2;
+    },
   };
 }
 
 function candlesticks(candles: Candle[], scale: ReturnType<typeof priceScale>): string {
   if (candles.length === 0) return "";
-  const slot = CHART_W / candles.length;
-  const body = Math.max(1, Math.min(7, slot * 0.62));
+  const slot = PLOT_W / candles.length;
+  // Wide enough to read at a glance, with a floor so a dense chart still shows
+  // bars rather than a picket fence of wicks.
+  const body = Math.max(2.5, Math.min(9, slot * 0.72));
 
   return candles
     .map((candle, index) => {
@@ -138,7 +156,7 @@ function candlesticks(candles: Candle[], scale: ReturnType<typeof priceScale>): 
       // still visible instead of vanishing from the chart.
       const height = Math.max(1, Math.abs(yClose - yOpen));
       return (
-        `<line x1="${cx.toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="${color}" stroke-width="1"/>` +
+        `<line x1="${cx.toFixed(1)}" y1="${yHigh.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="${color}" stroke-width="1.2"/>` +
         rect(cx - body / 2, top, body, height, color)
       );
     })
@@ -153,11 +171,15 @@ function levelLine(
   decimals: number,
 ): string {
   const y = scale.y(price);
-  if (!Number.isFinite(y) || y < CHART_Y - 2 || y > CHART_Y + CHART_H + 2) return "";
+  if (!scale.inside(price)) return "";
+  const pillX = CHART_X + PLOT_W + 3;
+  const pillW = AXIS_W - 6;
   return (
-    `<line x1="${CHART_X}" y1="${y.toFixed(1)}" x2="${CHART_X + CHART_W}" y2="${y.toFixed(1)}" stroke="${color}" stroke-width="1" stroke-dasharray="4 4" opacity="0.9"/>` +
-    rect(CHART_X + CHART_W - 96, y - 8, 94, 16, color, 'rx="3"') +
-    text(`${label} ${formatPrice(price, decimals)}`, CHART_X + CHART_W - 49, y + 4, {
+    // The dashed line stops at the plot edge; the pill lives in the gutter
+    // beside it, so neither ever covers a candle.
+    `<line x1="${CHART_X}" y1="${y.toFixed(1)}" x2="${CHART_X + PLOT_W}" y2="${y.toFixed(1)}" stroke="${color}" stroke-width="1" stroke-dasharray="4 4" opacity="0.9"/>` +
+    rect(pillX, y - 8, pillW, 16, color, 'rx="3"') +
+    text(`${label} ${formatPrice(price, decimals)}`, pillX + pillW / 2, y + 4, {
       size: 9,
       weight: 700,
       fill: "#06060a",
@@ -165,6 +187,26 @@ function levelLine(
     })
   );
 }
+
+/**
+ * Vertical rhythm of the plan panel, measured down from the panel's own top.
+ *
+ * Every offset is relative for a reason: two of these were absolute page
+ * coordinates, so the breakdown heading landed inside the confidence tile and
+ * the first two rows sat on top of it. A layout described half in one frame
+ * and half in another cannot be checked by reading it.
+ */
+export const PANEL = {
+  heading: 22,
+  title: 50,
+  trend: 66,
+  statTop: 78,
+  statHeight: 42,
+  breakdown: 140,
+  rowsTop: 150,
+  rowHeight: 24,
+  rowStride: 30,
+} as const;
 
 function planPanel(input: SnapshotInput, decimals: number): string {
   const { setup } = input;
@@ -178,9 +220,9 @@ function planPanel(input: SnapshotInput, decimals: number): string {
 
   const rowsMarkup = rows
     .map(([label, price, color], index) => {
-      const y = 150 + index * 30;
+      const y = CHART_Y + PANEL.rowsTop + index * PANEL.rowStride;
       return (
-        rect(PANEL_X + 12, y, PANEL_W - 24, 24, COLOR.surface3, 'rx="6"') +
+        rect(PANEL_X + 12, y, PANEL_W - 24, PANEL.rowHeight, COLOR.surface3, 'rx="6"') +
         text(label, PANEL_X + 22, y + 16, { size: 10, fill: COLOR.muted }) +
         text(formatPrice(price, decimals), PANEL_X + PANEL_W - 22, y + 16, {
           size: 10,
@@ -192,42 +234,55 @@ function planPanel(input: SnapshotInput, decimals: number): string {
     })
     .join("");
 
+  const statY = CHART_Y + PANEL.statTop;
+
   return (
     rect(PANEL_X, CHART_Y, PANEL_W, CHART_H, COLOR.surface2, `rx="8" stroke="${COLOR.border}"`) +
-    text("Trading Plan", PANEL_X + 12, CHART_Y + 22, { size: 11, weight: 600 }) +
-    text(input.setup.status, PANEL_X + PANEL_W - 12, CHART_Y + 22, {
+    text("Trading Plan", PANEL_X + 12, CHART_Y + PANEL.heading, { size: 11, weight: 600 }) +
+    text(input.setup.status, PANEL_X + PANEL_W - 12, CHART_Y + PANEL.heading, {
       size: 9,
       weight: 600,
-      fill: COLOR.positive,
+      fill: statusColor(setup.status),
       anchor: "end",
     }) +
-    text(bullish ? "Demand Zone" : "Supply Zone", PANEL_X + 12, CHART_Y + 48, {
+    text(bullish ? "Demand Zone" : "Supply Zone", PANEL_X + 12, CHART_Y + PANEL.title, {
       size: 16,
       weight: 700,
       fill: COLOR.accent2,
     }) +
-    text(bullish ? "bullish" : "bearish", PANEL_X + 12, CHART_Y + 64, {
+    text(bullish ? "bullish" : "bearish", PANEL_X + 12, CHART_Y + PANEL.trend, {
       size: 9,
       weight: 600,
       fill: bullish ? COLOR.positive : COLOR.negative,
     }) +
-    rect(PANEL_X + 12, CHART_Y + 76, PANEL_W - 24, 40, COLOR.surface3, 'rx="6"') +
-    text("CONFIDENCE", PANEL_X + 22, CHART_Y + 91, { size: 8, weight: 600, fill: COLOR.muted2 }) +
-    text(`${setup.confidence}%`, PANEL_X + 22, CHART_Y + 108, { size: 14, weight: 700 }) +
-    text("RISK-REWARD", PANEL_X + PANEL_W - 22, CHART_Y + 91, {
+    rect(PANEL_X + 12, statY, PANEL_W - 24, PANEL.statHeight, COLOR.surface3, 'rx="6"') +
+    text("CONFIDENCE", PANEL_X + 22, statY + 16, { size: 8, weight: 600, fill: COLOR.muted2 }) +
+    text(`${setup.confidence}%`, PANEL_X + 22, statY + 34, { size: 14, weight: 700 }) +
+    text("RISK-REWARD", PANEL_X + PANEL_W - 22, statY + 16, {
       size: 8,
       weight: 600,
       fill: COLOR.muted2,
       anchor: "end",
     }) +
-    text(`1 : ${setup.riskReward.toFixed(0)}`, PANEL_X + PANEL_W - 22, CHART_Y + 108, {
+    text(`1 : ${setup.riskReward.toFixed(0)}`, PANEL_X + PANEL_W - 22, statY + 34, {
       size: 14,
       weight: 700,
       anchor: "end",
     }) +
-    text("TRADE BREAKDOWN", PANEL_X + 12, 142, { size: 8, weight: 600, fill: COLOR.muted2 }) +
+    text("TRADE BREAKDOWN", PANEL_X + 12, CHART_Y + PANEL.breakdown, {
+      size: 8,
+      weight: 600,
+      fill: COLOR.muted2,
+    }) +
     rowsMarkup
   );
+}
+
+/** A losing outcome must not be printed in the same green as a winning one. */
+function statusColor(status: string): string {
+  if (status.startsWith("Invalidated") || status === "Missed") return COLOR.negative;
+  if (status === "Limit Order") return COLOR.muted;
+  return COLOR.positive;
 }
 
 /** One snapshot: chart on the left, the plan beside it. */
@@ -248,14 +303,15 @@ export function snapshotBody(input: SnapshotInput): string {
       anchor: "end",
     }) +
     rect(CHART_X, CHART_Y, CHART_W, CHART_H, COLOR.background, `rx="6" stroke="${COLOR.border}"`) +
-    // The zone spans the full width: it is a price band, not an event at one bar.
+    // The zone spans the plot: it is a price band, not an event at one bar.
+    // Faint on purpose — it sits behind the candles it is meant to explain.
     rect(
       CHART_X,
       zoneTopY,
-      CHART_W,
+      PLOT_W,
       zoneBottomY - zoneTopY,
       setup.direction === "long" ? COLOR.positive : COLOR.negative,
-      'opacity="0.14"',
+      'opacity="0.10"',
     ) +
     candlesticks(input.candles, scale) +
     levelLine("Entry", setup.entry, COLOR.accentBlue, scale, decimals) +

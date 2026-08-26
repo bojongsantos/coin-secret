@@ -194,6 +194,10 @@ model TrackedSetup {
   signature  String   @unique
   /// Set once both snapshots exist and the proof image can be rendered.
   resultAt   DateTime?
+  /// Last time the sweep looked at this setup's candles for an outcome.
+  /// Ordering by it rotates the queue, so a setup that dropped out of the live
+  /// scan cannot sink behind newer rows and stay unchecked forever.
+  resultCheckedAt DateTime?
   firstSeenAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -201,6 +205,7 @@ model TrackedSetup {
 
   @@index([symbol, updatedAt])
   @@index([resultAt])
+  @@index([resultCheckedAt])
 }
 
 /// One photograph of a setup at a moment worth keeping.

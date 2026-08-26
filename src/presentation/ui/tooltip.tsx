@@ -73,7 +73,7 @@ export function Tooltip({ content, children }: TooltipProps) {
         <div
           ref={tipRef}
           role="tooltip"
-          className={`pointer-events-none fixed z-50 max-w-[240px] rounded-md border border-border-strong bg-[#101018] px-2.5 py-2 text-[11px] leading-snug text-white/85 shadow-xl ${
+          className={`pointer-events-none fixed z-50 max-w-[240px] whitespace-pre-line rounded-md border border-border-strong bg-[#101018] px-2.5 py-2 text-[11px] leading-snug text-white/85 shadow-xl ${
             pos ? "opacity-100" : "invisible opacity-0"
           }`}
           style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0 }}

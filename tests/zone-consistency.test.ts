@@ -34,8 +34,8 @@ test("zone detection ignores history beyond its own window", () => {
   const long = series(1_000);
   const short = long.slice(-ZONE_SCAN_WINDOW);
 
-  const fromLong = detectSupplyDemand(long, "BTCUSDT", "15m");
-  const fromShort = detectSupplyDemand(short, "BTCUSDT", "15m");
+  const fromLong = detectSupplyDemand(long);
+  const fromShort = detectSupplyDemand(short);
 
   assert.deepEqual(
     fromLong.zones.map((zone) => [zone.type, zone.top, zone.bottom, zone.strength]),
@@ -51,19 +51,45 @@ test("a setup either exists for both callers or for neither", () => {
   for (const seed of [3, 11, 29, 47]) {
     const long = series(800, seed);
     const short = long.slice(-ZONE_SCAN_WINDOW);
-    const a = detectSupplyDemand(long, "ETHUSDT", "15m");
-    const b = detectSupplyDemand(short, "ETHUSDT", "15m");
+    const a = detectSupplyDemand(long);
+    const b = detectSupplyDemand(short);
     assert.equal(
       a.setup === null,
       b.setup === null,
       `seed ${seed}: one caller saw a setup while the other did not`,
     );
+    if (a.setup && b.setup) {
+      // Not just present in both, but the same setup. The table listing a pair
+      // under Demand while its own chart called it a Supply Zone is what this
+      // pins: the two readings must agree on side, confidence and status, not
+      // merely on whether something exists.
+      assert.equal(a.setup.direction, b.setup.direction, `seed ${seed}: direction differs`);
+      assert.equal(a.setup.confidence, b.setup.confidence, `seed ${seed}: confidence differs`);
+      assert.equal(a.setup.status, b.setup.status, `seed ${seed}: status differs`);
+      assert.equal(a.setup.entry, b.setup.entry, `seed ${seed}: entry differs`);
+      assert.equal(a.setup.stopLoss, b.setup.stopLoss, `seed ${seed}: stop differs`);
+    }
   }
+});
+
+test("detection is a pure function of the candles handed in", () => {
+  // The regression this pins: a per-browser lock could freeze one reader's
+  // setup while the server recomputed a different one, so the same symbol
+  // showed a Demand Zone in the table and a Supply Zone on the chart. Calling
+  // twice with the same input must give the same answer, every time.
+  const candles = series(600, 19);
+  const first = detectSupplyDemand(candles);
+  const second = detectSupplyDemand(candles);
+  assert.deepEqual(first.setup, second.setup);
+  assert.deepEqual(first.zones, second.zones);
+  // And there is no second argument left that could change it: the signature
+  // itself now makes a per-caller answer impossible.
+  assert.equal(detectSupplyDemand.length, 1, "detection takes candles and nothing else");
 });
 
 test("a caller with less than the window still gets a usable result", () => {
   const brief = series(60);
-  const result = detectSupplyDemand(brief, "SOLUSDT", "15m");
+  const result = detectSupplyDemand(brief);
   assert.ok(Array.isArray(result.zones));
   assert.ok(Number.isFinite(result.support));
   assert.ok(Number.isFinite(result.resistance));

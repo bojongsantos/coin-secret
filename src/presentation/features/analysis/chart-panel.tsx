@@ -140,12 +140,13 @@ interface ChartPanelProps {
 /**
  * Zone box colours.
  *
- * Grey rather than green/red so the band reads as a marked region rather than
- * an instruction. The label sits above it in near-white, which stays readable
- * on the box in both themes because the box is drawn over the chart's own dark
- * plot area either way.
+ * Green for demand, red for supply — the colours the band carried before it
+ * was made grey. Grey read as a dead region and washed the candles inside the
+ * box out; a tinted band at low opacity keeps them visible while still saying
+ * which side of the market the zone belongs to.
  */
-const ZONE_FILL = "#8a8a99";
+const ZONE_DEMAND_FILL = "#22c55e";
+const ZONE_SUPPLY_FILL = "#f43f5e";
 const ZONE_LABEL = "#e8e8f0";
 
 /** How many future candles the setup zone extends. */
@@ -438,9 +439,7 @@ export function ChartPanel({
     for (const zone of zones) {
       if (!isSetupZone(zone)) continue;
       const isDemand = zone.type === "demand";
-      // Neutral grey: the band marks where the zone is, not what to do about
-      // it. Direction is already stated by the plan panel and the level lines.
-      const color = ZONE_FILL;
+      const color = isDemand ? ZONE_DEMAND_FILL : ZONE_SUPPLY_FILL;
 
       // Broken zones: no fill, only a faint dashed outline.
       if (zone.strength === "broken") {

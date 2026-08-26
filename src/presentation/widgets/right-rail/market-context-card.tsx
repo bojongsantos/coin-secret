@@ -1,6 +1,23 @@
-import { ShieldAlert, TrendingDown, TrendingUp } from "lucide-react";
+import { Info, ShieldAlert, TrendingDown, TrendingUp } from "lucide-react";
 import type { MarketContext } from "@/core/domain/models";
 import { Delta } from "@/presentation/ui/delta";
+import { Tooltip } from "@/presentation/ui/tooltip";
+
+/**
+ * What each row is measuring.
+ *
+ * The labels are the industry's own terms, which say nothing to a reader who
+ * has not traded perpetuals. Written here rather than in the payload because
+ * it is wording, not data: the server has no business shipping a paragraph of
+ * Indonesian prose alongside a number.
+ */
+const metricHelp: Record<string, string> = {
+  dom: "Porsi kapitalisasi pasar kripto yang dipegang Bitcoin. Naik berarti dana berpindah dari altcoin ke BTC.",
+  funding:
+    "Biaya berkala yang dibayarkan antar pemegang posisi perpetual. Positif berarti pembeli membayar penjual — mayoritas pasar sedang long.",
+  oi: "Total nilai posisi futures yang masih terbuka. Naik bersama harga menandakan tren didukung uang baru, bukan sekadar penutupan posisi.",
+  fng: "Indeks sentimen pasar 0–100 dari Alternative.me. Angka rendah berarti pasar takut, angka tinggi berarti pasar serakah.",
+};
 
 function MetricRow({
   label,
@@ -11,6 +28,7 @@ function MetricRow({
   tone,
   warning,
   hideDelta,
+  help,
 }: {
   label: string;
   value: string;
@@ -20,12 +38,20 @@ function MetricRow({
   tone?: "positive" | "negative";
   warning?: boolean;
   hideDelta?: boolean;
+  help?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-2 py-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <p className="text-[12px] font-medium text-muted">{label}</p>
-        {warning && (
+        {help && (
+          <Tooltip content={warning ? `${help}
+
+Data sumber sedang tidak tersedia.` : help}>
+            <Info className="size-3.5 shrink-0 text-muted-2 transition-colors hover:text-muted" />
+          </Tooltip>
+        )}
+        {warning && !help && (
           <span title="Data tidak tersedia" aria-label="Data tidak tersedia">
             <ShieldAlert className="size-3 shrink-0 text-warning" aria-hidden="true" />
           </span>
@@ -79,6 +105,7 @@ export function MarketContextCard({ data }: { data: MarketContext }) {
           hint={data.fundingRate.hint}
           tone={data.fundingRate.tone}
           warning={data.fundingRate.warning}
+          help={metricHelp[data.fundingRate.id]}
           hideDelta={data.fundingRate.hideDelta}
         />
         <MetricRow
@@ -88,6 +115,7 @@ export function MarketContextCard({ data }: { data: MarketContext }) {
           change={data.openInterest.change}
           hint={data.openInterest.hint}
           warning={data.openInterest.warning}
+          help={metricHelp[data.openInterest.id]}
           hideDelta={data.openInterest.hideDelta}
         />
         <MetricRow
@@ -97,6 +125,7 @@ export function MarketContextCard({ data }: { data: MarketContext }) {
           change={data.dominance.change}
           hint={data.dominance.hint}
           warning={data.dominance.warning}
+          help={metricHelp[data.dominance.id]}
         />
         <MetricRow
           label={data.volume.label}
@@ -105,6 +134,7 @@ export function MarketContextCard({ data }: { data: MarketContext }) {
           change={data.volume.change}
           tone={data.volume.tone}
           warning={data.volume.warning}
+          help={metricHelp[data.volume.id]}
           hideDelta={data.volume.hideDelta}
         />
       </div>

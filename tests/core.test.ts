@@ -8,7 +8,6 @@ import {
   type SdZone,
 } from "@/core/domain/analysis/supply-demand";
 import type { Candle } from "@/core/domain/models";
-import { setupLockKey } from "@/infrastructure/persistence/browser-setup-lock-store";
 
 function candle(time: number, open: number, high: number, low: number, close: number): Candle {
   return { time, open, high, low, close, volume: 1_000 };
@@ -44,6 +43,13 @@ test("setup state machine covers long outcomes", () => {
   assert.equal(computeSetupStatus(history(candle(4, 101, 108, 99, 106)), zone, true, 100, 90, 110, 120, 106), "Running");
   assert.equal(computeSetupStatus(history(candle(4, 101, 105, 89, 92)), zone, true, 100, 90, 110, 120, 92), "Invalidated (SL hit)");
   assert.equal(computeSetupStatus(history(candle(4, 101, 121, 99, 119)), zone, true, 100, 90, 110, 120, 119), "Target 2 reached");
+  // The first target is reported in its own right. Calling it "Running" left
+  // the plan panel and the exported performance block describing the same
+  // trade differently on the same screen.
+  assert.equal(computeSetupStatus(history(candle(4, 101, 112, 99, 111)), zone, true, 100, 90, 110, 120, 111), "Target 1 reached");
+  // A target price reached without the entry ever filling is not a target
+  // reached — there was no position to reach it with.
+  assert.equal(computeSetupStatus(history(candle(4, 104, 112, 102, 111)), zone, true, 100, 90, 110, 120, 111), "Missed");
 });
 
 test("protective stops use confirmed swings and remain outside the zone", () => {
@@ -72,11 +78,6 @@ test("protective stops use confirmed swings and remain outside the zone", () => 
   assert.equal(findSwingStopLoss(shortCandles, "short", 107), 107 * 1.001);
   assert.deepEqual(buildRiskTargets(100, 90, "long"), { target1: 110, target2: 120 });
   assert.deepEqual(buildRiskTargets(100, 110, "short"), { target1: 90, target2: 80 });
-});
-
-test("setup locks are isolated by symbol and timeframe", () => {
-  assert.equal(setupLockKey("BTCUSDT", "15m"), "coinsecret:setup-lock:BTCUSDT:15m");
-  assert.notEqual(setupLockKey("BTCUSDT", "15m"), setupLockKey("BTCUSDT", "1H"));
 });
 
 test("indicators and historical statistics remain finite", () => {

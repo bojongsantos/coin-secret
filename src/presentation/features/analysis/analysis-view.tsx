@@ -35,6 +35,7 @@ export function AnalysisView({
 
   // Measured from the candles already loaded for the chart, so the exported
   // image can say what the setup did rather than only what it proposed.
+  const entryLevel = data.levels.find((level) => level.id === "entry");
   const target1 = data.levels.find((level) => level.id === "target-1");
   const target2 = data.levels.find((level) => level.id === "target-2");
   const stop = data.levels.find((level) => level.id === "sl");
@@ -44,11 +45,12 @@ export function AnalysisView({
   const setupShape = data.pattern.shape?.setup;
   const signalZone = data.pattern.shape?.zones?.find((zone) => zone.id === setupShape?.zoneId);
   const performance =
-    signalZone && target1 && target2 && stop
+    signalZone && entryLevel && target1 && target2 && stop
       ? buildSignalPerformance({
           candles: data.chartData.candles,
           signalTime: signalZone.baseTime,
           direction: data.pattern.trend === "bearish" ? "short" : "long",
+          entry: entryLevel.price,
           target1: target1.price,
           target2: target2.price,
           stopLoss: stop.price,

@@ -19,7 +19,6 @@ import {
   subscribeBinanceMarket,
   type BinanceStreamStatus,
 } from "@/infrastructure/market-data/binance-stream-client";
-import { browserSetupLockStore } from "@/infrastructure/persistence/browser-setup-lock-store";
 
 export const FALLBACK_POLL_MS = 4_000;
 
@@ -176,7 +175,6 @@ export function useLiveAnalysis(
         "Binance",
         candles.slice(-ANALYSIS_WINDOW_SIZE),
         ticker,
-        browserSetupLockStore,
       );
       setAnalysis({ ...result, chartData: { ...result.chartData, candles } });
       setError(null);

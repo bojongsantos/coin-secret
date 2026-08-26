@@ -1,6 +1,17 @@
 import "server-only";
 
 import type { MarketContextPayload } from "@/core/domain/models";
+import {
+  formatFundingRate,
+  formatOpenInterest,
+  parseBinanceDerivatives,
+  parseBybitDerivatives,
+  parseOkxDerivatives,
+  type BybitTickerResponse,
+  type DerivativesSnapshot,
+  type OkxFundingResponse,
+  type OkxOpenInterestResponse,
+} from "@/core/domain/market/derivatives";
 import { formatCompact } from "@/shared/lib/format";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 
@@ -33,17 +44,65 @@ function fearGreedLabel(value: number): string {
   return "Extreme Greed";
 }
 
+/**
+ * Funding rate and open interest, from whichever futures venue answers.
+ *
+ * Binance stays first because it is the deepest BTC perp book and therefore
+ * the reference figure, but its `fapi` host is unreachable from several
+ * regions — including the one the app is deployed in, which is how both
+ * figures came to be permanently blank. Bybit and OKX are asked in turn.
+ *
+ * Sources are tried in sequence, not in parallel: on the normal path the first
+ * one answers and the other two are never called at all.
+ */
+async function fetchDerivatives(btcPrice: number): Promise<DerivativesSnapshot | null> {
+  const attempts: Array<() => Promise<DerivativesSnapshot | null>> = [
+    async () => {
+      const [premium, oi] = await Promise.all([
+        externalJson<{ lastFundingRate?: string }>(
+          "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT",
+        ),
+        externalJson<{ openInterest?: string }>(
+          "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT",
+        ),
+      ]);
+      return parseBinanceDerivatives(premium, oi, btcPrice);
+    },
+    async () =>
+      parseBybitDerivatives(
+        await externalJson<BybitTickerResponse>(
+          "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT",
+        ),
+      ),
+    async () => {
+      const [funding, oi] = await Promise.all([
+        externalJson<OkxFundingResponse>(
+          "https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP",
+        ),
+        externalJson<OkxOpenInterestResponse>(
+          "https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId=BTC-USDT-SWAP",
+        ),
+      ]);
+      return parseOkxDerivatives(funding, oi, btcPrice);
+    },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt();
+      if (result) return result;
+    } catch {
+      // Unreachable or rate limited; the next venue gets its turn.
+    }
+  }
+  return null;
+}
+
 async function buildPayload(): Promise<MarketContextPayload> {
-  const [btcResult, ethResult, fundingResult, oiResult, dominanceResult, fearGreedResult] =
+  const [btcResult, ethResult, dominanceResult, fearGreedResult] =
     await Promise.allSettled([
       marketData.fetchTicker24h("BTCUSDT"),
       marketData.fetchTicker24h("ETHUSDT"),
-      externalJson<{ lastFundingRate?: string }>(
-        "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT",
-      ),
-      externalJson<{ openInterest?: string }>(
-        "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT",
-      ),
       externalJson<{
         data?: {
           market_cap_percentage?: { btc?: number };
@@ -59,14 +118,8 @@ async function buildPayload(): Promise<MarketContextPayload> {
 
   const btc = btcResult.value;
   const eth = ethResult.value;
-  const fundingRate =
-    fundingResult.status === "fulfilled"
-      ? optionalFinite(fundingResult.value.lastFundingRate)
-      : null;
-  const openInterestBtc =
-    oiResult.status === "fulfilled"
-      ? optionalFinite(oiResult.value.openInterest)
-      : null;
+  // Needs the spot price, so it runs after the tickers rather than beside them.
+  const derivatives = await fetchDerivatives(btc.lastPrice);
   const dominance =
     dominanceResult.status === "fulfilled"
       ? dominanceResult.value.data?.market_cap_percentage?.btc
@@ -112,25 +165,28 @@ async function buildPayload(): Promise<MarketContextPayload> {
       fundingRate: {
         id: "funding",
         label: "Funding Rate",
-        value: fundingRate === null ? "—" : `${(fundingRate * 100).toFixed(4)}%`,
-        change: fundingRate === null ? 0 : fundingRate * 100,
-        direction: fundingRate === null || fundingRate === 0 ? "flat" : fundingRate > 0 ? "up" : "down",
+        value: derivatives === null ? "—" : formatFundingRate(derivatives.fundingRate),
+        change: derivatives === null ? 0 : derivatives.fundingRate * 100,
+        direction:
+          derivatives === null || derivatives.fundingRate === 0
+            ? "flat"
+            : derivatives.fundingRate > 0
+              ? "up"
+              : "down",
         hint: "BTC perp · 8h",
-        tone: fundingRate === null ? undefined : fundingRate >= 0 ? "positive" : "negative",
-        warning: fundingRate === null,
+        tone:
+          derivatives === null ? undefined : derivatives.fundingRate >= 0 ? "positive" : "negative",
+        warning: derivatives === null,
         hideDelta: true,
       },
       openInterest: {
         id: "oi",
         label: "Open Interest",
-        value:
-          openInterestBtc === null
-            ? "—"
-            : `$${(openInterestBtc * btc.lastPrice / 1e9).toFixed(1)}B`,
+        value: derivatives === null ? "—" : formatOpenInterest(derivatives.openInterestUsd),
         change: 0,
         direction: "flat",
         hint: "BTC futures",
-        warning: openInterestBtc === null,
+        warning: derivatives === null,
         hideDelta: true,
       },
       volume: {

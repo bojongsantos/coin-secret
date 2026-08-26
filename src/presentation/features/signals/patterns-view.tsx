@@ -21,6 +21,7 @@ const STATUS_TONES: Record<string, "warning" | "blue" | "positive" | "negative" 
   "Limit Order": "warning",
   Filled: "blue",
   Running: "positive",
+  "Target 1 reached": "positive",
   "Target 2 reached": "positive",
   "Invalidated (SL hit)": "negative",
   Missed: "neutral",

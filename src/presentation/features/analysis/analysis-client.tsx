@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
-import type { HistoryRange } from "@/core/application/market-data/history-plan";
+import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import type { Timeframe } from "@/core/domain/models";
 import { isValidBinanceSymbol, mergeSearchableSymbols, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
@@ -11,10 +11,19 @@ import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Loader2, RefreshCw } from "lucide-react";
 
-export function AnalysisClient({ initialSymbol }: { initialSymbol: string }) {
+export function AnalysisClient({
+  initialSymbol,
+  initialTimeframe,
+}: {
+  initialSymbol: string;
+  initialTimeframe: Timeframe;
+}) {
   const [symbol, setSymbol] = useState<string>(initialSymbol);
-  const [timeframe, setTimeframe] = useState<Timeframe>("15m");
-  const [range, setRange] = useState<HistoryRange>("3M");
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  // Not a reader's choice any more: how much history to load is decided by the
+  // interval, so the chart always has at least as much market as the detector
+  // that produced the row this page was opened from.
+  const range = rangeForTimeframe(timeframe);
   const [symbols, setSymbols] = useState<string[]>(DEFAULT_WATCHLIST);
   const [query, setQuery] = useState(initialSymbol.replace(/USDT$/, ""));
   const { analysis, loading, error, streamStatus, history, loadMoreHistory } = useLiveAnalysis(
@@ -113,7 +122,6 @@ export function AnalysisClient({ initialSymbol }: { initialSymbol: string }) {
             timeframe={timeframe}
             onTimeframeChange={setTimeframe}
             range={range}
-            onRangeChange={setRange}
             history={history}
             onLoadMoreHistory={loadMoreHistory}
           />

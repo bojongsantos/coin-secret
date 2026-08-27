@@ -7,6 +7,7 @@ import { MIN_DASHBOARD_CONFIDENCE } from "@/core/domain/analysis/signal-display"
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useSdScan } from "@/presentation/hooks/use-scanner";
 import { Badge } from "@/presentation/ui/badge";
+import type { Timeframe } from "@/core/domain/models";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { LockedOverlay } from "@/presentation/ui/locked-overlay";
 import { formatCompact } from "@/shared/lib/format";
@@ -53,12 +54,12 @@ function ZoneRow({
   hit: SdScanHit;
   color: string;
   maxVol: number;
-  onSelect?: (symbol: string) => void;
+  onSelect?: (symbol: string, timeframe: Timeframe) => void;
 }) {
   return (
     <tr
       data-zone-row={hit.symbol}
-      onClick={onSelect ? () => onSelect(hit.symbol) : undefined}
+      onClick={onSelect ? () => onSelect(hit.symbol, hit.timeframe) : undefined}
       className={`group border-b border-border/50 transition-colors last:border-b-0 hover:bg-surface-2/60 ${
         onSelect ? "cursor-pointer" : ""
       }`}
@@ -71,9 +72,16 @@ function ZoneRow({
               {hit.base}
               <span className="font-medium text-muted-2">/USDT</span>
             </span>
-            <span className="block text-[9px] tabular-nums text-muted-2">
-              {hit.change24h >= 0 ? "+" : ""}
-              {hit.change24h.toFixed(2)}%
+            <span className="flex items-center gap-1 text-[9px] tabular-nums text-muted-2">
+              <span>
+                {hit.change24h >= 0 ? "+" : ""}
+                {hit.change24h.toFixed(2)}%
+              </span>
+              {/* Which chart the setup lives on. The scan reads four of them,
+                  and a plan only means anything next to its own interval. */}
+              <span className="rounded bg-surface-3 px-1 py-px font-bold text-muted">
+                {hit.timeframe}
+              </span>
             </span>
           </span>
         </div>
@@ -109,7 +117,7 @@ function ZoneCard({
   hits: SdScanHit[];
   totalCount?: number;
   tone: "green" | "red";
-  onSelect?: (symbol: string) => void;
+  onSelect?: (symbol: string, timeframe: Timeframe) => void;
 }) {
   const router = useRouter();
   const { canAccess } = usePlan();
@@ -189,7 +197,11 @@ function ZoneCard({
   );
 }
 
-export function SupplyDemandSection({ onSelect }: { onSelect?: (symbol: string) => void }) {
+export function SupplyDemandSection({
+  onSelect,
+}: {
+  onSelect?: (symbol: string, timeframe: Timeframe) => void;
+}) {
   const { result, loading, error, refresh } = useSdScan();
 
   // Rows and totals both arrive already filtered by the API. A free plan is

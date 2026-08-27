@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { HistoryRange } from "@/core/application/market-data/history-plan";
+import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import type { Timeframe } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
@@ -19,7 +19,7 @@ export function DashboardClient() {
   const { top, loading: topLoading, error: topError } = useTopSetups(5);
   const [symbol, setSymbol] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
-  const [range, setRange] = useState<HistoryRange>("3M");
+  const range = rangeForTimeframe(timeframe);
 
   // On a fresh mount, no session choice yet → auto-load today's #1 top setup.
   // Once the user picks a symbol it becomes the session choice (reset on the
@@ -42,7 +42,10 @@ export function DashboardClient() {
     if (setupTimeframe) setTimeframe(setupTimeframe);
   };
 
-  const selectFromSection = (value: string) => setSymbol(value.toUpperCase());
+  const selectFromSection = (value: string, setupTimeframe: Timeframe) => {
+    setSymbol(value.toUpperCase());
+    setTimeframe(setupTimeframe);
+  };
 
   return (
     <AppShell analysis={analysis}>
@@ -147,7 +150,6 @@ export function DashboardClient() {
             timeframe={timeframe}
             onTimeframeChange={setTimeframe}
             range={range}
-            onRangeChange={setRange}
             history={history}
             onLoadMoreHistory={loadMoreHistory}
           />

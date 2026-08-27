@@ -1,4 +1,9 @@
 import type { Candle, SetupDirection } from "@/core/domain/models";
+import {
+  isTerminalSetupStatus,
+  traceSetupLifecycle,
+  type SetupStatus as Status,
+} from "@/core/domain/analysis/setup-lifecycle";
 import { formatPrice } from "@/shared/lib/format";
 
 export type ZoneType = "supply" | "demand";
@@ -44,34 +49,12 @@ export interface SdResult {
   resistance: number;
 }
 
-export type SetupStatus =
-  | "Limit Order"
-  | "Filled"
-  | "Running"
-  | "Target 1 reached"
-  | "Target 2 reached"
-  | "Invalidated (SL hit)"
-  | "Missed";
-
-/**
- * Statuses that are still actionable and belong in the scanner table.
- *
- * "Target 1 reached" is among them: the first target is a partial, and the
- * position is still open and working toward the second. Treating it as
- * terminal would drop a live trade off the board the moment it started
- * winning.
- */
-export const ACTIVE_SETUP_STATUSES: SetupStatus[] = [
-  "Limit Order",
-  "Filled",
-  "Running",
-  "Target 1 reached",
-];
-export const TERMINAL_SETUP_STATUSES: SetupStatus[] = [
-  "Target 2 reached",
-  "Invalidated (SL hit)",
-  "Missed",
-];
+export type { SetupStatus } from "@/core/domain/analysis/setup-lifecycle";
+export {
+  ACTIVE_SETUP_STATUSES,
+  isTerminalSetupStatus,
+  TERMINAL_SETUP_STATUSES,
+} from "@/core/domain/analysis/setup-lifecycle";
 
 const SWING_RADIUS = 2;
 const SWING_LOOKBACK = 50;
@@ -88,16 +71,6 @@ const SWING_LOOKBACK = 50;
  */
 export const ZONE_SCAN_WINDOW = 300;
 
-/**
- * Bars skipped after a zone's base before price action counts.
- *
- * The impulse candle that creates a zone passes straight through the entry —
- * that is what makes it an impulse — so counting it would mark every setup
- * filled the instant it was detected. Exported because anything measuring the
- * same setup has to start from the same bar or the two will contradict each
- * other on screen.
- */
-export const ZONE_IMPULSE_BARS = 3;
 const STOP_BUFFER_RATIO = 0.001;
 
 /**
@@ -300,9 +273,7 @@ export function detectSupplyDemand(candles: Candle[]): SdResult {
     const { target1, target2 } = buildRiskTargets(entry, stopLoss, direction);
 
     const status = computeSetupStatus(candles, zone, isLong, entry, stopLoss, target1, target2, price);
-    if (TERMINAL_SETUP_STATUSES.includes(status as SetupStatus)) {
-      continue;
-    }
+    if (isTerminalSetupStatus(status)) continue;
 
     const rawRr = Math.abs(target2 - entry) / Math.max(1e-9, Math.abs(entry - stopLoss));
     const riskReward = Math.min(9, Math.max(0.3, rawRr));
@@ -379,14 +350,11 @@ export function setupOutcomeSince(
 }
 
 /**
- * State machine that decides a setup's status from actual price history.
+ * A setup's status, from actual price history.
  *
- * - Limit Order: entry never touched since the zone formed.
- * - Filled: entry touched, price still at/behind the entry (no confirmation).
- * - Running: entry touched and price moved past entry toward the targets.
- * - Target 1 reached: the first target paid; the position works on toward T2.
- * - Target 2 reached / Invalidated (SL hit): terminal outcomes.
- * - Missed: entry never touched but price already ran through target 1.
+ * Kept as a thin wrapper so existing callers keep their shape; the walk itself
+ * lives in `setup-lifecycle` because the exported performance block and the
+ * capture sweep have to read the same one.
  */
 export function computeSetupStatus(
   candles: Candle[],
@@ -397,52 +365,13 @@ export function computeSetupStatus(
   target1: number,
   target2: number,
   price: number,
-): SetupStatus {
-  // Walk candles after the zone formed and track whether entry was ever filled
-  // before any target/SL could be "reached".
-  let entryFilled = false;
-  let slHit = false;
-  let t1Hit = false;
-  let t2Hit = false;
-  // If entry never filled but price still ran through target 1 at any point,
-  // the setup is cancelled and replaced with a new one.
-  let ranToT1 = false;
-  // Walk candles AFTER the impulse (zone formation) only: the base candles
-  // themselves sit below/above the entry and must not count as "filled".
-  for (let i = Math.min(candles.length - 1, zone.baseIndex + ZONE_IMPULSE_BARS); i < candles.length; i++) {
-    const c = candles[i];
-    if (isLong) {
-      if (c.low <= entry) entryFilled = true;
-      if (entryFilled && c.low <= stopLoss) slHit = true;
-      if (entryFilled && c.high >= target1) t1Hit = true;
-      if (entryFilled && c.high >= target2) t2Hit = true;
-      if (!entryFilled && c.high > target1) ranToT1 = true;
-    } else {
-      if (c.high >= entry) entryFilled = true;
-      if (entryFilled && c.high >= stopLoss) slHit = true;
-      if (entryFilled && c.low <= target1) t1Hit = true;
-      if (entryFilled && c.low <= target2) t2Hit = true;
-      if (!entryFilled && c.low < target1) ranToT1 = true;
-    }
-  }
-
-  if (!entryFilled) {
-    // Entry never touched. If price already ran through target 1 at any candle,
-    // the opportunity is gone (Missed). Otherwise it is still a live limit.
-    if (ranToT1) return "Missed";
-    return "Limit Order";
-  }
-  if (slHit) return "Invalidated (SL hit)";
-  if (t2Hit) return "Target 2 reached";
-  // The first target is a partial, not an exit, so it is a state the setup
-  // passes through rather than a result. Reported explicitly because the plan
-  // saying "Running" while the export said the market had already paid out at
-  // target 1 read as two different opinions about the same trade.
-  if (t1Hit) return "Target 1 reached";
-  // Entry filled: Filled until price confirms direction past the entry.
-  const moved = isLong ? price > entry : price < entry;
-  if (!moved) return "Filled";
-  return "Running";
+): Status {
+  return traceSetupLifecycle(
+    candles,
+    { direction: isLong ? "long" : "short", entry, stopLoss, target1, target2 },
+    zone.baseIndex,
+    price,
+  ).status;
 }
 
 /** Build a single-lookback quick scan result for the scanner. */

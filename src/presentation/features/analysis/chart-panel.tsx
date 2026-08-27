@@ -23,8 +23,6 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import {
-  HISTORY_RANGES,
-  HISTORY_RANGE_HINT,
   type HistoryRange,
 } from "@/core/application/market-data/history-plan";
 import { TIMEFRAMES, TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
@@ -124,7 +122,6 @@ interface ChartPanelProps {
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
   range: HistoryRange;
-  onRangeChange: (range: HistoryRange) => void;
   symbol: string;
   precision: number;
   price: number;
@@ -182,7 +179,6 @@ export function ChartPanel({
   timeframe,
   onTimeframeChange,
   range,
-  onRangeChange,
   symbol,
   precision,
   price,
@@ -618,28 +614,7 @@ export function ChartPanel({
             ))}
           </div>
 
-          <div
-            className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5"
-            role="group"
-            aria-label="Rentang histori"
-          >
-            {HISTORY_RANGES.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => onRangeChange(option)}
-                aria-pressed={range === option}
-                title={HISTORY_RANGE_HINT[option]}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                  range === option
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-2 hover:text-foreground"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+
         </div>
       </div>
 

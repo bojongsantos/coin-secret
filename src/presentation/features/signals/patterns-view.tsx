@@ -108,16 +108,24 @@ function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; to
                   className="group border-b border-border/50 transition-colors last:border-b-0 hover:bg-surface-2/60"
                 >
                   <td className="px-1.5 py-2">
-                    <Link href={`/analysis?symbol=${hit.symbol}`} className="flex items-center gap-1.5">
+                    <Link
+                      href={`/analysis?symbol=${hit.symbol}&tf=${hit.timeframe}`}
+                      className="flex items-center gap-1.5"
+                    >
                       <CoinIcon symbol={hit.symbol} size={24} />
                       <span>
                         <span className="block text-[11px] font-bold leading-tight transition-colors group-hover:text-accent-2">
                           {hit.base}
                           <span className="font-medium text-muted-2">/USDT</span>
                         </span>
-                        <span className="block text-[9px] tabular-nums text-muted-2">
-                          {hit.change24h >= 0 ? "+" : ""}
-                          {hit.change24h.toFixed(2)}%
+                        <span className="flex items-center gap-1 text-[9px] tabular-nums text-muted-2">
+                          <span>
+                            {hit.change24h >= 0 ? "+" : ""}
+                            {hit.change24h.toFixed(2)}%
+                          </span>
+                          <span className="rounded bg-surface-3 px-1 py-px font-bold text-muted">
+                            {hit.timeframe}
+                          </span>
                         </span>
                       </span>
                     </Link>
@@ -170,7 +178,7 @@ export function PatternsView() {
             Signals
           </h2>
           <p className="mt-0.5 text-[12px] text-muted">
-            Zona supply/demand aktif dari pemindaian pasar (timeframe 15m).
+            Zona supply/demand aktif dari pemindaian pasar di 15m, 1H, 4H, dan 1D.
           </p>
         </div>
         <button

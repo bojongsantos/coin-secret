@@ -17,7 +17,6 @@ interface AnalysisViewProps {
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
   range: HistoryRange;
-  onRangeChange: (range: HistoryRange) => void;
   history: HistoryState;
   onLoadMoreHistory: () => Promise<void>;
 }
@@ -27,7 +26,6 @@ export function AnalysisView({
   timeframe,
   onTimeframeChange,
   range,
-  onRangeChange,
   history,
   onLoadMoreHistory,
 }: AnalysisViewProps) {
@@ -84,7 +82,6 @@ export function AnalysisView({
           pattern={data.pattern}
           levels={data.levels}
           range={range}
-          onRangeChange={onRangeChange}
           history={history}
           onLoadMoreHistory={onLoadMoreHistory}
           captureRef={captureRef}

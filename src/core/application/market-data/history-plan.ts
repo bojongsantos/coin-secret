@@ -20,6 +20,21 @@ const RANGE_DAYS: Record<Exclude<HistoryRange, "ALL">, number> = {
 
 const SECONDS_PER_DAY = 86_400;
 
+/**
+ * How much history a timeframe loads.
+ *
+ * Chosen by the chart rather than by the reader. Detection reads a fixed
+ * window of the most recent bars, so a range that supplies fewer than that
+ * makes the chart disagree with the table it was opened from — three months
+ * of a daily chart is ninety candles against a detector that wants three
+ * hundred. Every entry here clears that window with room to scroll.
+ */
+export function rangeForTimeframe(timeframe: Timeframe): HistoryRange {
+  if (timeframe === "1D") return "ALL";
+  if (timeframe === "4H") return "1Y";
+  return "3M";
+}
+
 export function isHistoryRange(value: unknown): value is HistoryRange {
   return typeof value === "string" && HISTORY_RANGES.includes(value as HistoryRange);
 }

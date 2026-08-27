@@ -3,6 +3,7 @@ import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-wi
 import { parseScanSymbols } from "@/core/application/scanner/scan-request";
 import { rankTopSetups, runSdScanCached } from "@/core/application/scanner/supply-demand-scan-service";
 import { visibleSignalsFor } from "@/core/domain/analysis/signal-display";
+import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { canUserAccessFeature } from "@/infrastructure/auth/entitlements";
@@ -32,7 +33,15 @@ export async function POST(request: Request) {
     const symbols = requested ? requested.slice(0, fullAccess ? 200 : 20) : DEFAULT_WATCHLIST;
     const limit = typeof body.limit === "number" ? Math.min(10, Math.max(1, Math.trunc(body.limit))) : 5;
 
-    const scanned = await runSdScanCached(marketData, symbols, user !== null && body.force === true);
+    // The store is what keeps a published setup on screen until price finishes
+    // it. Without it a refresh would pick the best zone visible right now and
+    // quietly swap out the plan somebody was already trading.
+    const scanned = await runSdScanCached(
+      marketData,
+      symbols,
+      user !== null && body.force === true,
+      { activeSetups: activeSetupStore },
+    );
 
     // Filtering happens here, before the free-plan truncation, and not in the
     // browser. Ranking reads the filtered set so the top-5 strip and the

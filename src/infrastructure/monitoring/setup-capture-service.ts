@@ -12,6 +12,7 @@ import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { captureTriggerFor } from "@/core/domain/promo/capture-trigger";
 import type { SnapshotInput } from "@/core/domain/promo/result-image";
 import { prisma } from "@/infrastructure/database/prisma";
+import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 import { mapConcurrent } from "@/shared/lib/async";
 
@@ -103,7 +104,7 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
     skippedSymbols: [],
   };
 
-  const scan = await runSdScan(marketData, DEFAULT_WATCHLIST);
+  const scan = await runSdScan(marketData, DEFAULT_WATCHLIST, { activeSetups: activeSetupStore });
   const hits = [...scan.demand, ...scan.supply];
   report.scanned = hits.length;
   report.skippedSymbols = scan.errors.map((entry) => entry.split(":")[0]);

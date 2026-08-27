@@ -192,6 +192,9 @@ model TrackedSetup {
   status     String
   /// Identity of the setup itself, so the same zone is one row across sweeps.
   signature  String   @unique
+  /// Open time of the bar the zone formed on, in seconds. Stored rather than
+  /// parsed back out of the signature so the live scan can re-read the setup.
+  zoneBaseTime Int    @default(0)
   /// Set once both snapshots exist and the proof image can be rendered.
   resultAt   DateTime?
   /// Last time the sweep looked at this setup's candles for an outcome.

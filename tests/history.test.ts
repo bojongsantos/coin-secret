@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
+import { TIMEFRAMES } from "@/core/domain/market/timeframe";
 import {
   loadHistory,
   HISTORY_PAGE_SIZE,
@@ -8,6 +10,7 @@ import {
 import {
   estimateRangeCandles,
   isHistoryRange,
+  rangeForTimeframe,
   planHistoryPages,
   resolveRangeStart,
 } from "@/core/application/market-data/history-plan";
@@ -243,4 +246,20 @@ test("partials are disjoint older stretches that rebuild one continuous run", as
   );
   assert.equal(rebuilt[0].time, listing);
   assert.equal(rebuilt.at(-1)!.time, now);
+});
+
+test("every timeframe loads enough history to detect on", () => {
+  // The regression this pins: the chart and the signals table run the same
+  // detector over the last ZONE_SCAN_WINDOW bars. A range that supplies fewer
+  // than that leaves the chart reading a shorter market than the table did,
+  // and the two disagree about the very setup the reader just clicked.
+  for (const timeframe of TIMEFRAMES) {
+    const range = rangeForTimeframe(timeframe);
+    const candles = estimateRangeCandles(range, timeframe);
+    if (candles === null) continue; // "ALL" is unbounded
+    assert.ok(
+      candles >= ZONE_SCAN_WINDOW,
+      `${timeframe} at ${range} loads ${candles} candles, short of ${ZONE_SCAN_WINDOW}`,
+    );
+  }
 });

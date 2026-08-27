@@ -107,6 +107,34 @@ Status setup bertambah satu, yaitu `Target 1 reached`. Target pertama adalah rea
 
 Blok performa pada gambar ekspor mengukur dari bar yang sama dengan mesin status, dan hanya menghitung target setelah harga benar-benar menyentuh entry. Tanpa keduanya, panel bisa menulis "Limit Order" sementara blok di bawahnya mengaku sudah menyentuh Target 1.
 
+## Siklus hidup setup
+
+Status dihitung oleh satu penelusuran di `core/domain/analysis/setup-lifecycle.ts`. Panel rencana, blok performa pada gambar ekspor, dan sapuan arsip membacanya bersama; sebelumnya masing-masing berjalan sendiri dan layar bisa menampilkan rencana "Limit Order" di sebelah blok yang mengaku target pertama sudah terbayar.
+
+Tiga fase, berurutan, karena limit order tidak bisa terisi sebelum ia bisa dipasang:
+
+1. **Terbentuk.** Impuls yang membentuk zona menembus entry — itulah yang membuatnya impuls. Entry supply zone berada di sisi bawah zona, jadi harga yang masih di dalam zona sudah berada di atasnya. Tidak ada yang dihitung sampai harga menutup melewati entry.
+2. **Terpasang.** Limit hidup dan terisi ketika harga kembali menyentuhnya. Bila harga justru lari ke target pertama tanpa pernah kembali, setup berstatus Missed.
+3. **Terisi.** Target dan stop berlaku.
+
+Pada bar pengisian hanya stop yang boleh tercatat, dan bar yang menyentuh stop sekaligus target diputus sebagai kerugian. Urutan intrabar tidak diketahui, jadi aturannya sama seperti pada arsip: jangan mengklaim kemenangan yang tak terbukti, jangan menyingkirkan kerugian yang tak bisa disingkirkan.
+
+## Setup yang sudah terbit
+
+Pemindai memilih zona terbaik hanya ketika sebuah simbol belum membawa setup. Sesudah terbit, setup itu **dibaca ulang, bukan dipilih ulang**: levelnya beku dan hanya harga yang boleh mengubah statusnya. Simbol baru bebas membawa setup lain setelah harga menyelesaikannya — target kedua, stop, atau Missed.
+
+Simpanannya adalah tabel `TrackedSetup` yang sama dengan arsip bukti, sehingga dasbor dan gambar hasil tidak mungkin berselisih soal level sebuah setup. Identitasnya `symbol|timeframe|direction|zoneBaseTime`; lihat [[coinsecret-setup-identity]].
+
+Penulisan hanya terjadi saat ada setup baru atau perubahan status, jadi pasar yang tenang tidak membebani basis data sama sekali.
+
+## Timeframe
+
+Pemindai membaca 15m, 1H, 4H, dan 1D, lalu mengambil bacaan terbaik per simbol — confidence tertinggi, dan bila seri, timeframe yang lebih lambat karena dibangun dari lebih banyak pasar. Timeframe asal dibawa lewat tautan (`/analysis?symbol=X&tf=4H`).
+
+Rentang histori ditentukan interval, bukan dipilih pembaca. Tiga bulan pada chart harian hanya sembilan puluh candle sedangkan deteksi membaca tiga ratus, sehingga grafik akan membaca pasar yang lebih pendek daripada tabel yang membukanya. `rangeForTimeframe` menjamin setiap interval melewati ambang itu, dan satu tes menjaganya.
+
+Daftar di peramban menyegarkan diri tiap 60 detik, sama dengan umur cache pemindaian di server, jadi penyegaran otomatis hampir tidak berbiaya. Tombol refresh manual hanya memaksa lewat cache dan tidak diperlukan untuk melihat perubahan status.
+
 ## Wilayah eksekusi
 
 Fungsi dijalankan di `sin1` (Singapura), dipasang lewat `regions` pada `vercel.json`.

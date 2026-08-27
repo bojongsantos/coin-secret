@@ -1,5 +1,6 @@
 import { composeResultImage, type SnapshotInput } from "@/core/domain/promo/result-image";
 import { requireAdmin } from "@/infrastructure/auth/current-user";
+import { wordmarkDataUri } from "@/infrastructure/promo/brand-asset";
 import { prisma } from "@/infrastructure/database/prisma";
 import { apiError, HttpError } from "@/shared/server/http";
 
@@ -30,6 +31,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       symbol: setup.symbol,
       entry: entry.payload as unknown as SnapshotInput,
       result: result.payload as unknown as SnapshotInput,
+      logoHref: (await wordmarkDataUri()) ?? undefined,
     });
 
     return new Response(svg, {

@@ -367,7 +367,7 @@ export function composeResultImage(input: ComposeInput): string {
     `</g>`;
 
   const logo = input.logoHref
-    ? `<image href="${escapeXml(input.logoHref)}" x="${COMPOSE_PADDING}" y="22" width="132" height="30"/>`
+    ? `<image href="${escapeXml(input.logoHref)}" x="${COMPOSE_PADDING}" y="22" width="${Math.round((30 * 844) / 105)}" height="30"/>`
     : text("Coin Secret", COMPOSE_PADDING, 44, { size: 20, weight: 700 });
 
   return (

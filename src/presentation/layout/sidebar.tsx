@@ -51,7 +51,7 @@ export function Sidebar() {
         <Link href="/" aria-label={`${BRAND_NAME} dashboard`}>
           {/* The mark alone when collapsed: the wordmark would be clipped
               mid-name, which reads as a broken image rather than a compact one. */}
-          {collapsed ? <BrandMark size={30} /> : <BrandLockup height={30} />}
+          {collapsed ? <BrandMark size={24} /> : <BrandLockup height={26} />}
         </Link>
       </div>
 

@@ -26,9 +26,9 @@ const COLOR = {
  * only at full size, and these images are mostly looked at scaled down in a
  * chat thread.
  */
-const LOGO_SRC = "/logo/logo-text.svg";
+const LOGO_SRC = "/logo/logo-text.png";
 const LOGO_HEIGHT = 34;
-const LOGO_WIDTH = Math.round(LOGO_HEIGHT * 4.4);
+const LOGO_WIDTH = Math.round((LOGO_HEIGHT * 844) / 105);
 
 /**
  * Loads the wordmark, resolving to null instead of rejecting.

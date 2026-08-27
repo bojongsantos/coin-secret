@@ -93,8 +93,8 @@ export function TopNav() {
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 sm:gap-4 sm:px-6">
-      <Link href="/" className="flex size-9 shrink-0 items-center justify-center lg:hidden" aria-label={`${BRAND_NAME} dashboard`}>
-        <BrandMark size={34} />
+      <Link href="/" className="flex h-9 shrink-0 items-center lg:hidden" aria-label={`${BRAND_NAME} dashboard`}>
+        <BrandMark size={26} />
       </Link>
       <form
         ref={searchBoxRef}

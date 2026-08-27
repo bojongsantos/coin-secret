@@ -14,9 +14,27 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const TITLE = "Coin Secret — Crypto Technical Analysis";
+const DESCRIPTION =
+  "Rule-based crypto chart analysis, supply-demand detection, and market scanning.";
+
 export const metadata: Metadata = {
-  title: "Coin Secret — Crypto Technical Analysis",
-  description: "Rule-based crypto chart analysis, supply-demand detection, and market scanning.",
+  title: TITLE,
+  description: DESCRIPTION,
+  // Without a card image a shared link renders as a bare grey box, which is
+  // the first thing anyone sees of the product and says nothing about it.
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Coin Secret" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({

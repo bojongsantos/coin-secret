@@ -2,6 +2,7 @@ import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 import { parseScanSymbols } from "@/core/application/scanner/scan-request";
 import { runScannerCached } from "@/core/application/scanner/scanner-service";
+import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { canUserAccessFeature } from "@/infrastructure/auth/entitlements";
@@ -31,7 +32,14 @@ export async function POST(request: Request) {
     const requested = user ? parseScanSymbols(body.symbols) : undefined;
     const symbols = (requested ?? DEFAULT_WATCHLIST).slice(0, extended ? 200 : 20);
 
-    const result = await runScannerCached(marketData, symbols, user !== null && body.force === true);
+    // Same store the signals table reads, so this page cannot advertise a
+    // different trade for a symbol than the board is publishing for it.
+    const result = await runScannerCached(
+      marketData,
+      symbols,
+      user !== null && body.force === true,
+      { activeSetups: activeSetupStore },
+    );
     const payload = extended ? result : { ...result, opportunities: result.opportunities.slice(0, 2) };
     return Response.json(payload, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

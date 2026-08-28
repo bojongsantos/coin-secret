@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
+import { runScanner } from "@/core/application/scanner/scanner-service";
 import { runSdScan, SD_SETUP_TIMEFRAMES } from "@/core/application/scanner/supply-demand-scan-service";
 import { buildAnalysisResult } from "@/core/domain/analysis/analysis-engine";
 import { detectSupplyDemand, type PublishedSetup } from "@/core/domain/analysis/supply-demand";
@@ -303,4 +304,41 @@ test("a published plan price has finished lets the chart move on", async () => {
     "BTCUSDT", "BTC", "USDT", "15m", "Binance", candles, ticker as never, finished,
   );
   assert.equal(result.pattern.name, "No Zone Setup", "a finished plan must not still be drawn");
+});
+
+test("the opportunities board reads the same published plan", async () => {
+  // The bug this pins, found during a QA sweep: /scanner detected for itself,
+  // so it could call a symbol a 77% short while the dashboard, reading the
+  // plan actually published for it, called it a 51% filled long.
+  const candles = series(400, 1);
+  const { port } = marketFor({}, candles);
+  assert.equal(detectSupplyDemand(candles).setup, null, "the fixture must give the detector nothing");
+
+  const bare = await runScanner(port, ["BTCUSDT"]);
+  assert.equal(bare.opportunities.length, 0, "without the store there is nothing to show");
+
+  const held = store([
+    {
+      symbol: "BTCUSDT",
+      timeframe: "1H",
+      direction: "long",
+      entry: 10_000,
+      target1: 11_000,
+      target2: 12_000,
+      stopLoss: 9_000,
+      confidence: 64,
+      zoneTop: 10_000,
+      zoneBottom: 9_500,
+      zoneBaseTime: candles[10].time,
+      status: "Limit Order",
+    },
+  ]);
+
+  const withStore = await runScanner(port, ["BTCUSDT"], { activeSetups: held.port });
+  const row = withStore.opportunities[0];
+  assert.ok(row, "the published plan must be listed");
+  assert.equal(row.entry, 10_000, "and it must be the published entry");
+  assert.equal(row.confidence, 64);
+  assert.equal(row.setup, "long");
+  assert.equal(row.timeframe, "1H", "reported on the chart it lives on");
 });

@@ -1,6 +1,11 @@
+import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import { emaSeries, rsiSeries } from "@/core/domain/analysis/analysis-engine";
-import { detectSupplyDemand, ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
+import {
+  detectSupplyDemand,
+  readPublishedSetup,
+  ZONE_SCAN_WINDOW,
+} from "@/core/domain/analysis/supply-demand";
 import type { ScannerOpportunity, Timeframe } from "@/core/domain/models";
 import { mapConcurrent } from "@/shared/lib/async";
 
@@ -24,11 +29,29 @@ function sparkline(candles: { close: number }[], points = 14): number[] {
   return out;
 }
 
+export interface ScannerOptions {
+  /** Where published setups live; see `runSdScan` for why this matters. */
+  activeSetups?: ActiveSetupPort;
+}
+
+/**
+ * The opportunities board.
+ *
+ * Reads the same published setups the signals table does. Detecting for itself
+ * meant this page could call a symbol a short at 77% while the dashboard,
+ * looking at the plan actually published for it, called it a filled long at
+ * 51%. Two scanners are already one too many; two answers is worse.
+ */
 export async function runScanner(
   marketData: MarketDataPort,
   symbols: string[],
+  options: ScannerOptions = {},
 ): Promise<ScanResult> {
   const errors: string[] = [];
+  const stored = options.activeSetups
+    ? await options.activeSetups.loadActive(symbols).catch(() => [] as ActiveSetup[])
+    : [];
+  const active = new Map(stored.map((entry) => [entry.symbol, entry]));
   let tickers;
   try {
     tickers = await marketData.fetchTickers24h(symbols);
@@ -54,11 +77,18 @@ export async function runScanner(
       try {
         const ticker = tickerMap.get(symbol);
         if (!ticker) throw new Error(`No ticker for ${symbol}`);
-        const candles = await marketData.fetchKlines({ symbol, timeframe: SCAN_TIMEFRAME, limit: ZONE_SCAN_WINDOW });
+        // A published setup is read on its own chart, so this page cannot
+        // disagree with the board about which trade a symbol is carrying.
+        const held = active.get(symbol);
+        const timeframe = held?.timeframe ?? SCAN_TIMEFRAME;
+        const candles = await marketData.fetchKlines({ symbol, timeframe, limit: ZONE_SCAN_WINDOW });
         const sd = detectSupplyDemand(candles);
-        if (!sd.setup) return null;
+        const published = held
+          ? readPublishedSetup(candles, held, candles[candles.length - 1]?.close ?? held.entry).setup
+          : null;
+        const setup = published ?? sd.setup;
+        if (!setup) return null;
 
-        const setup = sd.setup;
         const price = ticker.lastPrice;
         const base = symbol.replace(/USDT$/, "");
         const closes = candles.map((candle) => candle.close);
@@ -85,7 +115,7 @@ export async function runScanner(
             },
             confidence: setup.confidence,
             pattern: setup.zone.type === "demand" ? "Demand Zone" : "Supply Zone",
-            timeframe: SCAN_TIMEFRAME,
+            timeframe,
             setup: setup.direction,
             sparkline: sparkline(candles),
             status: setup.status || "Limit Order",
@@ -144,6 +174,7 @@ export function runScannerCached(
   marketData: MarketDataPort,
   symbols: string[],
   force = false,
+  options: ScannerOptions = {},
 ): Promise<ScanResult> {
   const key = symbols.join(",");
   if (
@@ -155,7 +186,7 @@ export function runScannerCached(
   }
   if (!force && scannerInFlight?.key === key) return scannerInFlight.promise;
 
-  const promise = runScanner(marketData, symbols)
+  const promise = runScanner(marketData, symbols, options)
     .then((result) => {
       scannerCache = { key, timestamp: Date.now(), result };
       return result;

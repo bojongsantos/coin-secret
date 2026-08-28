@@ -1,8 +1,13 @@
 import "server-only";
 
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
-import { runSdScan, SD_SCAN_TIMEFRAME } from "@/core/application/scanner/supply-demand-scan-service";
-import { setupOutcomeSince } from "@/core/domain/analysis/supply-demand";
+import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service";
+import {
+  publishedBaseIndex,
+  setupOutcomeSince,
+  ZONE_SCAN_WINDOW,
+} from "@/core/domain/analysis/supply-demand";
+import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { FILLED_STATUSES, owesEntrySnapshot } from "@/core/domain/promo/capture-trigger";
 import type { SnapshotInput } from "@/core/domain/promo/result-image";
@@ -143,13 +148,35 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
     if (!owesEntrySnapshot({ firstStatus: setup.firstStatus, status: setup.status, hasEntrySnapshot: false })) {
       continue;
     }
-    const candles = await marketData
-      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: SNAPSHOT_BARS })
+    // Enough history to hold both the zone's base bar and the fill.
+    const history = await marketData
+      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: ZONE_SCAN_WINDOW })
       .catch(() => [] as Candle[]);
-    if (candles.length === 0) {
+    if (history.length === 0) {
       if (!report.skippedSymbols.includes(setup.symbol)) report.skippedSymbols.push(setup.symbol);
       continue;
     }
+
+    // The picture is cut at the bar the entry actually filled, not at the bar
+    // the sweep happened to run on. Scheduled runs drift by hours, and a
+    // "before" picture showing price already halfway to target is not a
+    // before picture at all. The candles are history either way, so the
+    // moment can be reconstructed exactly.
+    const life = traceSetupLifecycle(
+      history,
+      {
+        direction: setup.direction as SetupDirection,
+        entry: setup.entry,
+        stopLoss: setup.stopLoss,
+        target1: setup.target1,
+        target2: setup.target2,
+      },
+      publishedBaseIndex(history, setup.zoneBaseTime),
+      history[history.length - 1].close,
+    );
+    if (life.filledIndex === null) continue;
+    const candles = history.slice(0, life.filledIndex + 1);
+    if (candles.length === 0) continue;
 
     const payload = snapshotPayload({
       symbol: setup.symbol,
@@ -166,7 +193,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       zoneTop: setup.zoneTop,
       zoneBottom: setup.zoneBottom,
       price: candles[candles.length - 1].close,
-      capturedAt: now,
+      capturedAt: new Date(candles[candles.length - 1].time * 1000),
     });
 
     await prisma.setupSnapshot.upsert({
@@ -220,7 +247,9 @@ async function resolveResults(now: Date): Promise<number> {
   let captured = 0;
   for (const setup of pending) {
     const candles = await marketData
-      .fetchKlines({ symbol: setup.symbol, timeframe: SD_SCAN_TIMEFRAME, limit: SNAPSHOT_BARS })
+      // The setup's own chart. Reading the fast one for a setup published on
+      // the hourly compares its levels against bars it was never drawn from.
+      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: SNAPSHOT_BARS })
       .catch(() => [] as Candle[]);
     if (candles.length === 0) continue;
 

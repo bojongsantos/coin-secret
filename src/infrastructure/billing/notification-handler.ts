@@ -9,6 +9,7 @@ import {
   type PaymentStatus,
 } from "@/core/domain/billing/payment-rules";
 import { getBillingGateway } from "@/infrastructure/billing/gateway-factory";
+import { billingPlan, isBillingPeriod } from "@/core/domain/billing/plans";
 import { prisma } from "@/infrastructure/database/prisma";
 import { apiError, HttpError } from "@/shared/server/http";
 
@@ -53,7 +54,10 @@ export async function handlePaymentNotification(
       if (shouldGrantAccess(storedStatus, successful)) {
         const now = new Date();
         const current = await tx.subscription.findUnique({ where: { userId: payment.userId } });
-        const periodEnd = extendPeriod(current?.currentPeriodEnd, now);
+        // Days come from the plan recorded on the order, so a repricing of
+        // the catalogue cannot shorten access somebody already paid for.
+        const bought = isBillingPeriod(payment.planPeriod) ? payment.planPeriod : "monthly";
+        const periodEnd = extendPeriod(current?.currentPeriodEnd, now, billingPlan(bought).days);
         await tx.user.update({ where: { id: payment.userId }, data: { plan: "PREMIUM" } });
         // Recorded from the gateway that verified this callback. Hardcoding a
         // provider here would file a crypto payment under the card processor.

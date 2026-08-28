@@ -133,7 +133,11 @@ model Payment {
   providerTransactionId String?       @unique
   provider              String
   amount                Int
-  currency              String        @default("IDR")
+  currency              String        @default("USD")
+  /// Which billing period was bought, so settlement grants the right number of
+  /// days. Stored on the payment because the plan catalogue may be repriced
+  /// while an order is still open.
+  planPeriod            String        @default("monthly")
   status                PaymentStatus @default(PENDING)
   checkoutToken         String?
   checkoutUrl           String?

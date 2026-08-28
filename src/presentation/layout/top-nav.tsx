@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Search, LogIn, LogOut, Settings, UserPlus } from "lucide-react";
+import { ChevronDown, Lock, Search, LogIn, LogOut, Settings, UserPlus } from "lucide-react";
 import { BrandMark, BRAND_NAME } from "@/presentation/ui/brand-logo";
 import { ThemeToggle } from "@/presentation/ui/theme-toggle";
 import {
@@ -15,11 +15,16 @@ import {
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
+import { usePlan } from "@/presentation/features/access/plan-provider";
 import { authClient, notifyAuthStateChanged } from "@/infrastructure/auth/auth-client";
 import type { CurrentUserDto } from "@/core/domain/identity";
 
 export function TopNav() {
   const router = useRouter();
+  // Reaching any coin on the board is what Pro sells. A free reader works from
+  // the setups the product puts in front of them.
+  const { canAccess } = usePlan();
+  const canSearch = canAccess("symbolSearch");
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUserDto | null>(null);
@@ -96,96 +101,113 @@ export function TopNav() {
       <Link href="/" className="flex h-9 shrink-0 items-center lg:hidden" aria-label={`${BRAND_NAME} dashboard`}>
         <BrandMark size={26} />
       </Link>
-      <form
-        ref={searchBoxRef}
-        className="relative hidden w-full max-w-xl md:block"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submitSearch();
-        }}
-      >
-        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-2" />
-        <input
-          ref={searchRef}
-          type="search"
-          value={searchQuery}
-          role="combobox"
-          aria-expanded={suggestions.length > 0}
-          aria-controls="symbol-suggestions"
-          aria-autocomplete="list"
-          autoComplete="off"
-          onChange={(event) => {
-            setSearchQuery(event.target.value);
-            setSuggestOpen(true);
-            setHighlight(0);
+      {canSearch ? (
+        <form
+          ref={searchBoxRef}
+          className="relative hidden w-full max-w-xl md:block"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitSearch();
           }}
-          onFocus={() => setSuggestOpen(true)}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown" && suggestions.length > 0) {
-              event.preventDefault();
-              setHighlight((index) => (index + 1) % suggestions.length);
-              return;
-            }
-            if (event.key === "ArrowUp" && suggestions.length > 0) {
-              event.preventDefault();
-              setHighlight((index) => (index - 1 + suggestions.length) % suggestions.length);
-              return;
-            }
-            if (event.key === "Escape") {
-              setSuggestOpen(false);
-              return;
-            }
-            if (event.key === "Enter") {
-              event.preventDefault();
-              // A highlighted suggestion wins over the raw text: it is what the
-              // reader can see, and typing "eth" alone would otherwise resolve
-              // through the pair parser instead of the list they are looking at.
-              const picked = activeIndex >= 0 ? suggestions[activeIndex] : null;
-              if (picked) goToSymbol(picked);
-              else submitSearch(event.currentTarget.value);
-            }
-          }}
-          placeholder="Cari coin, pair, atau tempel URL TradingView…"
-          className="w-full rounded-lg border border-border bg-background py-2 pl-10 pr-14 text-[13px] text-foreground placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
-        />
-        <button
-          type="submit"
-          aria-label="Cari market"
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium text-muted-2 hover:text-foreground"
         >
-          ↵
-        </button>
-
-        {suggestions.length > 0 && (
-          <ul
-            id="symbol-suggestions"
-            role="listbox"
-            className="absolute left-0 top-full z-30 mt-1.5 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-2" />
+          <input
+            ref={searchRef}
+            type="search"
+            value={searchQuery}
+            role="combobox"
+            aria-expanded={suggestions.length > 0}
+            aria-controls="symbol-suggestions"
+            aria-autocomplete="list"
+            autoComplete="off"
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setSuggestOpen(true);
+              setHighlight(0);
+            }}
+            onFocus={() => setSuggestOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" && suggestions.length > 0) {
+                event.preventDefault();
+                setHighlight((index) => (index + 1) % suggestions.length);
+                return;
+              }
+              if (event.key === "ArrowUp" && suggestions.length > 0) {
+                event.preventDefault();
+                setHighlight((index) => (index - 1 + suggestions.length) % suggestions.length);
+                return;
+              }
+              if (event.key === "Escape") {
+                setSuggestOpen(false);
+                return;
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                // A highlighted suggestion wins over the raw text: it is what the
+                // reader can see, and typing "eth" alone would otherwise resolve
+                // through the pair parser instead of the list they are looking at.
+                const picked = activeIndex >= 0 ? suggestions[activeIndex] : null;
+                if (picked) goToSymbol(picked);
+                else submitSearch(event.currentTarget.value);
+              }
+            }}
+            placeholder="Cari coin, pair, atau tempel URL TradingView…"
+            className="w-full rounded-lg border border-border bg-background py-2 pl-10 pr-14 text-[13px] text-foreground placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+          />
+          <button
+            type="submit"
+            aria-label="Cari market"
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium text-muted-2 hover:text-foreground"
           >
-            {suggestions.map((symbol, index) => (
-              <li key={symbol} role="option" aria-selected={index === activeIndex}>
-                <button
-                  type="button"
-                  // mousedown, not click: the input blurs first and would close
-                  // the list before a click ever lands on it.
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    goToSymbol(symbol);
-                  }}
-                  onMouseEnter={() => setHighlight(index)}
-                  className={`flex w-full items-center gap-2.5 border-b border-border px-3 py-2 text-left transition-colors last:border-b-0 ${
-                    index === activeIndex ? "bg-accent/10" : "hover:bg-surface-2"
-                  }`}
-                >
-                  <CoinIcon symbol={symbol} size={24} />
-                  <span className="text-[12px] font-bold">{symbol.replace(/USDT$/, "")}</span>
-                  <span className="text-[10px] text-muted-2">{symbol}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </form>
+            ↵
+          </button>
+
+          {suggestions.length > 0 && (
+            <ul
+              id="symbol-suggestions"
+              role="listbox"
+              className="absolute left-0 top-full z-30 mt-1.5 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+            >
+              {suggestions.map((symbol, index) => (
+                <li key={symbol} role="option" aria-selected={index === activeIndex}>
+                  <button
+                    type="button"
+                    // mousedown, not click: the input blurs first and would close
+                    // the list before a click ever lands on it.
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      goToSymbol(symbol);
+                    }}
+                    onMouseEnter={() => setHighlight(index)}
+                    className={`flex w-full items-center gap-2.5 border-b border-border px-3 py-2 text-left transition-colors last:border-b-0 ${
+                      index === activeIndex ? "bg-accent/10" : "hover:bg-surface-2"
+                    }`}
+                  >
+                    <CoinIcon symbol={symbol} size={24} />
+                    <span className="text-[12px] font-bold">{symbol.replace(/USDT$/, "")}</span>
+                    <span className="text-[10px] text-muted-2">{symbol}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </form>
+      ) : (
+        /* Not blurred behind an overlay: a search box that looks usable and
+           silently is not wastes the reader's time. It says what it is and
+           where to get it. */
+        <Link
+          href="/pricing"
+          className="relative hidden w-full max-w-xl items-center gap-2 rounded-lg border border-border bg-background py-2 pl-10 pr-3 text-[13px] text-muted-2 transition-colors hover:border-border-strong hover:text-muted md:flex"
+        >
+          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-2" />
+          <span className="truncate">Cari coin atau pair</span>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-2">
+            <Lock className="size-3" />
+            Pro
+          </span>
+        </Link>
+      )}
 
       <div className="ml-auto flex items-center gap-3">
         <ThemeToggle />

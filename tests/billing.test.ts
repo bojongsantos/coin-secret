@@ -6,11 +6,11 @@ import {
   decidePayment,
   extendPeriod,
   grantsAccess,
-  PREMIUM_PERIOD_DAYS,
   shouldGrantAccess,
   shouldRevokeAccess,
   statusForOutcome,
 } from "@/core/domain/billing/payment-rules";
+import { billingPlan } from "@/core/domain/billing/plans";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -66,19 +66,20 @@ test("a mismatched amount is rejected", () => {
 
 test("a fresh payment starts a 30 day period from now", () => {
   const now = new Date("2026-08-19T10:00:00.000Z");
-  const expected = new Date(now.getTime() + PREMIUM_PERIOD_DAYS * DAY_MS);
-  assert.equal(extendPeriod(null, now).toISOString(), expected.toISOString());
-  assert.equal(extendPeriod(undefined, now).getTime(), expected.getTime());
+  const MONTH_DAYS = billingPlan("monthly").days;
+  const expected = new Date(now.getTime() + MONTH_DAYS * DAY_MS);
+  assert.equal(extendPeriod(null, now, MONTH_DAYS).toISOString(), expected.toISOString());
+  assert.equal(extendPeriod(undefined, now, MONTH_DAYS).getTime(), expected.getTime());
 });
 
 test("renewing early stacks onto the running period instead of losing days", () => {
   const now = new Date("2026-08-19T10:00:00.000Z");
   const stillRunning = new Date(now.getTime() + 10 * DAY_MS);
 
-  const extended = extendPeriod(stillRunning, now);
+  const extended = extendPeriod(stillRunning, now, billingPlan("monthly").days);
 
   // Ten days left plus thirty bought equals forty from today, not thirty.
-  assert.equal(extended.getTime(), stillRunning.getTime() + PREMIUM_PERIOD_DAYS * DAY_MS);
+  assert.equal(extended.getTime(), stillRunning.getTime() + 30 * DAY_MS);
   assert.equal(extended.getTime() - now.getTime(), 40 * DAY_MS);
 });
 
@@ -86,9 +87,9 @@ test("an expired period restarts from now rather than from the old end", () => {
   const now = new Date("2026-08-19T10:00:00.000Z");
   const lapsed = new Date(now.getTime() - 5 * DAY_MS);
 
-  const restarted = extendPeriod(lapsed, now);
+  const restarted = extendPeriod(lapsed, now, billingPlan("monthly").days);
 
-  assert.equal(restarted.getTime(), now.getTime() + PREMIUM_PERIOD_DAYS * DAY_MS);
+  assert.equal(restarted.getTime(), now.getTime() + 30 * DAY_MS);
   assert.ok(restarted > now, "a lapsed subscriber must not receive a period already in the past");
 });
 
@@ -109,4 +110,19 @@ test("a refund revokes access only for a payment that was actually paid", () => 
   // Other outcomes must not revoke a paid period.
   assert.equal(shouldRevokeAccess("EXPIRED", "SETTLED"), false);
   assert.equal(shouldRevokeAccess("FAILED", "SETTLED"), false);
+});
+
+test("a longer plan grants the days it charged for", () => {
+  // The regression this guards: access used to come from one global constant,
+  // so buying six months would have granted thirty days.
+  const now = new Date("2026-08-19T10:00:00.000Z");
+  for (const period of ["monthly", "sixMonth", "annual"] as const) {
+    const plan = billingPlan(period);
+    const end = extendPeriod(null, now, plan.days);
+    assert.equal(
+      end.getTime() - now.getTime(),
+      plan.days * DAY_MS,
+      `${period} charged for ${plan.months} months but granted a different span`,
+    );
+  }
 });

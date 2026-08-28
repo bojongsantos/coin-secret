@@ -8,9 +8,6 @@ export type PaymentStatus =
   | "CANCELED"
   | "REFUNDED";
 
-/** Days of access one settled payment grants. */
-export const PREMIUM_PERIOD_DAYS = 30;
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -75,10 +72,15 @@ export function amountsMatch(paidAmount: string, expectedAmount: number): boolea
  * end date, so a customer never loses days by renewing early. An expired or
  * missing period starts fresh from now.
  */
-export function extendPeriod(currentEnd: Date | null | undefined, now: Date): Date {
+export function extendPeriod(
+  currentEnd: Date | null | undefined,
+  now: Date,
+  /** Days the settled payment bought. */
+  days: number,
+): Date {
   const stillRunning = currentEnd !== null && currentEnd !== undefined && currentEnd > now;
   const base = stillRunning ? currentEnd : now;
-  return new Date(base.getTime() + PREMIUM_PERIOD_DAYS * DAY_MS);
+  return new Date(base.getTime() + days * DAY_MS);
 }
 
 /**

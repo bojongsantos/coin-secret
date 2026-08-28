@@ -7,6 +7,7 @@ import type { Timeframe } from "@/core/domain/models";
 import { isValidBinanceSymbol, mergeSearchableSymbols, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
+import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -18,6 +19,10 @@ export function AnalysisClient({
   initialSymbol: string;
   initialTimeframe: Timeframe;
 }) {
+  // The same gate as the navbar. Leaving one way in open would make the
+  // limit look like a bug rather than a plan.
+  const { canAccess } = usePlan();
+  const canSearch = canAccess("symbolSearch");
   const [symbol, setSymbol] = useState<string>(initialSymbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
   // Not a reader's choice any more: how much history to load is decided by the
@@ -69,8 +74,9 @@ export function AnalysisClient({
               onKeyDown={(e) => {
                 if (e.key === "Enter") pick(e.currentTarget.value);
               }}
-              placeholder="Search symbol…"
-              className="w-44 rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[12px] font-semibold text-foreground placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+              disabled={!canSearch}
+              placeholder={canSearch ? "Cari simbol…" : "Pencarian simbol tersedia di Pro"}
+              className="w-56 rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[12px] font-semibold text-foreground placeholder:text-muted-2 focus:border-accent/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             />
             <datalist id="symbol-options">
               {filtered.map((s) => (

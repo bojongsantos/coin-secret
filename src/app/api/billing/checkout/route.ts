@@ -4,13 +4,18 @@ import { getBillingGateway } from "@/infrastructure/billing/gateway-factory";
 import { prisma } from "@/infrastructure/database/prisma";
 import { apiError, getRequestIp } from "@/shared/server/http";
 import { writeAuditLog } from "@/infrastructure/audit/audit-log";
+import { billingPlan, isBillingPeriod } from "@/core/domain/billing/plans";
 
-const CURRENCY = "IDR";
+const CURRENCY = "USD";
 
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    const amount = Number.parseInt(process.env.PREMIUM_PRICE_IDR ?? "99000", 10);
+    // Priced from the catalogue, never from the request. A period name is all
+    // the browser gets to choose; the amount is ours.
+    const body = (await request.json().catch(() => ({}))) as { period?: unknown };
+    const period = isBillingPeriod(body.period) ? body.period : "monthly";
+    const amount = billingPlan(period).totalUsd;
     const recent = await prisma.payment.findFirst({
       where: { userId: user.id, status: "PENDING", createdAt: { gt: new Date(Date.now() - 5 * 60 * 1000) }, checkoutUrl: { not: null } },
       orderBy: { createdAt: "desc" },
@@ -23,7 +28,7 @@ export async function POST(request: Request) {
     const orderId = `CS-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const payment = await prisma.payment.create({
       // Recorded from the gateway itself, so each charge says who processed it.
-      data: { orderId, userId: user.id, amount, provider: gateway.id },
+      data: { orderId, userId: user.id, amount, provider: gateway.id, planPeriod: period },
       select: { id: true },
     });
     try {
@@ -37,7 +42,7 @@ export async function POST(request: Request) {
         where: { id: payment.id },
         data: { checkoutToken: checkout.reference, checkoutUrl: checkout.redirectUrl, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
       });
-      await writeAuditLog({ actorId: user.id, action: "billing.checkout.create", entityType: "Payment", entityId: payment.id, metadata: { orderId, amount, provider: gateway.id }, ipAddress: getRequestIp(request) });
+      await writeAuditLog({ actorId: user.id, action: "billing.checkout.create", entityType: "Payment", entityId: payment.id, metadata: { orderId, amount, provider: gateway.id, period }, ipAddress: getRequestIp(request) });
       return Response.json(
         { orderId, amount, currency: CURRENCY, token: checkout.reference, redirectUrl: checkout.redirectUrl },
         { status: 201 },

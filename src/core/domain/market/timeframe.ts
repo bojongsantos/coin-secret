@@ -1,7 +1,17 @@
 import type { Timeframe } from "@/core/domain/models";
 
-/** Every timeframe the app charts and scans, in display order. */
-export const TIMEFRAMES: readonly Timeframe[] = ["15m", "1H", "4H", "1D"];
+/**
+ * Timeframes the app offers and scans, in display order.
+ *
+ * Held to the two fastest charts. A setup on the four-hour or the daily can
+ * sit unresolved for days before anyone learns whether it was right, so the
+ * board fills up with plans nobody can act on today; the faster charts produce
+ * more setups and settle them inside a session.
+ *
+ * `TIMEFRAME_SECONDS` still covers the slower ones, so a stored setup or a
+ * saved link that names one keeps working.
+ */
+export const TIMEFRAMES: readonly Timeframe[] = ["15m", "1H"];
 
 /** Seconds covered by one candle of each timeframe. */
 export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {

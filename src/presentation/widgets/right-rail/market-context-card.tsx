@@ -6,18 +6,24 @@ import { Tooltip } from "@/presentation/ui/tooltip";
 /**
  * What each row is measuring.
  *
- * The labels are the industry's own terms, which say nothing to a reader who
- * has not traded perpetuals. Written here rather than in the payload because
- * it is wording, not data: the server has no business shipping a paragraph of
- * Indonesian prose alongside a number.
+ * The labels are the industry's own terms and say nothing to a reader who has
+ * not traded perpetuals. Written here rather than in the payload because it is
+ * wording, not data: the server has no business shipping a paragraph of prose
+ * alongside a number.
+ *
+ * Each entry states the measurement first and what a move in it implies
+ * second, so the reader can stop after one sentence and still be better off.
  */
 const metricHelp: Record<string, string> = {
-  dom: "Porsi kapitalisasi pasar kripto yang dipegang Bitcoin. Naik berarti dana berpindah dari altcoin ke BTC.",
+  dom: "Bagian dari total kapitalisasi pasar kripto yang dipegang Bitcoin. Ketika angkanya naik, modal cenderung berpindah dari altcoin ke Bitcoin.",
   funding:
-    "Biaya berkala yang dibayarkan antar pemegang posisi perpetual. Positif berarti pembeli membayar penjual — mayoritas pasar sedang long.",
-  oi: "Total nilai posisi futures yang masih terbuka. Naik bersama harga menandakan tren didukung uang baru, bukan sekadar penutupan posisi.",
-  fng: "Indeks sentimen pasar 0–100 dari Alternative.me. Angka rendah berarti pasar takut, angka tinggi berarti pasar serakah.",
+    "Biaya berkala yang dibayarkan antar pemegang posisi perpetual. Nilai positif berarti posisi beli membayar posisi jual, tanda pasar sedang condong ke arah beli.",
+  oi: "Nilai seluruh posisi futures yang masih terbuka. Kenaikan yang searah dengan harga menunjukkan tren ditopang modal baru, bukan sekadar penutupan posisi lama.",
+  fng: "Indeks sentimen pasar berskala 0 sampai 100 dari Alternative.me. Angka rendah menandakan pasar cenderung takut, angka tinggi menandakan pasar cenderung serakah.",
 };
+
+/** Appended when the figure itself could not be fetched. */
+const UNAVAILABLE_NOTE = "Sumber datanya sedang tidak dapat dijangkau.";
 
 function MetricRow({
   label,
@@ -47,7 +53,7 @@ function MetricRow({
         {help && (
           <Tooltip content={warning ? `${help}
 
-Data sumber sedang tidak tersedia.` : help}>
+${UNAVAILABLE_NOTE}` : help}>
             <Info className="size-3.5 shrink-0 text-muted-2 transition-colors hover:text-muted" />
           </Tooltip>
         )}

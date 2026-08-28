@@ -570,7 +570,7 @@ export function ChartPanel({
   // stops short of what the range asked for, and scrolling loads more.
   const truncationNotice =
     !history.loading && !history.reachedStart && history.truncated
-      ? "Batas pemuatan tercapai — geser ke kiri untuk menambah"
+      ? "Batas pemuatan tercapai. Geser ke kiri untuk menambah."
       : null;
 
   return (

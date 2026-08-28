@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import { runSdScan, SD_SETUP_TIMEFRAMES } from "@/core/application/scanner/supply-demand-scan-service";
+import { buildAnalysisResult } from "@/core/domain/analysis/analysis-engine";
+import { detectSupplyDemand, type PublishedSetup } from "@/core/domain/analysis/supply-demand";
 import type { Candle, Timeframe } from "@/core/domain/models";
 
 const BAR = 900;
@@ -120,12 +122,12 @@ test("a published setup survives the next scan unchanged", async () => {
 });
 
 test("a held setup is re-read on its own timeframe, not the fast one", async () => {
-  const daily = series(400, 3);
-  const { port, calls } = marketFor({ "1D": daily }, series(400, 5));
+  const hourly = series(400, 3);
+  const { port, calls } = marketFor({ "1H": hourly }, series(400, 5));
   const held = store([
     {
       symbol: "BTCUSDT",
-      timeframe: "1D",
+      timeframe: "1H",
       direction: "long",
       // Far above anything the fixture trades at, so price never closes clear
       // of the entry: the setup is still forming and cannot be terminal.
@@ -136,16 +138,46 @@ test("a held setup is re-read on its own timeframe, not the fast one", async () 
       confidence: 70,
       zoneTop: 10_000,
       zoneBottom: 9_500,
-      zoneBaseTime: daily[10].time,
+      zoneBaseTime: hourly[10].time,
       status: "Limit Order",
     },
   ]);
 
   await runSdScan(port, ["BTCUSDT"], { activeSetups: held.port });
-  assert.ok(calls.includes("1D"), "the setup's own timeframe must be read");
-  // Only the fast chart (for the sparkline) and the setup's own timeframe.
-  assert.ok(!calls.includes("4H"), "a held setup must not trigger a full re-scan");
-  assert.ok(!calls.includes("1H"));
+  const hourlyReads = calls.filter((c) => c === "1H").length;
+  assert.equal(hourlyReads, 1, "the setup's own timeframe is read exactly once");
+  // The fast chart is still fetched for the sparkline; nothing else is.
+  assert.deepEqual([...new Set(calls)].sort(), ["15m", "1H"]);
+});
+
+test("a setup on a timeframe the scanner dropped is released", async () => {
+  // The board is for what can be acted on now. When the scanned set shrinks,
+  // setups left behind on the slower charts would otherwise sit there for days
+  // with nothing ever refreshing them.
+  const candles = series(400, 20);
+  const { port } = marketFor({}, candles);
+  const held = store([
+    {
+      symbol: "BTCUSDT",
+      timeframe: "1D",
+      direction: "long",
+      entry: 10_000,
+      target1: 11_000,
+      target2: 12_000,
+      stopLoss: 9_000,
+      confidence: 70,
+      zoneTop: 10_000,
+      zoneBottom: 9_500,
+      zoneBaseTime: candles[10].time,
+      status: "Limit Order",
+    },
+  ]);
+
+  const result = await runSdScan(port, ["BTCUSDT"], { activeSetups: held.port });
+  const listed = [...result.demand, ...result.supply][0];
+  assert.ok(listed, "a replacement setup must be chosen");
+  assert.notEqual(listed.timeframe, "1D", "the dropped timeframe must not be republished");
+  assert.ok(SD_SETUP_TIMEFRAMES.includes(listed.timeframe));
 });
 
 test("a finished setup releases the symbol for a new one", async () => {
@@ -216,4 +248,59 @@ test("scanning without a store still works", async () => {
   const result = await runSdScan(port, ["BTCUSDT"]);
   assert.ok(Array.isArray(result.demand));
   assert.ok(Array.isArray(result.supply));
+});
+
+test("the chart shows the published plan, not one it re-chose", async () => {
+  // The bug this pins, reproduced exactly: on this market every zone the
+  // detector can still see has already resolved, so it answers with nothing
+  // and the chart printed "No Zone Setup" for a symbol the table was listing
+  // with a live setup.
+  const candles = series(400, 1);
+  const ticker = { symbol: "BTCUSDT", lastPrice: candles[candles.length - 1].close, priceChangePercent: 1, quoteVolume: 1_000_000 };
+  assert.equal(detectSupplyDemand(candles).setup, null, "the fixture must give the detector nothing");
+
+  const published: PublishedSetup = {
+    direction: "long",
+    // Above everything this market trades at, so price never closes clear of
+    // it: the order is still waiting, which is as non-terminal as it gets.
+    entry: 10_000,
+    target1: 11_000,
+    target2: 12_000,
+    stopLoss: 9_000,
+    confidence: 64,
+    zoneTop: 10_000,
+    zoneBottom: 9_500,
+    zoneBaseTime: candles[10].time,
+  };
+
+  const without = buildAnalysisResult(
+    "BTCUSDT", "BTC", "USDT", "15m", "Binance", candles, ticker as never,
+  );
+  assert.equal(without.pattern.name, "No Zone Setup", "without the plan the chart has nothing");
+
+  const withPlan = buildAnalysisResult(
+    "BTCUSDT", "BTC", "USDT", "15m", "Binance", candles, ticker as never, published,
+  );
+  assert.notEqual(withPlan.pattern.name, "No Zone Setup", "the published plan must be drawn");
+  assert.equal(withPlan.pattern.confidence, 64, "and with its own confidence");
+  const entry = withPlan.levels.find((l) => l.id === "entry");
+  assert.equal(entry?.price, 10_000, "the chart must draw the published entry");
+});
+
+test("a published plan price has finished lets the chart move on", async () => {
+  // Terminal is terminal on both sides, so the chart stops showing a setup at
+  // the same moment the board releases the symbol.
+  const candles = series(400, 1);
+  const ticker = { symbol: "BTCUSDT", lastPrice: candles[candles.length - 1].close, priceChangePercent: 1, quoteVolume: 1_000_000 };
+  const finished: PublishedSetup = {
+    direction: "long",
+    // Far below the market and long since passed: this reads as Missed.
+    entry: 1, target1: 1.2, target2: 1.4, stopLoss: 0.8,
+    confidence: 55, zoneTop: 1, zoneBottom: 0.9,
+    zoneBaseTime: candles[5].time,
+  };
+  const result = buildAnalysisResult(
+    "BTCUSDT", "BTC", "USDT", "15m", "Binance", candles, ticker as never, finished,
+  );
+  assert.equal(result.pattern.name, "No Zone Setup", "a finished plan must not still be drawn");
 });

@@ -377,7 +377,7 @@ export async function composeShareImage(input: ShareImageInput): Promise<Blob | 
     cursor += 14;
 
     if (!perf) {
-      text(ctx, "Sinyal baru — belum ada riwayat.", innerX, cursor + 14, {
+      text(ctx, "Sinyal baru, belum ada riwayat.", innerX, cursor + 14, {
         size: 11,
         color: COLOR.muted,
       });

@@ -3,10 +3,10 @@ import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import {
   ACTIVE_SETUP_STATUSES,
   detectSupplyDemand,
+  readPublishedSetup,
   ZONE_SCAN_WINDOW,
   type SdResult,
 } from "@/core/domain/analysis/supply-demand";
-import { isTerminalSetupStatus, traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, Timeframe } from "@/core/domain/models";
 import { mapConcurrent } from "@/shared/lib/async";
 
@@ -16,13 +16,15 @@ export const SD_SCAN_TIMEFRAME: Timeframe = "15m";
 /**
  * Timeframes the scanner looks for setups on.
  *
- * A supply zone on the daily chart is a different trade from one on the
- * fifteen-minute, and scanning only the fastest of them meant the product had
- * an opinion about the next few hours and nothing to say about the next few
- * weeks. Ordered slowest-first so the tie-break below prefers the timeframe
- * that took longer to form.
+ * Held to the two fastest charts on purpose. A setup on the daily can sit
+ * unresolved for a week before anyone learns whether it was right, which buys
+ * a slower read at the cost of most of the board being unactionable; the
+ * product is worth more with more setups that settle inside a session.
+ *
+ * Ordered slowest-first so the tie-break below prefers the timeframe that took
+ * longer to form.
  */
-export const SD_SETUP_TIMEFRAMES: readonly Timeframe[] = ["1D", "4H", "1H", "15m"];
+export const SD_SETUP_TIMEFRAMES: readonly Timeframe[] = ["1H", "15m"];
 
 /**
  * Ranks two candidates for the same symbol.
@@ -109,12 +111,6 @@ function toHit(
   };
 }
 
-/** Index of the bar a stored zone formed on, or 0 if it has scrolled away. */
-function baseIndexFor(candles: Candle[], baseTime: number): number {
-  const found = candles.findIndex((candle) => candle.time === baseTime);
-  return found >= 0 ? found : 0;
-}
-
 export interface SdScanOptions {
   /**
    * Where published setups live.
@@ -165,7 +161,10 @@ export async function runSdScan(
         sparklineMap.set(symbol, fast.slice(-96).map((candle) => candle.close));
 
         const held = active.get(symbol);
-        if (held) {
+        // A setup on a timeframe the scanner no longer reads is let go rather
+        // than nursed to its conclusion: the board exists to show what can be
+        // acted on now, and nothing else would ever refresh those symbols.
+        if (held && SD_SETUP_TIMEFRAMES.includes(held.timeframe)) {
           const candles =
             held.timeframe === SD_SCAN_TIMEFRAME
               ? fast
@@ -175,39 +174,28 @@ export async function runSdScan(
                   limit: ZONE_SCAN_WINDOW,
                 });
           const price = candles[candles.length - 1]?.close ?? held.entry;
-          const life = traceSetupLifecycle(
-            candles,
-            {
-              direction: held.direction,
-              entry: held.entry,
-              stopLoss: held.stopLoss,
-              target1: held.target1,
-              target2: held.target2,
-            },
-            baseIndexFor(candles, held.zoneBaseTime),
-            price,
-          );
+          const reading = readPublishedSetup(candles, held, price);
+          if (reading.status !== held.status) changed.push({ ...held, status: reading.status });
 
-          if (life.status !== held.status) changed.push({ ...held, status: life.status });
-
-          if (!isTerminalSetupStatus(life.status)) {
+          const setup = reading.setup;
+          if (setup) {
             const hit = toHit(
               {
                 symbol,
                 timeframe: held.timeframe,
-                zoneType: held.direction === "long" ? "demand" : "supply",
-                strength: "tested",
-                confidence: held.confidence,
-                direction: held.direction,
-                entry: held.entry,
-                target1: held.target1,
-                target2: held.target2,
-                stopLoss: held.stopLoss,
+                zoneType: setup.zone.type,
+                strength: setup.zone.strength,
+                confidence: setup.confidence,
+                direction: setup.direction,
+                entry: setup.entry,
+                target1: setup.target1,
+                target2: setup.target2,
+                stopLoss: setup.stopLoss,
                 zoneBaseTime: held.zoneBaseTime,
-                zoneTop: held.zoneTop,
-                zoneBottom: held.zoneBottom,
+                zoneTop: setup.zone.top,
+                zoneBottom: setup.zone.bottom,
                 zones: 1,
-                status: life.status,
+                status: setup.status,
               },
               tickerMap.get(symbol),
             );

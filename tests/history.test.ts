@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
-import { TIMEFRAMES } from "@/core/domain/market/timeframe";
 import {
   loadHistory,
   HISTORY_PAGE_SIZE,
@@ -253,7 +252,9 @@ test("every timeframe loads enough history to detect on", () => {
   // detector over the last ZONE_SCAN_WINDOW bars. A range that supplies fewer
   // than that leaves the chart reading a shorter market than the table did,
   // and the two disagree about the very setup the reader just clicked.
-  for (const timeframe of TIMEFRAMES) {
+  // Every chartable interval, not just the ones currently offered: a stored
+  // setup or an old link can still name one of the slower charts.
+  for (const timeframe of Object.keys(TIMEFRAME_SECONDS) as Timeframe[]) {
     const range = rangeForTimeframe(timeframe);
     const candles = estimateRangeCandles(range, timeframe);
     if (candles === null) continue; // "ALL" is unbounded

@@ -374,6 +374,104 @@ export function computeSetupStatus(
   ).status;
 }
 
+/**
+ * A setup the product has already put in front of readers.
+ *
+ * Carried around by value rather than re-derived, because the whole point is
+ * that these numbers stop changing once they are published.
+ */
+export interface PublishedSetup {
+  direction: SetupDirection;
+  entry: number;
+  target1: number;
+  target2: number;
+  stopLoss: number;
+  confidence: number;
+  zoneTop: number;
+  zoneBottom: number;
+  /** Open time of the bar the zone formed on. */
+  zoneBaseTime: number;
+}
+
+/** Index of the bar a published zone formed on, or 0 once it has scrolled away. */
+export function publishedBaseIndex(candles: Candle[], zoneBaseTime: number): number {
+  const found = candles.findIndex((candle) => candle.time === zoneBaseTime);
+  return found >= 0 ? found : 0;
+}
+
+/**
+ * Re-reads a published setup against the market, without re-choosing it.
+ *
+ * The single implementation behind both the signals table and the chart. They
+ * used to answer this question separately: the table replayed the stored plan
+ * while the chart ran the detector again, so a symbol could be listed with a
+ * live setup and then open on "No Zone Setup" because every zone the detector
+ * could still see had already finished.
+ *
+ * Returns null once price has finished the setup, which is the signal to the
+ * caller that the symbol is free to carry a new one.
+ */
+export interface PublishedReading {
+  /** What price has made of the plan, terminal or not. */
+  status: Status;
+  /** The plan as it should be shown, or null once price has finished it. */
+  setup: SdSetup | null;
+}
+
+export function readPublishedSetup(
+  candles: Candle[],
+  published: PublishedSetup,
+  price: number,
+): PublishedReading {
+  const life = traceSetupLifecycle(
+    candles,
+    {
+      direction: published.direction,
+      entry: published.entry,
+      stopLoss: published.stopLoss,
+      target1: published.target1,
+      target2: published.target2,
+    },
+    publishedBaseIndex(candles, published.zoneBaseTime),
+    price,
+  );
+  if (isTerminalSetupStatus(life.status)) return { status: life.status, setup: null };
+
+  const isLong = published.direction === "long";
+  const zone: SdZone = {
+    id: `${isLong ? "demand" : "supply"}-published`,
+    type: isLong ? "demand" : "supply",
+    top: published.zoneTop,
+    bottom: published.zoneBottom,
+    baseIndex: publishedBaseIndex(candles, published.zoneBaseTime),
+    baseTime: published.zoneBaseTime,
+    touches: 1,
+    strength: "tested",
+    active: true,
+    confidence: published.confidence,
+    narrowness: 0,
+  };
+  const risk = Math.abs(published.entry - published.stopLoss);
+  const reward = Math.abs(published.target2 - published.entry);
+  const setup: SdSetup = {
+    direction: published.direction,
+    zone,
+    entry: published.entry,
+    target1: published.target1,
+    target2: published.target2,
+    stopLoss: published.stopLoss,
+    riskReward: Number(Math.min(9, Math.max(0.3, reward / Math.max(1e-9, risk))).toFixed(2)),
+    confidence: published.confidence,
+    status: life.status,
+    reasoning: [
+      `Zona ${isLong ? "demand" : "supply"} berada di rentang ${formatPrice(published.zoneBottom)} hingga ${formatPrice(published.zoneTop)}, dan rencana ini sudah terbit sehingga levelnya tidak lagi dihitung ulang.`,
+      `Entry ${isLong ? "beli" : "jual"} di ${formatPrice(published.entry)} dengan invalidation di ${formatPrice(published.stopLoss)}.`,
+      `Target pertama ${formatPrice(published.target1)} memakai rasio 1:1 dan target kedua ${formatPrice(published.target2)} memakai rasio 1:2.`,
+    ],
+  };
+  return { status: life.status, setup };
+}
+
 /** Build a single-lookback quick scan result for the scanner. */
 export function scanSd(candles: Candle[]): SdResult {
   return detectSupplyDemand(candles);

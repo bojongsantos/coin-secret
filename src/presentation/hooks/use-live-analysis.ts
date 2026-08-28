@@ -12,6 +12,7 @@ import {
   type HistoryRange,
 } from "@/core/application/market-data/history-plan";
 import { buildAnalysisResult } from "@/core/domain/analysis/analysis-engine";
+import type { PublishedSetup } from "@/core/domain/analysis/supply-demand";
 import { applyRecentCandles, olderThan, upsertLatestCandle } from "@/core/domain/market/candles";
 import type { AnalysisResult, Candle, MarketTicker, Timeframe } from "@/core/domain/models";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
@@ -24,6 +25,14 @@ export const FALLBACK_POLL_MS = 4_000;
 
 /** Candles fed to the analysis engine. Older bars are for the chart only. */
 const ANALYSIS_WINDOW_SIZE = 1_000;
+
+/**
+ * How often the chart re-reads the published plan.
+ *
+ * Matches the signals tables, so the status on the chart and the status in the
+ * table change over within the same minute rather than drifting apart.
+ */
+const PUBLISHED_REFRESH_MS = 60_000;
 
 /**
  * Minimum gap between chart repaints for live price movement.
@@ -68,6 +77,14 @@ export function useLiveAnalysis(
     reachedStart: false,
   });
 
+  // The plan already published for this chart, fetched alongside the candles.
+  // Held in a ref because every live tick re-renders from it and a state
+  // update per tick would repaint the chart for no reason.
+  const publishedRef = useRef<PublishedSetup | null>(null);
+  // Set by the stream effect; lets a freshly fetched plan repaint immediately
+  // instead of waiting for the next tick to arrive.
+  const repaintRef = useRef<(() => void) | null>(null);
+
   const loadMoreRef = useRef<() => Promise<void>>(async () => undefined);
   const loadMoreHistory = useCallback(() => loadMoreRef.current(), []);
 
@@ -85,6 +102,36 @@ export function useLiveAnalysis(
     setStreamStatus("connecting");
     setHistory({ loading: true, progress: null, truncated: false, reachedStart: false });
   }
+
+  // The published plan for this chart. Cleared first so a stale one from the
+  // previous symbol can never be drawn over the new market, then refreshed on
+  // the same cadence as the signals table so a status change lands here too.
+  useEffect(() => {
+    let cancelled = false;
+    publishedRef.current = null;
+
+    async function load(): Promise<void> {
+      try {
+        const response = await fetch(
+          `/api/setup?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(timeframe)}`,
+        );
+        if (!response.ok) return;
+        const payload = (await response.json()) as { setup?: PublishedSetup | null };
+        if (cancelled) return;
+        publishedRef.current = payload.setup ?? null;
+        repaintRef.current?.();
+      } catch {
+        // The chart detects for itself; a missing plan is not a broken page.
+      }
+    }
+
+    void load();
+    const timer = window.setInterval(() => void load(), PUBLISHED_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [symbol, timeframe]);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +222,7 @@ export function useLiveAnalysis(
         "Binance",
         candles.slice(-ANALYSIS_WINDOW_SIZE),
         ticker,
+        publishedRef.current,
       );
       setAnalysis({ ...result, chartData: { ...result.chartData, candles } });
       setError(null);
@@ -353,11 +401,13 @@ export function useLiveAnalysis(
         },
       );
       pollTimer = setInterval(() => void pollLatest(), FALLBACK_POLL_MS);
+      repaintRef.current = () => publish();
       await loadRange();
     });
 
     return () => {
       cancelled = true;
+      repaintRef.current = null;
       controller.abort();
       unsubscribe?.();
       if (pollTimer) clearInterval(pollTimer);

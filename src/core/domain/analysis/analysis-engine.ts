@@ -8,7 +8,11 @@ import type {
   TradeLevel,
 } from "@/core/domain/models";
 import type { MarketTicker } from "@/core/domain/models";
-import { detectSupplyDemand } from "@/core/domain/analysis/supply-demand";
+import {
+  detectSupplyDemand,
+  readPublishedSetup,
+  type PublishedSetup,
+} from "@/core/domain/analysis/supply-demand";
 import { formatPrice } from "@/shared/lib/format";
 
 export function emaSeries(closes: number[], period: number): number[] {
@@ -331,12 +335,24 @@ export function buildAnalysisResult(
   exchange: string,
   candles: Candle[],
   ticker: MarketTicker,
+  /**
+   * The setup already published for this symbol, when there is one.
+   *
+   * Given precedence over anything the detector would pick now. The table and
+   * the chart have to be looking at the same plan, and the published one is
+   * the plan the reader was handed.
+   */
+  published?: PublishedSetup | null,
 ): AnalysisResult {
   const price = ticker.lastPrice;
   const now = new Date();
   const analyzedAt = now.toISOString();
 
-  const sd = detectSupplyDemand(candles);
+  const detected = detectSupplyDemand(candles);
+  const reading = published ? readPublishedSetup(candles, published, price) : null;
+  // A published setup that price has finished falls back to the detector, so
+  // the chart moves on at the same moment the board does.
+  const sd = reading?.setup ? { ...detected, setup: reading.setup } : detected;
   const setup = sd.setup;
   const performance = buildPerformance(candles);
 

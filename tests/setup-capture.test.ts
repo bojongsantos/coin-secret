@@ -5,7 +5,6 @@ import {
   FILLED_STATUSES,
   isFilledStatus,
   isTerminalStatus,
-  owesEntrySnapshot,
 } from "@/core/domain/promo/capture-trigger";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import {
@@ -70,44 +69,6 @@ test("a setup keeps one identity while its plan is replanned", () => {
   assert.notEqual(monday, setupSignature({ ...zone, direction: "short" }));
   assert.notEqual(monday, setupSignature({ ...zone, symbol: "ENAUSDT" }));
   assert.notEqual(monday, setupSignature({ ...zone, timeframe: "1H" }));
-});
-
-test("a setup that filled while we watched still owes its entry photograph", () => {
-  // The bug this pins: the trigger compared the status seen now against the
-  // status stored last time. The live scan writes that column too, so by the
-  // time the sweep looked the value had already moved and nothing appeared to
-  // have changed. A whole day of sweeps reported success and captured nothing.
-  const owed = (status: string) =>
-    owesEntrySnapshot({ firstStatus: "Limit Order", status, hasEntrySnapshot: false });
-
-  assert.equal(owed("Filled"), true);
-  assert.equal(owed("Running"), true);
-  assert.equal(owed("Target 1 reached"), true);
-  // A late sweep can meet a setup that has already run its whole course. It
-  // still deserves its before-picture.
-  assert.equal(owed("Target 2 reached"), true);
-  // Not filled yet: nothing to photograph.
-  assert.equal(owed("Limit Order"), false);
-  assert.equal(owed("Missed"), false);
-});
-
-test("a setup already filled when we met it is never photographed", () => {
-  // There is no before-picture to pair it with, and a result built from it
-  // would imply the scanner called the entry in advance when it did not.
-  for (const firstStatus of ["Filled", "Running", "Target 1 reached", ""]) {
-    assert.equal(
-      owesEntrySnapshot({ firstStatus, status: "Running", hasEntrySnapshot: false }),
-      false,
-      `first seen as ${firstStatus || "unknown"}`,
-    );
-  }
-});
-
-test("a setup is photographed once, not on every sweep", () => {
-  assert.equal(
-    owesEntrySnapshot({ firstStatus: "Limit Order", status: "Running", hasEntrySnapshot: true }),
-    false,
-  );
 });
 
 test("a finished setup is recognised as finished", () => {

@@ -9,7 +9,7 @@ import {
 } from "@/core/domain/analysis/supply-demand";
 import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
-import { FILLED_STATUSES, owesEntrySnapshot } from "@/core/domain/promo/capture-trigger";
+import { isFilledStatus } from "@/core/domain/promo/capture-trigger";
 import type { SnapshotInput } from "@/core/domain/promo/result-image";
 import { prisma } from "@/infrastructure/database/prisma";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
@@ -130,25 +130,43 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
   return report;
 }
 
-/** Photographs setups that filled while we were watching but were never shot. */
+/**
+ * Candidates examined per sweep.
+ *
+ * Higher than the photograph ceiling because most candidates resolve to "not
+ * filled" or "lost" and cost one klines call to find out. Drained
+ * oldest-checked-first, so the queue rotates rather than starving its tail.
+ */
+const MAX_ENTRY_CANDIDATES = 24;
+
+/**
+ * Photographs setups that filled after we published them.
+ *
+ * Reads the market rather than the stored status. The status column is only
+ * refreshed for the one row per symbol the live scan considers current, so a
+ * setup that stopped being the current one keeps whatever status it had when
+ * it was dropped, forever. Trusting that column meant the archive waited on a
+ * transition the database was never going to record: seventeen setups had
+ * filled, fourteen of them had run all the way to target two, and every sweep
+ * reported nothing to do.
+ *
+ * The candles decide, and the row is corrected on the way past.
+ */
 async function captureEntries(now: Date, report: SetupCaptureReport): Promise<number> {
-  const owing = await prisma.trackedSetup.findMany({
+  const candidates = await prisma.trackedSetup.findMany({
     where: {
       firstStatus: "Limit Order",
-      status: { in: FILLED_STATUSES },
       snapshots: { none: { kind: "ENTRY" } },
     },
-    orderBy: { updatedAt: "desc" },
-    take: MAX_CAPTURES_PER_RUN,
+    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }],
+    take: MAX_ENTRY_CANDIDATES,
   });
-  if (owing.length === 0) return 0;
+  if (candidates.length === 0) return 0;
 
   let captured = 0;
-  for (const setup of owing) {
-    if (!owesEntrySnapshot({ firstStatus: setup.firstStatus, status: setup.status, hasEntrySnapshot: false })) {
-      continue;
-    }
-    // Enough history to hold both the zone's base bar and the fill.
+  for (const setup of candidates) {
+    if (captured >= MAX_CAPTURES_PER_RUN) break;
+
     const history = await marketData
       .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: ZONE_SCAN_WINDOW })
       .catch(() => [] as Candle[]);
@@ -157,11 +175,6 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       continue;
     }
 
-    // The picture is cut at the bar the entry actually filled, not at the bar
-    // the sweep happened to run on. Scheduled runs drift by hours, and a
-    // "before" picture showing price already halfway to target is not a
-    // before picture at all. The candles are history either way, so the
-    // moment can be reconstructed exactly.
     const life = traceSetupLifecycle(
       history,
       {
@@ -174,9 +187,22 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       publishedBaseIndex(history, setup.zoneBaseTime),
       history[history.length - 1].close,
     );
+
+    // Marked as looked at whatever the answer, so the queue moves on.
+    await prisma.trackedSetup.update({
+      where: { id: setup.id },
+      data: { status: life.status, resultCheckedAt: now },
+    });
+
+    // Never filled, or filled and lost. Neither earns a place in the archive.
     if (life.filledIndex === null) continue;
+    if (!isFilledStatus(life.status)) continue;
+
+    // Cut at the bar the entry actually filled, not at the bar this sweep
+    // happened to run on. Scheduled runs drift by hours, and a "before"
+    // picture showing price already halfway to target is not one.
     const candles = history.slice(0, life.filledIndex + 1);
-    if (candles.length === 0) continue;
+    if (candles.length < 2) continue;
 
     const payload = snapshotPayload({
       symbol: setup.symbol,
@@ -189,7 +215,8 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       stopLoss: setup.stopLoss,
       confidence: setup.confidence,
       riskReward: setup.riskReward,
-      status: setup.status,
+      // The status as it stood at the fill, not as it stands now.
+      status: "Filled",
       zoneTop: setup.zoneTop,
       zoneBottom: setup.zoneBottom,
       price: candles[candles.length - 1].close,
@@ -201,7 +228,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       create: {
         setupId: setup.id,
         kind: "ENTRY",
-        status: setup.status,
+        status: "Filled",
         price: payload.price,
         payload: JSON.parse(JSON.stringify(payload)),
       },

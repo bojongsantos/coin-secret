@@ -86,7 +86,7 @@ function ZoneRow({
           </span>
         </div>
       </td>
-      <td className="px-1.5 py-2">
+      <td className="hidden px-1.5 py-2 sm:table-cell">
         <VolumeBar volume={hit.volume24h} max={maxVol} />
       </td>
       <td className="px-1.5 py-2">
@@ -157,7 +157,9 @@ function ZoneCard({
           <thead>
             <tr className="border-b border-border bg-surface-2/40 text-[8px] uppercase text-muted-2">
               <th className="px-1.5 py-2 font-semibold">Pair</th>
-              <th className="px-1.5 py-2 font-semibold">Volume 24H</th>
+              {/* Dropped on narrow screens so confidence, the column the
+                  table exists for, is not pushed behind a sideways scroll. */}
+              <th className="hidden px-1.5 py-2 font-semibold sm:table-cell">Volume 24H</th>
               <th className="px-1.5 py-2 font-semibold">Status</th>
               <th className="px-1.5 py-2 text-right font-semibold">Confidence</th>
             </tr>

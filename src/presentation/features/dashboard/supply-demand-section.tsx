@@ -135,7 +135,7 @@ function ZoneCard({
   const maxVol = Math.max(1, ...filtered.map((h) => h.volume24h));
 
   return (
-    <section className="card flex flex-col p-4 sm:p-6" style={{ borderRadius: 12 }}>
+    <section className="card flex min-w-0 flex-col p-4 sm:p-6" style={{ borderRadius: 12 }}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[14px] font-bold tracking-tight" style={{ color }}>
           {title}
@@ -242,7 +242,7 @@ export function SupplyDemandSection({
       )}
 
       {result && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
           <ZoneCard
             title="Demand Zones (Buy)"
             hits={result.demand}

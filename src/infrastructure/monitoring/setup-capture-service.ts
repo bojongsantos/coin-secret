@@ -2,19 +2,13 @@ import "server-only";
 
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { runSdScan, SD_SCAN_TIMEFRAME } from "@/core/application/scanner/supply-demand-scan-service";
-import {
-  setupOutcomeSince,
-  TERMINAL_SETUP_STATUSES,
-  type SetupStatus,
-} from "@/core/domain/analysis/supply-demand";
-import { setupSignature } from "@/core/domain/analysis/setup-signature";
+import { setupOutcomeSince } from "@/core/domain/analysis/supply-demand";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
-import { captureTriggerFor } from "@/core/domain/promo/capture-trigger";
+import { FILLED_STATUSES, owesEntrySnapshot } from "@/core/domain/promo/capture-trigger";
 import type { SnapshotInput } from "@/core/domain/promo/result-image";
 import { prisma } from "@/infrastructure/database/prisma";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
-import { mapConcurrent } from "@/shared/lib/async";
 
 export interface SetupCaptureReport {
   scanned: number;
@@ -35,6 +29,7 @@ const SNAPSHOT_BARS = 90;
 
 /** Ceiling on candle fetches per run, so one sweep cannot fan out unbounded. */
 const MAX_CAPTURES_PER_RUN = 8;
+
 
 /**
  * How many pending setups get their outcome checked per sweep.
@@ -95,6 +90,20 @@ function snapshotPayload(input: {
  * stops reporting it entirely; waiting for it to say "Target 2 reached" would
  * mean waiting forever.
  */
+/**
+ * Keeps the result archive fed.
+ *
+ * Asks two questions of the database, both about state rather than about a
+ * moment that may already have passed:
+ *
+ *   1. Which published setups have filled but have no entry photograph yet?
+ *   2. Which of those have since reached their second target?
+ *
+ * Nothing here depends on the sweep running at any particular rate, or on it
+ * being the only writer of a setup's status. Both assumptions were quietly
+ * false and the archive recorded nothing for a day while reporting success on
+ * every run.
+ */
 export async function runSetupCapture(): Promise<SetupCaptureReport> {
   const report: SetupCaptureReport = {
     scanned: 0,
@@ -104,91 +113,38 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
     skippedSymbols: [],
   };
 
+  // Refreshes every published setup's status and records new ones.
   const scan = await runSdScan(marketData, DEFAULT_WATCHLIST, { activeSetups: activeSetupStore });
-  const hits = [...scan.demand, ...scan.supply];
-  report.scanned = hits.length;
+  report.scanned = scan.demand.length + scan.supply.length;
+  report.tracked = report.scanned;
   report.skippedSymbols = scan.errors.map((entry) => entry.split(":")[0]);
 
   const now = new Date();
-  const signed = hits.map((hit) => ({
-    hit,
-    signature: setupSignature({
-      symbol: hit.symbol,
-      timeframe: hit.timeframe,
-      direction: hit.direction,
-      zoneBaseTime: hit.zoneBaseTime,
-    }),
-    status: (hit.status ?? "Limit Order") as SetupStatus,
-  }));
+  report.entrySnapshots = await captureEntries(now, report);
+  report.resultSnapshots = await resolveResults(now);
+  return report;
+}
 
-  // One query for what the last sweep saw, rather than one per setup. At a
-  // hundred live setups the round trips alone were most of the run.
-  const known = await prisma.trackedSetup.findMany({
-    where: { signature: { in: signed.map((entry) => entry.signature) } },
-    select: { id: true, signature: true, status: true },
-  });
-  const previous = new Map(known.map((row) => [row.signature, row]));
-
-  // Triggers are decided before anything is written, so the sweep knows which
-  // fills it can afford this run. A fill it cannot photograph now keeps its
-  // stored status, and the next sweep sees the same transition again —
-  // otherwise recording the new status would consume the only chance to
-  // notice it, and the setup would be filed as having been filled without a
-  // picture of the moment.
-  const triggered = new Set<string>();
-  for (const { signature, status } of signed) {
-    const before = (previous.get(signature)?.status ?? null) as SetupStatus | null;
-    if (captureTriggerFor(before, status) === "ENTRY") triggered.add(signature);
-  }
-  const capturing = new Set([...triggered].slice(0, MAX_CAPTURES_PER_RUN));
-
-  const entryCaptures: { setupId: string; symbol: string; status: SetupStatus }[] = [];
-
-  await mapConcurrent(
-    signed,
-    async ({ hit, signature, status }) => {
-      const deferred = triggered.has(signature) && !capturing.has(signature);
-      const record = await prisma.trackedSetup.upsert({
-        where: { signature },
-        create: {
-          signature,
-          symbol: hit.symbol,
-          timeframe: hit.timeframe,
-          direction: hit.direction,
-          entry: hit.entry,
-          target1: hit.target1,
-          target2: hit.target2,
-          stopLoss: hit.stopLoss,
-          riskReward: 2,
-          confidence: Math.round(hit.confidence),
-          // The zone's own bounds. Deriving them from the entry and the stop
-          // drew a band reaching down to the stop, which is not where the zone
-          // is — the stop sits beyond it, on the far side of a swing.
-          zoneTop: hit.zoneTop,
-          zoneBottom: hit.zoneBottom,
-          status,
-        },
-        // Only the status is refreshed. The levels are the plan as it stood
-        // when the setup was first seen, and the snapshots are photographs of
-        // that plan; letting the stop drift here would move the goalposts
-        // under a proof that has already been taken.
-        update: deferred ? {} : { status },
-        select: { id: true },
-      });
-      report.tracked++;
-
-      if (capturing.has(signature)) {
-        entryCaptures.push({ setupId: record.id, symbol: hit.symbol, status });
-      }
+/** Photographs setups that filled while we were watching but were never shot. */
+async function captureEntries(now: Date, report: SetupCaptureReport): Promise<number> {
+  const owing = await prisma.trackedSetup.findMany({
+    where: {
+      firstStatus: "Limit Order",
+      status: { in: FILLED_STATUSES },
+      snapshots: { none: { kind: "ENTRY" } },
     },
-    8,
-  );
+    orderBy: { updatedAt: "desc" },
+    take: MAX_CAPTURES_PER_RUN,
+  });
+  if (owing.length === 0) return 0;
 
-  for (const capture of entryCaptures) {
-    const setup = await prisma.trackedSetup.findUnique({ where: { id: capture.setupId } });
-    if (!setup) continue;
+  let captured = 0;
+  for (const setup of owing) {
+    if (!owesEntrySnapshot({ firstStatus: setup.firstStatus, status: setup.status, hasEntrySnapshot: false })) {
+      continue;
+    }
     const candles = await marketData
-      .fetchKlines({ symbol: setup.symbol, timeframe: SD_SCAN_TIMEFRAME, limit: SNAPSHOT_BARS })
+      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: SNAPSHOT_BARS })
       .catch(() => [] as Candle[]);
     if (candles.length === 0) {
       if (!report.skippedSymbols.includes(setup.symbol)) report.skippedSymbols.push(setup.symbol);
@@ -206,7 +162,7 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
       stopLoss: setup.stopLoss,
       confidence: setup.confidence,
       riskReward: setup.riskReward,
-      status: capture.status,
+      status: setup.status,
       zoneTop: setup.zoneTop,
       zoneBottom: setup.zoneBottom,
       price: candles[candles.length - 1].close,
@@ -218,17 +174,15 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
       create: {
         setupId: setup.id,
         kind: "ENTRY",
-        status: capture.status,
+        status: setup.status,
         price: payload.price,
         payload: JSON.parse(JSON.stringify(payload)),
       },
       update: {},
     });
-    report.entrySnapshots++;
+    captured++;
   }
-
-  report.resultSnapshots = await resolveResults(now);
-  return report;
+  return captured;
 }
 
 /**
@@ -247,7 +201,10 @@ async function resolveResults(now: Date): Promise<number> {
   const pending = await prisma.trackedSetup.findMany({
     where: {
       resultAt: null,
-      status: { notIn: TERMINAL_SETUP_STATUSES },
+      // Only the losing outcomes are excluded. A setup the live scan has
+      // already marked "Target 2 reached" still owes the archive its result
+      // photograph, and filtering on "not terminal" skipped exactly those.
+      status: { notIn: ["Invalidated (SL hit)", "Missed"] },
       snapshots: { some: { kind: "ENTRY" } },
     },
     // Nulls first: a setup never checked before takes priority over one

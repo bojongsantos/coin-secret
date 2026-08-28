@@ -13,9 +13,16 @@ export type CaptureKind = "ENTRY" | "RESULT";
  * Statuses that mean price has traded through the entry.
  *
  * The archive needs to know a position was opened, not which rung of the plan
- * it is currently on.
+ * it is currently on. "Target 2 reached" belongs here because a sweep that
+ * arrives late can meet a setup that has already run its whole course, and
+ * that setup still deserves its entry picture.
  */
-const FILLED_STATUSES: SetupStatus[] = ["Filled", "Running", "Target 1 reached"];
+export const FILLED_STATUSES: SetupStatus[] = [
+  "Filled",
+  "Running",
+  "Target 1 reached",
+  "Target 2 reached",
+];
 
 /** Whether a status means the order is live in the market. */
 export function isFilledStatus(status: SetupStatus): boolean {
@@ -23,32 +30,32 @@ export function isFilledStatus(status: SetupStatus): boolean {
 }
 
 /**
- * Which capture, if any, a status change calls for.
+ * Whether a setup still owes the archive its entry photograph.
  *
- * Takes the previous status as well as the new one because a sweep sees the
- * same setup again and again. Firing on the status alone would re-photograph a
- * filled setup on every run and fill the archive with duplicates of the same
- * moment.
+ * A state, not an event. The trigger used to compare the status seen now
+ * against the status stored last time, which only works if the sweep is the
+ * only thing writing that column and is looking often enough to land inside
+ * the transition. Neither held: the live scan writes status on its own now, so
+ * the sweep read back a value already updated and saw nothing change, and the
+ * scheduled runs drifted to roughly ten hours apart. The archive recorded
+ * nothing for a day and reported itself healthy throughout.
  *
- * ENTRY fires on the move out of "Limit Order" into any filled state, not on
- * "Filled" alone. The sweep runs roughly hourly against a fifteen-minute
- * chart, so a setup is usually already Running by the time it is looked at
- * again; insisting on the exact intermediate status meant the archive recorded
- * one entry in a whole day of live sweeps and nothing at all on most of them.
- *
- * A null previous status is deliberately *not* a trigger: a setup discovered
- * already filled has no before-picture, and a result image built from it would
- * show an entry the scanner never actually called in advance.
+ * Asking whether a photograph is owed instead of whether a moment just passed
+ * costs nothing and cannot be missed by arriving late.
  */
-export function captureTriggerFor(
-  previous: SetupStatus | null,
-  next: SetupStatus,
-): CaptureKind | null {
-  if (previous === null) return null;
-  if (previous === next) return null;
-  if (previous === "Limit Order" && isFilledStatus(next)) return "ENTRY";
-  if (next === "Target 2 reached") return "RESULT";
-  return null;
+export function owesEntrySnapshot(input: {
+  /** Status the setup carried when it was first published. */
+  firstStatus: string;
+  /** Status it carries now. */
+  status: string;
+  hasEntrySnapshot: boolean;
+}): boolean {
+  if (input.hasEntrySnapshot) return false;
+  // Only a setup we published while it was still waiting has a before-picture
+  // to pair a result with. Anything already filled when we met it would imply
+  // the scanner called an entry it never actually called.
+  if (input.firstStatus !== "Limit Order") return false;
+  return isFilledStatus(input.status as SetupStatus);
 }
 
 /** Whether a status means the setup is over, win or lose. */

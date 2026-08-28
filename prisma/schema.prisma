@@ -190,6 +190,11 @@ model TrackedSetup {
   zoneTop    Float
   zoneBottom Float
   status     String
+  /// Status the setup carried when it was first published. A setup that was
+  /// already filled when we met it has no before-picture to pair a result
+  /// with, and the archive must not imply we called it in advance. Empty on
+  /// rows written before this column existed, which are treated as unknown.
+  firstStatus String  @default("")
   /// Identity of the setup itself, so the same zone is one row across sweeps.
   signature  String   @unique
   /// Open time of the bar the zone formed on, in seconds. Stored rather than

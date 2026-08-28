@@ -88,6 +88,10 @@ export const activeSetupStore: ActiveSetupPort = {
           zoneBottom: setup.zoneBottom,
           zoneBaseTime: setup.zoneBaseTime,
           status: setup.status,
+          // Recorded once, on the row's first write. The archive needs to know
+          // whether a setup was published before it filled, and no later
+          // observation can recover that.
+          firstStatus: setup.status,
         },
         // Levels are never rewritten: they are the plan the reader was given,
         // and the archive's snapshots are photographs of it. The base time is

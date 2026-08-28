@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   canComposeResult,
-  captureTriggerFor,
+  FILLED_STATUSES,
   isFilledStatus,
   isTerminalStatus,
+  owesEntrySnapshot,
 } from "@/core/domain/promo/capture-trigger";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import {
@@ -71,39 +72,42 @@ test("a setup keeps one identity while its plan is replanned", () => {
   assert.notEqual(monday, setupSignature({ ...zone, timeframe: "1H" }));
 });
 
-test("the entry photograph is taken when the limit order stops being one", () => {
-  assert.equal(captureTriggerFor("Limit Order", "Filled"), "ENTRY");
-  // The sweep runs about hourly against a fifteen-minute chart, so a setup is
-  // usually past "Filled" by the time it is seen again. Insisting on that one
-  // status meant the archive recorded almost nothing.
-  assert.equal(captureTriggerFor("Limit Order", "Running"), "ENTRY");
-  assert.equal(captureTriggerFor("Limit Order", "Target 1 reached"), "ENTRY");
-  // Seen again in the same state on the next sweep: nothing new happened.
-  assert.equal(captureTriggerFor("Filled", "Filled"), null);
-  assert.equal(captureTriggerFor("Running", "Filled"), null);
-  // Already past the entry when first tracked; the picture would be a lie.
-  assert.equal(captureTriggerFor("Filled", "Running"), null);
+test("a setup that filled while we watched still owes its entry photograph", () => {
+  // The bug this pins: the trigger compared the status seen now against the
+  // status stored last time. The live scan writes that column too, so by the
+  // time the sweep looked the value had already moved and nothing appeared to
+  // have changed. A whole day of sweeps reported success and captured nothing.
+  const owed = (status: string) =>
+    owesEntrySnapshot({ firstStatus: "Limit Order", status, hasEntrySnapshot: false });
+
+  assert.equal(owed("Filled"), true);
+  assert.equal(owed("Running"), true);
+  assert.equal(owed("Target 1 reached"), true);
+  // A late sweep can meet a setup that has already run its whole course. It
+  // still deserves its before-picture.
+  assert.equal(owed("Target 2 reached"), true);
+  // Not filled yet: nothing to photograph.
+  assert.equal(owed("Limit Order"), false);
+  assert.equal(owed("Missed"), false);
 });
 
-test("a setup first seen already filled is not photographed", () => {
+test("a setup already filled when we met it is never photographed", () => {
   // There is no before-picture to pair it with, and a result built from it
   // would imply the scanner called the entry in advance when it did not.
-  assert.equal(captureTriggerFor(null, "Filled"), null);
-  assert.equal(captureTriggerFor(null, "Target 2 reached"), null);
+  for (const firstStatus of ["Filled", "Running", "Target 1 reached", ""]) {
+    assert.equal(
+      owesEntrySnapshot({ firstStatus, status: "Running", hasEntrySnapshot: false }),
+      false,
+      `first seen as ${firstStatus || "unknown"}`,
+    );
+  }
 });
 
-test("reaching the second target is photographed once", () => {
-  assert.equal(captureTriggerFor("Filled", "Target 2 reached"), "RESULT");
-  assert.equal(captureTriggerFor("Running", "Target 2 reached"), "RESULT");
-  assert.equal(captureTriggerFor("Target 2 reached", "Target 2 reached"), null);
-});
-
-test("losses and misses are not promoted", () => {
-  assert.equal(captureTriggerFor("Filled", "Invalidated (SL hit)"), null);
-  // Never filled, so there is nothing to photograph either side of.
-  assert.equal(captureTriggerFor("Limit Order", "Missed"), null);
-  assert.equal(isFilledStatus("Missed"), false);
-  assert.equal(isFilledStatus("Limit Order"), false);
+test("a setup is photographed once, not on every sweep", () => {
+  assert.equal(
+    owesEntrySnapshot({ firstStatus: "Limit Order", status: "Running", hasEntrySnapshot: true }),
+    false,
+  );
 });
 
 test("a finished setup is recognised as finished", () => {
@@ -256,4 +260,19 @@ test("a losing status is not printed in the winning colour", () => {
   const status = /fill="([^"]+)"[^>]*>Invalidated \(SL hit\)</.exec(svg);
   assert.ok(status, "the status is drawn");
   assert.notEqual(status[1], "#22c55e", "a stop-out must not be green");
+});
+
+test("only a filled status can owe an entry photograph", () => {
+  // The sweep queries the database with this very list, so a status missing
+  // from it is a setup the archive silently never photographs.
+  for (const status of ["Filled", "Running", "Target 1 reached", "Target 2 reached"] as const) {
+    assert.ok(FILLED_STATUSES.includes(status), `${status} must count as filled`);
+    assert.equal(isFilledStatus(status), true);
+  }
+  for (const status of ["Limit Order", "Missed"] as const) {
+    assert.equal(isFilledStatus(status), false, `${status} must not count as filled`);
+  }
+  // A stop-out means it filled and then lost; the archive keeps only winners,
+  // so it is deliberately absent.
+  assert.equal(isFilledStatus("Invalidated (SL hit)"), false);
 });

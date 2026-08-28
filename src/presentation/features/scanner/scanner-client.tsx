@@ -13,7 +13,7 @@ export function ScannerClient() {
         <div>
           <h1 className="text-lg font-bold tracking-tight">Market Scanner</h1>
           <p className="mt-0.5 text-[12px] text-muted">
-            Setup live diurutkan berdasarkan confidence pada watchlist aktif.
+            Setup live diurutkan berdasarkan confidence di seluruh papan.
           </p>
         </div>
         {error && (

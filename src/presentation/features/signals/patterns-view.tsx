@@ -97,7 +97,6 @@ function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; to
               <th className="px-1.5 py-2 font-semibold">Volume 24H</th>
               <th className="px-1.5 py-2 font-semibold">Status</th>
               <th className="px-1.5 py-2 text-right font-semibold">Confidence</th>
-              <th className="px-1.5 py-2"><span className="sr-only">Watchlist</span></th>
             </tr>
           </thead>
           <tbody>
@@ -178,7 +177,7 @@ export function PatternsView() {
             Signals
           </h2>
           <p className="mt-0.5 text-[12px] text-muted">
-            Zona supply/demand aktif dari pemindaian pasar di 15m, 1H, 4H, dan 1D.
+            Zona supply/demand aktif dari pemindaian pasar di 15m dan 1H.
           </p>
         </div>
         <button

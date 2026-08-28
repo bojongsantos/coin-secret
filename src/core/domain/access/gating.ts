@@ -28,5 +28,5 @@ export const featureLabel: Record<FeatureKey, string> = {
   entryBreakdown: "Entry, targets & invalidation levels",
   convictionDetail: "Confidence score breakdown",
   scannerExtended: "Full scanner opportunities list",
-  signals: "Signals — live supply & demand setups across the watchlist",
+  signals: "Signals: live supply and demand setups across the whole board",
 };

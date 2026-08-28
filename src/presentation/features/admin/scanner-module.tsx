@@ -14,7 +14,7 @@ export function ScannerModule() {
         <div>
           <h2 className="text-lg font-bold tracking-tight">Scanner Log</h2>
           <p className="mt-0.5 text-[12px] text-muted">
-            Hasil scan pola terkini dari semua symbol watchlist (timeframe 1D).
+            Hasil scan pola terkini dari seluruh papan.
           </p>
         </div>
         <button

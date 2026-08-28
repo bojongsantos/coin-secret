@@ -194,8 +194,8 @@ export function PricingModule({ priceIdr, authenticated, plan, periodEnd, provid
               otomatis. Tidak ada tagihan berulang.
             </li>
             <li>
-              Setelah masa aktif berakhir, akun kembali ke Free. Data watchlist, alert, dan
-              History Anda tetap tersimpan.
+              Setelah masa aktif berakhir, akun kembali ke Free. Riwayat pembayaran
+              dan data akun Anda tetap tersimpan.
             </li>
             <li>
               Coin Secret adalah alat analisis teknikal berbasis aturan. Ini bukan nasihat

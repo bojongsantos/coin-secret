@@ -48,7 +48,7 @@ const CAPABILITIES: Capability[] = [
     id: "database",
     name: "Database",
     requires: ["DATABASE_URL"],
-    impact: "Login, watchlist, alert, dan pembayaran seluruhnya berhenti.",
+    impact: "Login, langganan, dan pembayaran seluruhnya berhenti.",
   },
   {
     id: "auth",

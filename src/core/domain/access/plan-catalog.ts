@@ -17,7 +17,7 @@ const CAPABILITY_LABEL: Record<FeatureKey, string> = {
   entryBreakdown: "Level entry, target, dan invalidasi",
   convictionDetail: "Rincian confidence score",
   scannerExtended: "Daftar peluang scanner penuh",
-  signals: "Signals — setup supply & demand di seluruh watchlist",
+  signals: "Signals: setup supply dan demand di seluruh papan",
 };
 
 /** Yes/no values come from the same gate the server enforces. */

@@ -131,10 +131,10 @@ export function Sidebar() {
             </p>
             <p className="mt-1 text-[11px] leading-snug text-muted">
               {!authenticated
-                ? "Login untuk menyimpan watchlist dan mengaktifkan Premium."
+                ? "Masuk untuk mengaktifkan Premium dan membuka seluruh signals."
                 : plan === "premium"
                   ? "Premium aktif. Seluruh fitur dan scanner tersedia."
-                  : "Free aktif. Watchlist tersimpan pada akun Anda."}
+                  : "Free aktif. Tiga setup teratas per sisi terbuka untuk Anda."}
             </p>
           </div>
         )}

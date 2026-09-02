@@ -59,7 +59,7 @@ const GAP = 20;
  * lopsided picture next to the trade plan, so the chart is fitted into a
  * constant box instead and the shared image always has the same proportions.
  */
-const CHART_BOX_WIDTH = 720;
+export const EXPORT_CHART_WIDTH = 720;
 /**
  * Chart height in the export.
  *
@@ -68,7 +68,7 @@ const CHART_BOX_WIDTH = 720;
  * second reading of the same setup underneath only invited the two to
  * disagree.
  */
-const CHART_BOX_HEIGHT = 470;
+export const EXPORT_CHART_HEIGHT = 470;
 
 /** Rendered above 1x so text and candles stay crisp when the image is opened. */
 const EXPORT_SCALE = 2;
@@ -157,18 +157,42 @@ function text(
  * search, account state — so the picture carries only what a reader needs to
  * judge the setup.
  */
+/**
+ * Where the captured chart sits inside its frame.
+ *
+ * Separated out so the one rule that matters can be checked without a canvas:
+ * the chart is *contained*, never cropped. The capture is taken at the frame's
+ * own size, so in practice this returns the frame exactly and the chart fills
+ * it edge to edge. It used to be captured at whatever width the reader's
+ * window gave it — 440 pixels of chart stretched into a 720 pixel frame, a
+ * third of the frame left empty and the bitmap blown up past its resolution.
+ */
+export function chartPlacement(
+  sourceWidth: number,
+  sourceHeight: number,
+): { width: number; height: number; offsetX: number; offsetY: number } {
+  const w = Math.max(1, sourceWidth);
+  const h = Math.max(1, sourceHeight);
+  const fit = Math.min(EXPORT_CHART_WIDTH / w, EXPORT_CHART_HEIGHT / h);
+  const width = w * fit;
+  const height = h * fit;
+  return {
+    width,
+    height,
+    offsetX: (EXPORT_CHART_WIDTH - width) / 2,
+    offsetY: (EXPORT_CHART_HEIGHT - height) / 2,
+  };
+}
+
 export async function composeShareImage(input: ShareImageInput): Promise<Blob | null> {
   const logo = await loadLogo();
   const scale = EXPORT_SCALE;
-  const chartWidth = CHART_BOX_WIDTH;
-  const chartHeight = CHART_BOX_HEIGHT;
+  const chartWidth = EXPORT_CHART_WIDTH;
+  const chartHeight = EXPORT_CHART_HEIGHT;
 
-  // Fit the captured chart inside the box without distorting it.
-  const sourceWidth = Math.max(1, input.chart.width);
-  const sourceHeight = Math.max(1, input.chart.height);
-  const fit = Math.min(CHART_BOX_WIDTH / sourceWidth, CHART_BOX_HEIGHT / sourceHeight);
-  const drawWidth = sourceWidth * fit;
-  const drawHeight = sourceHeight * fit;
+  const placement = chartPlacement(input.chart.width, input.chart.height);
+  const drawWidth = placement.width;
+  const drawHeight = placement.height;
 
   const width = PADDING * 2 + chartWidth + GAP + PANEL_WIDTH;
   const headerHeight = 64;
@@ -218,8 +242,8 @@ export async function composeShareImage(input: ShareImageInput): Promise<Blob | 
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(
     input.chart,
-    PADDING + (chartWidth - drawWidth) / 2,
-    chartTop + (chartHeight - drawHeight) / 2,
+    PADDING + placement.offsetX,
+    chartTop + placement.offsetY,
     drawWidth,
     drawHeight,
   );

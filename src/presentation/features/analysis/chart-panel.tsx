@@ -26,6 +26,7 @@ import {
   type HistoryRange,
 } from "@/core/application/market-data/history-plan";
 import { TIMEFRAMES, TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
+import { EXPORT_CHART_HEIGHT, EXPORT_CHART_WIDTH } from "@/presentation/features/analysis/share-image";
 import type { Candle, ChartData, PatternSummary, Timeframe, TradeLevel } from "@/core/domain/models";
 import { formatPrice } from "@/shared/lib/format";
 import { usePlan } from "@/presentation/features/access/plan-provider";
@@ -295,7 +296,45 @@ export function ChartPanel({
 
     // The share image needs the rendered chart, and only this component owns
     // the instance. Expose a snapshot function rather than the chart itself.
-    if (captureRef) captureRef.current = () => chartRef.current?.takeScreenshot() ?? null;
+    //
+    // Rendered at the size the export will use it, not at whatever width the
+    // reader's window happens to give it. A snapshot of a 440px chart dropped
+    // into a 720px frame left a third of the frame empty and blew the bitmap
+    // up past its own resolution: the picture looked cropped and soft at once.
+    //
+    // The visible range is carried across the resize, so the exported chart
+    // shows exactly the bars that were on screen. Both resizes happen in one
+    // turn, so the browser never paints the intermediate size.
+    if (captureRef) {
+      captureRef.current = () => {
+        const chart = chartRef.current;
+        const element = containerRef.current;
+        if (!chart) return null;
+        const restore = element
+          ? { width: element.clientWidth, height: element.clientHeight }
+          : null;
+        const range = chart.timeScale().getVisibleLogicalRange();
+        try {
+          // `autoSize` binds the chart to its container through a resize
+          // observer, and while it is on a manual resize is ignored outright.
+          // Turning it off is what makes the export size take effect at all.
+          chart.applyOptions({ autoSize: false });
+          chart.resize(EXPORT_CHART_WIDTH, EXPORT_CHART_HEIGHT, true);
+          // Carried across so the picture holds the bars that were on screen,
+          // not however many the wider frame could fit.
+          if (range) chart.timeScale().setVisibleLogicalRange(range);
+          return chart.takeScreenshot();
+        } finally {
+          if (restore && restore.width > 0 && restore.height > 0) {
+            chart.resize(restore.width, restore.height, true);
+          }
+          // Handing the chart back to its container, which snaps it to the
+          // real layout even if the measurement above was off.
+          chart.applyOptions({ autoSize: true });
+          if (range) chart.timeScale().setVisibleLogicalRange(range);
+        }
+      };
+    }
 
     const onVisibleRange = (range: { from: number; to: number } | null) => {
       if (!range) return;

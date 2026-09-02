@@ -31,11 +31,22 @@ export function AnalysisClient({
   const range = rangeForTimeframe(timeframe);
   const [symbols, setSymbols] = useState<string[]>(DEFAULT_WATCHLIST);
   const [query, setQuery] = useState(initialSymbol.replace(/USDT$/, ""));
-  const { analysis, loading, error, streamStatus, history, loadMoreHistory } = useLiveAnalysis(
-    symbol,
-    timeframe,
-    range,
-  );
+  const { analysis, loading, error, streamStatus, history, loadMoreHistory, publishedTimeframe } =
+    useLiveAnalysis(symbol, timeframe, range);
+
+  // Move the chart to the interval the published plan was measured on, unless
+  // the reader has picked one for this symbol themselves. Adjusting during
+  // render is React's own pattern for "state derived from a changing input";
+  // an effect would paint the wrong chart first and then correct it.
+  const [chosenFor, setChosenFor] = useState<string | null>(null);
+  if (publishedTimeframe && publishedTimeframe !== timeframe && chosenFor !== symbol) {
+    setTimeframe(publishedTimeframe);
+  }
+  const chooseTimeframe = (next: Timeframe) => {
+    setChosenFor(symbol);
+    setTimeframe(next);
+  };
+
 
   // The saved-favourites list is gone, so the catalogue is simply the market.
   useEffect(() => {
@@ -126,7 +137,7 @@ export function AnalysisClient({
           <AnalysisView
             data={analysis}
             timeframe={timeframe}
-            onTimeframeChange={setTimeframe}
+            onTimeframeChange={chooseTimeframe}
             range={range}
             history={history}
             onLoadMoreHistory={loadMoreHistory}

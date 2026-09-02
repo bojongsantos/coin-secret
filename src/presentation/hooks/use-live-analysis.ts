@@ -59,6 +59,14 @@ export interface LiveAnalysis {
   streamStatus: BinanceStreamStatus;
   history: HistoryState;
   loadMoreHistory: () => Promise<void>;
+  /**
+   * Interval the published plan for this symbol lives on, once known.
+   *
+   * A plan can only be drawn on the chart it was measured against: its zone is
+   * anchored to a bar that does not exist at another interval. Rather than
+   * withhold the plan, the page moves the chart to meet it.
+   */
+  publishedTimeframe: Timeframe | null;
 }
 
 export function useLiveAnalysis(
@@ -81,6 +89,7 @@ export function useLiveAnalysis(
   // Held in a ref because every live tick re-renders from it and a state
   // update per tick would repaint the chart for no reason.
   const publishedRef = useRef<PublishedSetup | null>(null);
+  const [publishedTimeframe, setPublishedTimeframe] = useState<Timeframe | null>(null);
   // Set by the stream effect; lets a freshly fetched plan repaint immediately
   // instead of waiting for the next tick to arrive.
   const repaintRef = useRef<(() => void) | null>(null);
@@ -112,13 +121,18 @@ export function useLiveAnalysis(
 
     async function load(): Promise<void> {
       try {
-        const response = await fetch(
-          `/api/setup?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(timeframe)}`,
-        );
+        const response = await fetch(`/api/setup?symbol=${encodeURIComponent(symbol)}`);
         if (!response.ok) return;
-        const payload = (await response.json()) as { setup?: PublishedSetup | null };
+        const payload = (await response.json()) as {
+          setup?: (PublishedSetup & { timeframe?: Timeframe }) | null;
+        };
         if (cancelled) return;
-        publishedRef.current = payload.setup ?? null;
+        const setup = payload.setup ?? null;
+        setPublishedTimeframe(setup?.timeframe ?? null);
+        // Only drawn on its own chart. At another interval the zone's base bar
+        // does not exist, and the plan would be pinned to whatever sat at the
+        // far left instead.
+        publishedRef.current = setup && setup.timeframe === timeframe ? setup : null;
         repaintRef.current?.();
       } catch {
         // The chart detects for itself; a missing plan is not a broken page.
@@ -416,5 +430,5 @@ export function useLiveAnalysis(
     };
   }, [symbol, timeframe, range]);
 
-  return { analysis, loading, error, streamStatus, history, loadMoreHistory };
+  return { analysis, loading, error, streamStatus, history, loadMoreHistory, publishedTimeframe };
 }

@@ -47,8 +47,13 @@ export async function POST(request: Request) {
     // browser. Ranking reads the filtered set so the top-5 strip and the
     // tables cannot disagree on the same screen.
     const visible = visibleSignalsFor(scanned, fullAccess);
-    const full = { ...scanned, ...visibleSignalsFor(scanned, true) };
-    const top = rankTopSetups(full, limit);
+    // Ranked over the whole live board rather than the filtered tables. The
+    // tables carry a confidence floor because a long list of weak zones is
+    // worse than a short list of strong ones; a strip that names the five best
+    // of the day has the opposite job, and only twenty-nine of a hundred and
+    // ninety setups clear that floor at a quiet hour. Each card shows its own
+    // confidence, so a weaker leader states its own weakness.
+    const top = rankTopSetups(scanned, limit);
     const result = { ...scanned, ...visible };
     return Response.json({ result, top }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

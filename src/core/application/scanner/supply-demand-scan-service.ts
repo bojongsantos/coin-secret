@@ -305,17 +305,19 @@ export interface TopSetup {
 
 export function rankTopSetups(result: SdScanResult, limit = 5): TopSetup[] {
   const all = [...result.demand, ...result.supply];
-  const live = (hit: SdScanHit) =>
-    ACTIVE_SETUP_STATUSES.includes(hit.status as (typeof ACTIVE_SETUP_STATUSES)[number]);
-  const qualified = all.filter((hit) => live(hit) && hit.strength === "fresh");
-  const livePool = qualified.length > 0 ? qualified : all.filter(live);
-  const ranked = livePool.length > 0 ? livePool : all;
+  const live = all.filter((hit) =>
+    ACTIVE_SETUP_STATUSES.includes(hit.status as (typeof ACTIVE_SETUP_STATUSES)[number]),
+  );
+  const pool = live.length > 0 ? live : all;
 
-  // Confidence is the only score the detector produces; Setup Score used to be
-  // the same number rescaled, which made the ranking look like it weighed two
-  // signals when it never did.
-  ranked.sort((a, b) => {
+  // Confidence decides, and freshness only separates a tie. It used to be a
+  // gate: setups had to be "fresh" to be ranked at all. Once published setups
+  // began carrying their own state they all read as "tested", so the gate
+  // emptied the pool and a strip promising five names showed two.
+  const ranked = [...pool].sort((a, b) => {
     if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+    const freshness = Number(b.strength === "fresh") - Number(a.strength === "fresh");
+    if (freshness !== 0) return freshness;
     return b.volume24h - a.volume24h;
   });
 

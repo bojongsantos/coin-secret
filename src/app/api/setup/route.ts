@@ -1,5 +1,4 @@
 import { normalizeUsdtSymbol } from "@/core/domain/market/symbol";
-import { isTimeframe } from "@/core/domain/market/timeframe";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 
 export const runtime = "nodejs";
@@ -23,15 +22,15 @@ export async function GET(request: Request) {
     const rawSymbol = url.searchParams.get("symbol");
     if (!rawSymbol) return Response.json({ setup: null });
     const symbol = normalizeUsdtSymbol(rawSymbol);
-    const timeframe = url.searchParams.get("tf");
 
+    // Returned whatever timeframe the caller happens to be showing. A setup
+    // belongs to one chart and cannot be drawn on another, but withholding it
+    // when the timeframes differ left a hundred and eight of the hundred and
+    // ninety published setups invisible: the chart opened on 15m, the plan
+    // lived on 1H, and the page said "No Zone Setup" about a symbol the board
+    // was listing. The client reads `timeframe` and moves the chart to it.
     const [published] = await activeSetupStore.loadActive([symbol]);
-    // A published setup belongs to one chart. Handing it to another timeframe
-    // would draw a zone whose bars do not exist there.
     if (!published) return Response.json({ setup: null });
-    if (isTimeframe(timeframe) && published.timeframe !== timeframe) {
-      return Response.json({ setup: null });
-    }
 
     return Response.json(
       { setup: published },

@@ -26,11 +26,25 @@ export function DashboardClient() {
   // next visit because state lives only in this component instance).
   const activeSymbol = symbol ?? top[0]?.hit.symbol ?? null;
 
-  const { analysis, loading, error, history, loadMoreHistory } = useLiveAnalysis(
+  const { analysis, loading, error, history, loadMoreHistory, publishedTimeframe } = useLiveAnalysis(
     activeSymbol ?? "BTCUSDT",
     timeframe,
     range,
   );
+
+  // Move the chart to the interval the published plan was measured on, unless
+  // the reader has picked one for this symbol themselves. Adjusting during
+  // render is React's own pattern for "state derived from a changing input";
+  // an effect would paint the wrong chart first and then correct it.
+  const [chosenFor, setChosenFor] = useState<string | null>(null);
+  if (publishedTimeframe && publishedTimeframe !== timeframe && chosenFor !== activeSymbol) {
+    setTimeframe(publishedTimeframe);
+  }
+  const chooseTimeframe = (next: Timeframe) => {
+    setChosenFor(activeSymbol);
+    setTimeframe(next);
+  };
+
 
   const pick = (value: string, setupTimeframe?: Timeframe) => {
     const normalized = normalizeUsdtSymbol(value);
@@ -148,7 +162,7 @@ export function DashboardClient() {
           <AnalysisView
             data={analysis}
             timeframe={timeframe}
-            onTimeframeChange={setTimeframe}
+            onTimeframeChange={chooseTimeframe}
             range={range}
             history={history}
             onLoadMoreHistory={loadMoreHistory}

@@ -4,7 +4,6 @@ import { useState, type MutableRefObject } from "react";
 import { CalendarDays, Download, Loader2 } from "lucide-react";
 import type { PairSummary, PatternSummary, Timeframe, TradeLevel } from "@/core/domain/models";
 import { composeShareImage } from "@/presentation/features/analysis/share-image";
-import type { SignalPerformance } from "@/core/domain/analysis/signal-performance";
 
 interface AnalysisHeaderProps {
   pair: PairSummary;
@@ -13,7 +12,6 @@ interface AnalysisHeaderProps {
   pattern: PatternSummary;
   levels: TradeLevel[];
   riskReward: number;
-  performance: SignalPerformance | null;
   captureRef: MutableRefObject<(() => HTMLCanvasElement | null) | null>;
 }
 
@@ -33,7 +31,6 @@ export function AnalysisHeader({
   pattern,
   levels,
   riskReward,
-  performance,
   captureRef,
 }: AnalysisHeaderProps) {
   const [state, setState] = useState<ShareState>("idle");
@@ -67,8 +64,7 @@ export function AnalysisHeader({
         pattern,
         levels,
         riskReward,
-        performance,
-      });
+            });
       if (!blob) throw new Error("Gambar gagal dibuat.");
 
       const url = URL.createObjectURL(blob);

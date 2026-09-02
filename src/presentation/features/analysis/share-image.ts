@@ -1,5 +1,4 @@
 import type { PatternSummary, TradeLevel } from "@/core/domain/models";
-import type { SignalPerformance } from "@/core/domain/analysis/signal-performance";
 import { formatPrice, priceDecimals } from "@/shared/lib/format";
 
 /** Palette mirrored from the app tokens so the export matches the product. */
@@ -62,11 +61,14 @@ const GAP = 20;
  */
 const CHART_BOX_WIDTH = 720;
 /**
- * Tall enough for the trade plan beside it to finish with its performance
- * block. At 470 the panel ran out of room by a few pixels and the block was
- * silently skipped, which is the worst way for a section to be missing.
+ * Chart height in the export.
+ *
+ * Was 560 to leave room for a performance block beneath the trade plan. That
+ * block is gone: the plan and its levels are what the picture is for, and a
+ * second reading of the same setup underneath only invited the two to
+ * disagree.
  */
-const CHART_BOX_HEIGHT = 560;
+const CHART_BOX_HEIGHT = 470;
 
 /** Rendered above 1x so text and candles stay crisp when the image is opened. */
 const EXPORT_SCALE = 2;
@@ -80,12 +82,6 @@ export interface ShareImageInput {
   pattern: PatternSummary;
   levels: TradeLevel[];
   riskReward: number;
-  /**
-   * What the setup has done since it appeared. Null while it is too new to
-   * have any history, which the panel says outright rather than drawing a
-   * flat line that would read as "went nowhere".
-   */
-  performance?: SignalPerformance | null;
 }
 
 function roundedRect(
@@ -140,50 +136,6 @@ function warningTriangle(ctx: CanvasRenderingContext2D, x: number, y: number, si
  * shape of what happened after the call, and on a 0.4% move against a full
  * price scale that shape would be a flat line.
  */
-function sparkline(
-  ctx: CanvasRenderingContext2D,
-  values: number[],
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  color: string,
-): void {
-  if (values.length < 2) return;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min;
-  const pointAt = (index: number) => {
-    const px = x + (index / (values.length - 1)) * w;
-    // A flat series has no span to divide by; park it on the mid-line.
-    const py = span > 1e-12 ? y + h - ((values[index] - min) / span) * h : y + h / 2;
-    return [px, py] as const;
-  };
-
-  ctx.save();
-  ctx.beginPath();
-  const [x0, y0] = pointAt(0);
-  ctx.moveTo(x0, y0);
-  for (let i = 1; i < values.length; i++) {
-    const [px, py] = pointAt(i);
-    ctx.lineTo(px, py);
-  }
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6;
-  ctx.lineJoin = "round";
-  ctx.stroke();
-
-  // The starting level, so the reader can see which side of it the line ends.
-  const [, startY] = pointAt(0);
-  ctx.setLineDash([3, 3]);
-  ctx.strokeStyle = COLOR.muted2;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x, startY);
-  ctx.lineTo(x + w, startY);
-  ctx.stroke();
-  ctx.restore();
-}
 
 function text(
   ctx: CanvasRenderingContext2D,
@@ -361,70 +313,6 @@ export async function composeShareImage(input: ShareImageInput): Promise<Blob | 
     weight: "700",
     align: "right",
   });
-
-  // Performance since the signal. This is what makes the export worth keeping:
-  // the plan alone says what was hoped for, and a picture saved a week ago is
-  // only useful if it also says what the market did next.
-  cursor += 34 + 14;
-  const panelBottom = chartTop + panelHeight;
-  const perf = input.performance;
-  if (cursor + 74 <= panelBottom - 10) {
-    text(ctx, "PERFORMA SIGNAL", innerX, cursor, {
-      size: 10,
-      weight: "600",
-      color: COLOR.muted2,
-    });
-    cursor += 14;
-
-    if (!perf) {
-      text(ctx, "Sinyal baru, belum ada riwayat.", innerX, cursor + 14, {
-        size: 11,
-        color: COLOR.muted,
-      });
-    } else {
-      const up = perf.changePct >= 0;
-      const moveColor = up ? COLOR.positive : COLOR.negative;
-      text(
-        ctx,
-        `$${formatPrice(perf.priceAtSignal, decimals)} → $${formatPrice(perf.priceNow, decimals)}`,
-        innerX,
-        cursor + 12,
-        { size: 11, color: COLOR.muted },
-      );
-      text(
-        ctx,
-        `${up ? "+" : ""}${perf.changePct.toFixed(2)}%`,
-        innerX + innerWidth,
-        cursor + 12,
-        { size: 13, weight: "700", color: moveColor, align: "right" },
-      );
-
-      sparkline(ctx, perf.series, innerX, cursor + 20, innerWidth, 24, moveColor);
-
-      // Which levels the market actually reached, in the order they matter.
-      // Only a filled setup can reach anything: an order that never triggered
-      // has no position to take a target with, however far price travelled.
-      const reached: string[] = [];
-      if (perf.hitTarget2) reached.push("Target 2 ✓");
-      else if (perf.hitTarget1) reached.push("Target 1 ✓");
-      if (perf.hitStop) reached.push("Stop ✓");
-      const marks = !perf.filled
-        ? "Entry belum tersentuh"
-        : reached.length > 0
-          ? reached.join("  ·  ")
-          : "Belum menyentuh target/stop";
-      text(ctx, `${perf.barsSince} bar`, innerX, cursor + 58, {
-        size: 10,
-        color: COLOR.muted2,
-      });
-      text(ctx, marks, innerX + innerWidth, cursor + 58, {
-        size: 10,
-        weight: "600",
-        color: perf.hitStop ? COLOR.negative : perf.hitTarget1 ? COLOR.positive : COLOR.muted2,
-        align: "right",
-      });
-    }
-  }
 
   // Footer: the standing reminder on the left, the wordmark on the right.
   const footerBaseline = height - PADDING + 6;

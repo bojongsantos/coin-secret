@@ -1,4 +1,4 @@
-import { composeResultImage, type SnapshotInput } from "@/core/domain/promo/result-image";
+import { composeProofImage, type ProofInput } from "@/core/domain/promo/proof-image";
 import { requireAdmin } from "@/infrastructure/auth/current-user";
 import { wordmarkDataUri } from "@/infrastructure/promo/brand-asset";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -21,16 +21,17 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     });
     if (!setup) throw new HttpError(404, "Hasil setup tidak ditemukan.", "NOT_FOUND");
 
-    const entry = setup.snapshots.find((snapshot) => snapshot.kind === "ENTRY");
     const result = setup.snapshots.find((snapshot) => snapshot.kind === "RESULT");
-    if (!entry || !result) {
-      throw new HttpError(409, "Snapshot belum lengkap.", "INCOMPLETE");
+    const proof = result?.payload as unknown as ProofInput | undefined;
+    // The result snapshot carries the whole picture. A row written before that
+    // shape existed is not rendered from the wrong data; the next sweep
+    // rewrites it.
+    if (!proof?.entryFilledTime || !proof.candles?.length) {
+      throw new HttpError(409, "Bukti belum tersedia dalam bentuk terbaru.", "INCOMPLETE");
     }
 
-    const svg = composeResultImage({
-      symbol: setup.symbol,
-      entry: entry.payload as unknown as SnapshotInput,
-      result: result.payload as unknown as SnapshotInput,
+    const svg = composeProofImage({
+      ...proof,
       logoHref: (await wordmarkDataUri()) ?? undefined,
     });
 

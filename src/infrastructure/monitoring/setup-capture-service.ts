@@ -2,15 +2,11 @@ import "server-only";
 
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service";
-import {
-  publishedBaseIndex,
-  setupOutcomeSince,
-  ZONE_SCAN_WINDOW,
-} from "@/core/domain/analysis/supply-demand";
+import { publishedBaseIndex, ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
 import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { isFilledStatus } from "@/core/domain/promo/capture-trigger";
-import type { SnapshotInput } from "@/core/domain/promo/result-image";
+import { proofWindow, type ProofInput } from "@/core/domain/promo/proof-image";
 import { prisma } from "@/infrastructure/database/prisma";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
@@ -23,14 +19,6 @@ export interface SetupCaptureReport {
   skippedSymbols: string[];
 }
 
-/**
- * Bars kept with each snapshot.
- *
- * Enough to show the approach and the zone without storing a history nobody
- * looks at: every snapshot is a row in the database, and the archive is meant
- * to grow for as long as the product runs.
- */
-const SNAPSHOT_BARS = 90;
 
 /** Ceiling on candle fetches per run, so one sweep cannot fan out unbounded. */
 const MAX_CAPTURES_PER_RUN = 8;
@@ -45,42 +33,32 @@ const MAX_CAPTURES_PER_RUN = 8;
  */
 const MAX_RESULT_CHECKS_PER_RUN = 24;
 
-function snapshotPayload(input: {
+/**
+ * History fetched when composing a proof.
+ *
+ * Wide enough to hold a trade that ran for days along with its lead-in; the
+ * window actually drawn is chosen from it by `proofWindow`.
+ */
+const PROOF_HISTORY_BARS = 1000;
+
+/**
+ * What an entry snapshot records.
+ *
+ * No candles: the picture is composed from the result payload, which holds one
+ * window for both halves. This row exists to prove the setup was published
+ * while it was still waiting, which is the claim the archive rests on and the
+ * one no later observation can recover.
+ */
+interface EntryRecord {
   symbol: string;
-  timeframe: Timeframe;
-  candles: Candle[];
+  timeframe: string;
   direction: SetupDirection;
   entry: number;
   target1: number;
   target2: number;
   stopLoss: number;
-  confidence: number;
-  riskReward: number;
-  status: string;
-  zoneTop: number;
-  zoneBottom: number;
-  price: number;
-  capturedAt: Date;
-}): SnapshotInput {
-  return {
-    symbol: input.symbol,
-    timeframe: input.timeframe,
-    candles: input.candles.slice(-SNAPSHOT_BARS),
-    price: input.price,
-    capturedAt: input.capturedAt.toISOString().slice(0, 16).replace("T", " "),
-    setup: {
-      direction: input.direction,
-      entry: input.entry,
-      target1: input.target1,
-      target2: input.target2,
-      stopLoss: input.stopLoss,
-      confidence: input.confidence,
-      riskReward: input.riskReward,
-      status: input.status,
-      zoneTop: input.zoneTop,
-      zoneBottom: input.zoneBottom,
-    },
-  };
+  filledTime: number;
+  filledPrice: number;
 }
 
 /**
@@ -204,24 +182,18 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
     const candles = history.slice(0, life.filledIndex + 1);
     if (candles.length < 2) continue;
 
-    const payload = snapshotPayload({
+    const filled = candles[candles.length - 1];
+    const payload: EntryRecord = {
       symbol: setup.symbol,
-      timeframe: setup.timeframe as Timeframe,
-      candles,
+      timeframe: setup.timeframe,
       direction: setup.direction as SetupDirection,
       entry: setup.entry,
       target1: setup.target1,
       target2: setup.target2,
       stopLoss: setup.stopLoss,
-      confidence: setup.confidence,
-      riskReward: setup.riskReward,
-      // The status as it stood at the fill, not as it stands now.
-      status: "Filled",
-      zoneTop: setup.zoneTop,
-      zoneBottom: setup.zoneBottom,
-      price: candles[candles.length - 1].close,
-      capturedAt: new Date(candles[candles.length - 1].time * 1000),
-    });
+      filledTime: filled.time,
+      filledPrice: filled.close,
+    };
 
     await prisma.setupSnapshot.upsert({
       where: { setupId_kind: { setupId: setup.id, kind: "ENTRY" } },
@@ -229,7 +201,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
         setupId: setup.id,
         kind: "ENTRY",
         status: "Filled",
-        price: payload.price,
+        price: payload.filledPrice,
         payload: JSON.parse(JSON.stringify(payload)),
       },
       update: {},
@@ -265,73 +237,45 @@ async function resolveResults(now: Date): Promise<number> {
     // checked an hour ago.
     orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }],
     take: MAX_RESULT_CHECKS_PER_RUN,
-    include: {
-      snapshots: { where: { kind: "ENTRY" }, select: { capturedAt: true } },
-    },
   });
   if (pending.length === 0) return 0;
 
   let captured = 0;
   for (const setup of pending) {
-    const candles = await marketData
-      // The setup's own chart. Reading the fast one for a setup published on
-      // the hourly compares its levels against bars it was never drawn from.
-      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: SNAPSHOT_BARS })
+    // Enough history to hold the zone, the fill and the target in one window.
+    const history = await marketData
+      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: PROOF_HISTORY_BARS })
       .catch(() => [] as Candle[]);
-    if (candles.length === 0) continue;
+    if (history.length === 0) continue;
 
-    const price = candles[candles.length - 1].close;
-    // Measured from the moment the entry was photographed, not from now, and
-    // decided by the same rule the rest of the app uses — which is what stops
-    // a setup that was stopped out and only later drifted through its target
-    // from being filed as a win.
-    const outcome = setupOutcomeSince(
-      candles,
-      {
-        direction: setup.direction as SetupDirection,
-        stopLoss: setup.stopLoss,
-        target2: setup.target2,
-        runningSince: (setup.snapshots[0]?.capturedAt ?? setup.firstSeenAt).getTime(),
-      },
-      price,
-    );
-
-    if (outcome === null) {
-      await prisma.trackedSetup.update({
-        where: { id: setup.id },
-        data: { resultCheckedAt: now },
-      });
-      continue;
-    }
-
-    if (outcome === "stopped") {
-      // Closed, and closed as a loss. Recorded so the sweep stops re-checking
-      // it, and left without a result image: the archive is proof of setups
-      // that worked, and a losing trade is not that.
-      await prisma.trackedSetup.update({
-        where: { id: setup.id },
-        data: { status: "Invalidated (SL hit)", resultCheckedAt: now },
-      });
-      continue;
-    }
-
-    const payload = snapshotPayload({
-      symbol: setup.symbol,
-      timeframe: setup.timeframe as Timeframe,
-      candles,
+    const plan = {
       direction: setup.direction as SetupDirection,
       entry: setup.entry,
+      stopLoss: setup.stopLoss,
       target1: setup.target1,
       target2: setup.target2,
-      stopLoss: setup.stopLoss,
-      confidence: setup.confidence,
-      riskReward: setup.riskReward,
-      status: "Target 2 reached",
-      zoneTop: setup.zoneTop,
-      zoneBottom: setup.zoneBottom,
-      price,
-      capturedAt: now,
-    });
+    };
+    const life = traceSetupLifecycle(
+      history,
+      plan,
+      publishedBaseIndex(history, setup.zoneBaseTime),
+      history[history.length - 1].close,
+    );
+
+    // Not finished, or finished the wrong way. Either way there is no proof to
+    // publish; the stop is what the loop below records so the sweep moves on.
+    if (life.filledIndex === null || life.target2Index === null || life.stopIndex !== null) {
+      await prisma.trackedSetup.update({
+        where: { id: setup.id },
+        data: {
+          status: life.status,
+          resultCheckedAt: now,
+        },
+      });
+      continue;
+    }
+
+    const payload = proofPayload(setup, history, life.filledIndex, life.target2Index);
 
     await prisma.$transaction([
       prisma.setupSnapshot.upsert({
@@ -340,17 +284,69 @@ async function resolveResults(now: Date): Promise<number> {
           setupId: setup.id,
           kind: "RESULT",
           status: "Target 2 reached",
-          price: payload.price,
+          price: payload.targetReachedPrice,
           payload: JSON.parse(JSON.stringify(payload)),
         },
-        update: {},
+        // Rewritten on purpose: the picture is rendered from this, and an
+        // older shape would keep the archive on the previous design forever.
+        update: { payload: JSON.parse(JSON.stringify(payload)), price: payload.targetReachedPrice },
       }),
       prisma.trackedSetup.update({
         where: { id: setup.id },
-        data: { status: "Target 2 reached", resultAt: now, resultCheckedAt: now },
+        data: {
+          status: "Target 2 reached",
+          resultAt: new Date(history[life.target2Index].time * 1000),
+          resultCheckedAt: now,
+        },
       }),
     ]);
     captured++;
   }
   return captured;
+}
+
+/**
+ * Everything the proof image needs, measured once and stored.
+ *
+ * Both halves of the picture read this one window, which is what lets them
+ * share a time axis and a price scale.
+ */
+export function proofPayload(
+  setup: {
+    symbol: string;
+    timeframe: string;
+    direction: string;
+    entry: number;
+    target1: number;
+    target2: number;
+    stopLoss: number;
+    confidence: number;
+    riskReward: number;
+    zoneTop: number;
+    zoneBottom: number;
+  },
+  history: Candle[],
+  filledIndex: number,
+  targetIndex: number,
+): ProofInput {
+  const window = proofWindow(history.length, filledIndex, targetIndex);
+  return {
+    symbol: setup.symbol,
+    timeframe: setup.timeframe,
+    direction: setup.direction as "long" | "short",
+    entry: setup.entry,
+    target1: setup.target1,
+    target2: setup.target2,
+    stopLoss: setup.stopLoss,
+    confidence: setup.confidence,
+    riskReward: setup.riskReward,
+    zoneTop: setup.zoneTop,
+    zoneBottom: setup.zoneBottom,
+    candles: history.slice(window.from, window.to),
+    entryFilledTime: history[filledIndex].time,
+    entryFilledPrice: history[filledIndex].close,
+    targetReachedTime: history[targetIndex].time,
+    // The level the plan promised, which is what price reached.
+    targetReachedPrice: setup.target2,
+  };
 }

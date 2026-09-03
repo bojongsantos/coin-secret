@@ -121,11 +121,13 @@ test("both panels are drawn on the same scales", () => {
 
 test("the entry panel hides what happened next, opaquely", () => {
   const svg = composeProofImage(proof());
-  assert.ok(svg.includes("Hasil selanjutnya disembunyikan"), "the hidden stretch says so");
   // An overlay that lets the outcome show through is not a reveal. The cover
   // carries no opacity attribute at all.
   const cover = /<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="[\d.]+" fill="#0e0e16" \/>/.test(svg);
   assert.ok(cover, "the cover is fully opaque");
+  // The playhead and the blank half say it plainly enough; a caption on top
+  // only repeated them.
+  assert.ok(!svg.includes("disembunyikan"), "no caption over the hidden stretch");
 });
 
 test("the result panel reveals the run and marks where it started", () => {

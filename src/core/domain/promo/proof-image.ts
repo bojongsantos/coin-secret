@@ -411,16 +411,7 @@ export function composeProofImage(raw: ProofInput & { logoHref?: string }): stri
     // stretch. Where the targets sit is the question; what price did is not.
     levels(input, entryY, entryTop, chartHeight, decimals) +
     `<line x1="${entryX.toFixed(1)}" y1="${entryTop}" x2="${entryX.toFixed(1)}" y2="${(entryTop + chartHeight).toFixed(1)}" stroke="${COLOR.accentBlue}" stroke-width="2"/>` +
-    `<circle cx="${entryX.toFixed(1)}" cy="${entryY(input.entryFilledPrice).toFixed(1)}" r="4" fill="${COLOR.accentBlue}"/>` +
-    text(
-      "Hasil selanjutnya disembunyikan",
-      Math.min(
-        Math.max(redactFrom + (PLOT_X + PLOT_W - redactFrom) / 2, PLOT_X + 130),
-        PLOT_X + PLOT_W - 130,
-      ),
-      entryTop + chartHeight / 2,
-      { size: 13, fill: COLOR.muted, anchor: "middle" },
-    );
+    `<circle cx="${entryX.toFixed(1)}" cy="${entryY(input.entryFilledPrice).toFixed(1)}" r="4" fill="${COLOR.accentBlue}"/>`;
 
   // ---------------------------------------------------------------- result panel
   const resultTop = chartTop(LAYOUT.resultTop);

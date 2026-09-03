@@ -132,13 +132,36 @@ test("the entry panel hides what happened next, opaquely", () => {
 
 test("the result panel reveals the run and marks where it started", () => {
   const svg = composeProofImage(proof());
-  assert.ok(svg.includes("momen entry"), "the fill is marked for reference");
+  assert.ok(svg.includes("Entry Moment"), "the fill is marked for reference");
   assert.match(svg, /stroke-dasharray="6 5"/, "as a dashed playhead, not a solid one");
+});
+
+test("each panel header states one price and one time, and nothing else", () => {
+  const svg = composeProofImage(proof());
+  // Entry: the level, not a sentence about the level.
+  assert.ok(svg.includes(">Entry 99<"), "the entry panel names the fill price plainly");
+  assert.ok(!svg.includes("Harga saat entry"), "no prose in front of it");
+  // Result: what the trade was closed at, in the term a trader uses.
+  assert.match(svg, />Take Profit 93\s+\(\+6\.1%\)</, "the result panel names the exit");
+  // The duration is stated once, in the metric strip, at a size worth reading.
+  // Repeating it beside the timestamp was the same fact twice.
+  // Sixty 15-minute bars from the fill to the target.
+  assert.equal((svg.match(/15 hours/g) ?? []).length, 1, "duration appears exactly once");
+  assert.ok(!svg.includes("kemudian"));
+});
+
+test("the picture is written in one language", () => {
+  // Shared publicly, so a reader meets English throughout rather than two
+  // languages in one frame.
+  const svg = composeProofImage(proof());
+  for (const word of ["Harga", "Akhir", "momen", "jam", "hari", "kemudian", "DURASI", "HASIL", "analisis"]) {
+    assert.ok(!svg.includes(word), `Indonesian left in the image: ${word}`);
+  }
 });
 
 test("the metric strip states the whole claim", () => {
   const svg = composeProofImage(proof());
-  for (const label of ["CONFIDENCE", "RISK / REWARD", "DURASI", "HASIL"]) {
+  for (const label of ["CONFIDENCE", "RISK / REWARD", "DURATION", "RESULT"]) {
     assert.ok(svg.includes(label), `${label} missing from the strip`);
   }
   assert.ok(svg.includes("65%"), "confidence is shown");
@@ -153,15 +176,17 @@ test("a profitable short reads as a gain, not a loss", () => {
 });
 
 test("duration is stated in the units a reader thinks in", () => {
-  assert.equal(formatDuration(START, START + 3600), "1 jam");
-  assert.equal(formatDuration(START, START + 40 * 3600), "40 jam");
-  assert.equal(formatDuration(START, START + 96 * 3600), "4 hari");
+  assert.equal(formatDuration(START, START + 3600), "1 hour", "singular reads as singular");
+  assert.equal(formatDuration(START, START + 40 * 3600), "40 hours");
+  assert.equal(formatDuration(START, START + 96 * 3600), "4 days");
+  assert.equal(formatDuration(START, START + 25 * 3600), "25 hours", "a day and a bit is still hours");
 });
 
-test("the footer carries the disclaimer the brief requires", () => {
+test("the footer carries the disclaimer, and only that", () => {
   const svg = composeProofImage(proof());
-  assert.ok(svg.includes("Not financial advice"), "legal footing");
-  assert.ok(svg.includes("DYOR"));
+  assert.ok(svg.includes("Not Financial Advice · DYOR"), "legal footing");
+  // The tagline that followed it said nothing the picture had not shown.
+  assert.ok(!svg.includes("berbasis aturan"), "no tagline trailing the disclaimer");
 });
 
 test("the image is square and self-contained", () => {

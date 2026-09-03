@@ -301,11 +301,12 @@ function stamp(seconds: number): string {
   return new Date(seconds * 1000).toISOString().slice(0, 16).replace("T", " ");
 }
 
-/** `40 jam` — whole hours, which is the resolution anyone reads this at. */
+/** `40 hours` — whole hours, which is the resolution anyone reads this at. */
 export function formatDuration(fromSeconds: number, toSeconds: number): string {
   const hours = Math.max(0, Math.round((toSeconds - fromSeconds) / 3600));
-  if (hours < 48) return `${hours} jam`;
-  return `${Math.round(hours / 24)} hari`;
+  if (hours < 48) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
 /** Move from entry to the second target, signed in the trade's favour. */
@@ -397,7 +398,7 @@ export function composeProofImage(raw: ProofInput & { logoHref?: string }): stri
       "ENTRY",
       COLOR.accentBlue,
       stamp(input.entryFilledTime),
-      `Harga saat entry ${formatPrice(input.entryFilledPrice, decimals)}`,
+      `Entry ${formatPrice(input.entryFilledPrice, decimals)}`,
       COLOR.foreground,
       LAYOUT.entryTop,
     ) +
@@ -422,8 +423,8 @@ export function composeProofImage(raw: ProofInput & { logoHref?: string }): stri
     panelHeader(
       "RESULT",
       COLOR.positive,
-      `${stamp(input.targetReachedTime)} · ${formatDuration(input.entryFilledTime, input.targetReachedTime)} kemudian`,
-      `Akhir ${formatPrice(input.targetReachedPrice, decimals)}  (${move >= 0 ? "+" : ""}${move}%)`,
+      stamp(input.targetReachedTime),
+      `Take Profit ${formatPrice(input.targetReachedPrice, decimals)}  (${move >= 0 ? "+" : ""}${move}%)`,
       COLOR.positive,
       LAYOUT.resultTop,
     ) +
@@ -433,14 +434,14 @@ export function composeProofImage(raw: ProofInput & { logoHref?: string }): stri
     candlesticks(input.candles, resultY, time) +
     levels(input, resultY, resultTop, chartHeight, decimals) +
     `<line x1="${entryX.toFixed(1)}" y1="${resultTop}" x2="${entryX.toFixed(1)}" y2="${(resultTop + chartHeight).toFixed(1)}" stroke="${COLOR.accentBlue}" stroke-width="1.5" stroke-dasharray="6 5" opacity="0.9"/>` +
-    text("momen entry", entryX + 8, resultTop + 18, { size: 11, fill: COLOR.accentBlue });
+    text("Entry Moment", entryX + 8, resultTop + 18, { size: 11, fill: COLOR.accentBlue });
 
   // ---------------------------------------------------------------- metrics
   const metrics: Array<[string, string, string]> = [
     ["CONFIDENCE", `${input.confidence}%`, COLOR.foreground],
     ["RISK / REWARD", `1 : ${input.riskReward.toFixed(0)}`, COLOR.foreground],
-    ["DURASI", formatDuration(input.entryFilledTime, input.targetReachedTime), COLOR.foreground],
-    ["HASIL", `${move >= 0 ? "+" : ""}${move}%`, move >= 0 ? COLOR.positive : COLOR.negative],
+    ["DURATION", formatDuration(input.entryFilledTime, input.targetReachedTime), COLOR.foreground],
+    ["RESULT", `${move >= 0 ? "+" : ""}${move}%`, move >= 0 ? COLOR.positive : COLOR.negative],
   ];
   const cellW = (PROOF_SIZE - PAD * 2) / metrics.length;
   const metricStrip =
@@ -467,7 +468,7 @@ export function composeProofImage(raw: ProofInput & { logoHref?: string }): stri
 
   // ---------------------------------------------------------------- footer
   const footer = text(
-    "Not financial advice · DYOR · coinsecret, analisis teknikal berbasis aturan",
+    "Not Financial Advice · DYOR",
     PROOF_SIZE / 2,
     PROOF_SIZE - 34,
     { size: 12, fill: COLOR.muted2, anchor: "middle" },

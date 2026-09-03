@@ -216,7 +216,16 @@ function candlesticks(
   time: ReturnType<typeof timeScale>,
   dim = false,
 ): string {
-  const body = Math.max(2.5, Math.min(10, time.slot * 0.7));
+  // A bar has to be wider than the gap beside it, or the chart reads as a row
+  // of sticks with holes between them. The old ceiling of ten pixels did
+  // exactly that on a short window: fifty bars give each one twenty pixels of
+  // room, and drawing ten of them left more background than candle. The body
+  // now keeps its share of the slot whatever the bar count, and the outer
+  // limit is only there for a window too short to happen in practice.
+  const body = Math.max(2.5, Math.min(time.slot * 0.7, 22));
+  // The wick grows with it. Held at a hairline it looked like a thread
+  // stitched through a block once the bodies were wide.
+  const wick = Math.max(1.2, body * 0.14);
   const alpha = dim ? ' opacity="0.35"' : "";
   return candles
     .map((candle, index) => {
@@ -227,7 +236,7 @@ function candlesticks(
       // floor it reads as a doji; without one it is a hole in the chart.
       const height = Math.max(1.5, Math.abs(y(candle.close) - y(candle.open)));
       return (
-        `<line x1="${cx.toFixed(1)}" y1="${y(candle.high).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(candle.low).toFixed(1)}" stroke="${color}" stroke-width="1.2"${alpha}/>` +
+        `<line x1="${cx.toFixed(1)}" y1="${y(candle.high).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(candle.low).toFixed(1)}" stroke="${color}" stroke-width="${wick.toFixed(1)}"${alpha}/>` +
         rect(cx - body / 2, top, body, height, color, alpha.trim())
       );
     })

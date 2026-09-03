@@ -205,9 +205,68 @@ test("markup cannot be injected through a symbol name", () => {
   assert.doesNotMatch(svg, /<script>/i);
 });
 
+/** Wicks are the only lines drawn in a candle's own colour. */
+function wickCount(svg: string): number {
+  return (svg.match(/stroke="#(089981|f23645)"/g) ?? []).length;
+}
+
+/** Body rects, in the order they are drawn: entry panel first, then result. */
+function bodies(svg: string): Array<{ x: number; width: number }> {
+  return [...svg.matchAll(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)" height="[\d.]+" fill="#(?:089981|f23645)"/g)]
+    .map((m) => ({ x: Number(m[1]), width: Number(m[2]) }));
+}
+
 test("every candle in the window is drawn in both panels", () => {
   const input = proof();
   const svg = composeProofImage(input);
-  const wicks = (svg.match(/stroke-width="1.2"/g) ?? []).length;
-  assert.equal(wicks, input.candles.length * 2, "one wick per bar per panel, and no holes");
+  assert.equal(wickCount(svg), input.candles.length * 2, "one wick per bar per panel, and no holes");
+});
+
+test("a candle is wider than the gap beside it, at every bar count", () => {
+  // The complaint this pins: bodies were capped at ten pixels while a short
+  // window gave each bar twenty to itself, so half the plot was background and
+  // the chart read as sparse sticks with holes between them.
+  for (const count of [35, 44, 50, 70, 100, 150, 200]) {
+    const bars = candles(count);
+    const svg = composeProofImage(
+      proof({
+        candles: bars,
+        entryFilledTime: bars[Math.floor(count * 0.4)].time,
+        entryFilledPrice: bars[Math.floor(count * 0.4)].close,
+        targetReachedTime: bars[Math.floor(count * 0.8)].time,
+        targetReachedPrice: bars[Math.floor(count * 0.8)].close,
+      }),
+    );
+    const drawn = bodies(svg).slice(0, count);
+    assert.equal(drawn.length, count, `${count} bars: not every body was drawn`);
+    // Measured off the picture rather than recomputed from the layout, so the
+    // assertion cannot drift with the constants it is checking.
+    const slot = drawn[1].x - drawn[0].x;
+    const ratio = drawn[0].width / slot;
+    assert.ok(ratio >= 0.6, `${count} bars: body fills only ${(ratio * 100).toFixed(0)}% of its slot`);
+    assert.ok(ratio <= 0.95, `${count} bars: bodies touch each other (${(ratio * 100).toFixed(0)}%)`);
+  }
+});
+
+test("a flat bar is still a bar, not a gap in the row", () => {
+  // A candle that opened and closed at one price has no body to draw. Without
+  // a floor it vanishes, and a vanished bar is a hole in the chart.
+  const flat = candles(60).map((c, i) =>
+    i % 4 === 0 ? { ...c, open: c.close, high: c.close + 0.3, low: c.close - 0.3 } : c,
+  );
+  const svg = composeProofImage(proof({ candles: flat }));
+  const heights = [...svg.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="([\d.]+)" fill="#(?:089981|f23645)"/g)]
+    .map((m) => Number(m[1]));
+  assert.equal(heights.length, flat.length * 2, "every bar drew a body");
+  assert.ok(Math.min(...heights) >= 1, "including the ones that closed where they opened");
+});
+
+test("the wick keeps up with the body", () => {
+  // A hairline shadow through a wide body looked like a thread through a
+  // block; on dense windows it stays a hairline.
+  const wide = composeProofImage(proof({ candles: candles(40) }));
+  const dense = composeProofImage(proof({ candles: candles(200) }));
+  const widthOf = (svg: string) => Number(/stroke="#(?:089981|f23645)" stroke-width="([\d.]+)"/.exec(svg)![1]);
+  assert.ok(widthOf(wide) > widthOf(dense), "wide bars get a thicker wick");
+  assert.ok(widthOf(dense) >= 1.2, "and a dense chart keeps a visible one");
 });

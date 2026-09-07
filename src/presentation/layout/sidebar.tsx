@@ -26,7 +26,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "dashboard", label: "nav.dashboard", href: "/", icon: LayoutDashboard },
+  { id: "dashboard", label: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { id: "signals", label: "nav.signals", href: "/patterns", icon: Layers },
   { id: "pricing", label: "nav.pricing", href: "/pricing", icon: CreditCard },
 ];
@@ -52,7 +52,7 @@ export function Sidebar() {
           collapsed ? "justify-center px-2" : "px-5"
         }`}
       >
-        <Link href="/" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
+        <Link href="/dashboard" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
           {/* The mark alone when collapsed: the wordmark would be clipped
               mid-name, which reads as a broken image rather than a compact one. */}
           {collapsed ? <BrandMark size={24} /> : <BrandLockup height={26} />}

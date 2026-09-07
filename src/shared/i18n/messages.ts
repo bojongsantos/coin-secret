@@ -446,6 +446,101 @@ export const MESSAGES = {
   "admin.image": { id: "Gambar", en: "Image" },
   "admin.finished": { id: "Selesai", en: "Finished" },
 
+  // ----------------------------------------------------------------- landing
+  "landing.home": { id: "Beranda Coin Secret", en: "Coin Secret home" },
+  "landing.launchApp": { id: "Buka Aplikasi", en: "Launch App" },
+  "landing.howItWorks": { id: "Cara kerjanya", en: "How it works" },
+  "landing.nav.about": { id: "Tentang", en: "About" },
+  "landing.nav.technologies": { id: "Teknologi", en: "Technologies" },
+  "landing.nav.products": { id: "Produk", en: "Products" },
+  "landing.nav.buyPremium": { id: "Beli Premium", en: "Buy Premium" },
+  "landing.eyebrow": { id: "Coin Secret", en: "Coin Secret" },
+  "landing.headline": {
+    id: "Zona supply dan demand di {pairs} pair, dibaca aturan yang sama setiap kali",
+    en: "Supply and demand zones on {pairs} pairs, read by the same rules every time",
+  },
+  "landing.subhead": {
+    id: "Coin Secret memindai pasar kripto dengan aturan teknikal yang tetap, bukan model yang menebak. Tiap setup datang lengkap dengan entry, dua target, dan level yang membatalkannya — beserta alasan yang bisa kamu periksa sendiri.",
+    en: "Coin Secret scans the crypto market with fixed technical rules, not a model that guesses. Every setup arrives with an entry, two targets and the level that voids it — and the reasoning is there for you to check.",
+  },
+  "landing.disclaimer": {
+    id: "Not Financial Advice · DYOR · analisis teknikal berbasis aturan, bukan nasihat investasi",
+    en: "Not Financial Advice · DYOR · rule-based technical analysis, not investment advice",
+  },
+
+  "landing.about.title": {
+    id: "Rencana yang diberikan tidak berubah di tengah jalan",
+    en: "A plan you are given does not change halfway through",
+  },
+  "landing.about.p1.title": { id: "Zona dulu, baru rencana", en: "The zone first, then the plan" },
+  "landing.about.p1.body": {
+    id: "Aturannya mencari jejak ketidakseimbangan — bar yang meninggalkan sebuah harga dengan cepat — lalu mengukur zonanya. Entry, dua target, dan stop diturunkan dari zona itu, bukan dipilih belakangan.",
+    en: "The rules look for where price left a level in a hurry, then measure the zone it left behind. The entry, both targets and the stop all come from that zone rather than being picked afterwards.",
+  },
+  "landing.about.p2.title": { id: "Terbit sekali, dipegang", en: "Published once, then held" },
+  "landing.about.p2.body": {
+    id: "Setelah sebuah setup ditampilkan, levelnya tidak dihitung ulang. Detektor boleh melihat zona lain menit berikutnya; yang sudah kamu baca tetap seperti saat kamu membacanya.",
+    en: "Once a setup is shown, its levels are never recomputed. The detector may see a different zone a minute later; the one you were handed stays as it was.",
+  },
+  "landing.about.p3.title": { id: "Diikuti sampai selesai", en: "Followed to the end" },
+  "landing.about.p3.body": {
+    id: "Statusnya berjalan berurutan: menunggu, terisi, target, atau batal. Yang sudah selesai tidak muncul lagi sebagai peluang baru.",
+    en: "Its status walks in order: waiting, filled, target, or void. What has finished does not come back as a fresh opportunity.",
+  },
+
+  "landing.tech.title": {
+    id: "Tidak ada model yang menebak di baliknya",
+    en: "There is no guessing model behind it",
+  },
+  "landing.tech.rules": { id: "Berbasis aturan, bukan AI", en: "Rule-based, not AI" },
+  "landing.tech.rulesBody": {
+    id: "Setiap angka di layar bisa ditelusuri ke aturan yang menghasilkannya. Masukan yang sama selalu memberi keluaran yang sama, dan itulah alasan hasilnya bisa diuji.",
+    en: "Every number on screen traces back to the rule that produced it. The same input always gives the same output, which is what makes the results testable at all.",
+  },
+  "landing.tech.data": { id: "Data langsung dari bursa", en: "Exchange data, first hand" },
+  "landing.tech.dataBody": {
+    id: "Harga, candle, funding rate, dan open interest diambil langsung dari bursa — {pairs} pair pada interval 15 menit dan 1 jam.",
+    en: "Prices, candles, funding rate and open interest come straight from the exchange — {pairs} pairs on the fifteen-minute and hourly charts.",
+  },
+  "landing.tech.lifecycle": { id: "Siklus setup tiga fase", en: "A three-phase setup lifecycle" },
+  "landing.tech.lifecycleBody": {
+    id: "Tidak ada yang dihitung sampai harga benar-benar menutup melewati entry, lalu kembali menyentuhnya. Order limit yang langsung tereksekusi bukan setup.",
+    en: "Nothing counts until price closes clear of the entry and comes back to touch it. A limit order that would fill the instant it is placed is not a setup.",
+  },
+  "landing.tech.archive": { id: "Hasilnya diarsipkan", en: "Outcomes are archived" },
+  "landing.tech.archiveBody": {
+    id: "Setup yang mencapai target kedua difoto: keadaan saat entry dan hasil akhirnya, pada skala waktu dan harga yang sama.",
+    en: "A setup that reaches its second target is photographed: how it looked at entry and how it ended, on one shared time and price scale.",
+  },
+
+  "landing.products.title": { id: "Yang bisa kamu buka hari ini", en: "What you can open today" },
+  "landing.products.board": { id: "Papan Signals", en: "The Signals board" },
+  "landing.products.boardBody": {
+    id: "Zona demand dan supply yang sedang hidup, beserta status dan confidence-nya, di seluruh papan.",
+    en: "Live demand and supply zones across the whole board, each with its status and confidence.",
+  },
+  "landing.products.plan": { id: "Rencana trading", en: "The trading plan" },
+  "landing.products.planBody": {
+    id: "Entry, dua target, level pembatalan, dan rasio risk-reward — digambar pada chart tempat rencananya diukur.",
+    en: "Entry, two targets, the invalidation level and the risk-reward ratio — drawn on the chart the plan was measured on.",
+  },
+  "landing.products.reasoning": { id: "Analisis & alasan", en: "Analysis and reasoning" },
+  "landing.products.reasoningBody": {
+    id: "Struktur pasar, level kunci, momentum, dan manajemen risiko yang dihitung dari angka setup itu sendiri.",
+    en: "Market structure, key levels, momentum and risk management, worked out from that setup's own numbers.",
+  },
+  "landing.products.scanner": { id: "Market Scanner", en: "The market scanner" },
+  "landing.products.scannerBody": {
+    id: "Sapuan menyeluruh atas {pairs} pair, diurutkan supaya yang paling layak dilihat berada di atas.",
+    en: "A sweep across all {pairs} pairs, ranked so the ones worth a look sit at the top.",
+  },
+
+  "landing.cta.title": { id: "Lihat papannya sekarang", en: "Open the board now" },
+  "landing.cta.body": {
+    id: "Tidak perlu akun untuk melihat. Paket Free membuka tiga setup teratas di tiap sisi beserta seluruh analisisnya.",
+    en: "No account needed to look. The Free plan opens the top three setups on each side, with the full analysis.",
+  },
+
   // ---------------------------------------------------------------- language
   "language.switchTo": { id: "Switch to English", en: "Ganti ke Bahasa Indonesia" },
   "language.current": { id: "ID", en: "EN" },

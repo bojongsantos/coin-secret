@@ -101,7 +101,7 @@ export function TopNav() {
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 sm:gap-4 sm:px-6">
-      <Link href="/" className="flex h-9 shrink-0 items-center lg:hidden" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
+      <Link href="/dashboard" className="flex h-9 shrink-0 items-center lg:hidden" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
         <BrandMark size={26} />
       </Link>
       {canSearch ? (

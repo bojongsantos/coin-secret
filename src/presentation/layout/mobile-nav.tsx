@@ -19,7 +19,7 @@ import type { MessageKey } from "@/shared/i18n/messages";
 
 /** Destinations that earn a permanent slot on a phone-width bar. */
 const PRIMARY: Array<{ href: string; label: MessageKey; icon: typeof LayoutDashboard }> = [
-  { href: "/", label: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard },
   { href: "/patterns", label: "nav.signals", icon: Layers },
 ];
 

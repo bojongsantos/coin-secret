@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useTheme } from "@/presentation/hooks/use-ui-preference";
+import type { Theme } from "@/shared/lib/ui-preferences";
 
 /**
  * The Coin Secret wordmark and mark.
@@ -33,11 +34,24 @@ const MARK_SRC = {
 const LOCKUP_RATIO = 844 / 105;
 const MARK_RATIO = 171 / 105;
 
-export function BrandLockup({ height = 30, className = "" }: { height?: number; className?: string }) {
+export function BrandLockup({
+  height = 30,
+  className = "",
+  tone,
+}: {
+  height?: number;
+  className?: string;
+  /**
+   * Which ink to use, when the surface has already committed to one. The
+   * landing page is dark whatever the reader's theme, and asking the theme
+   * there would hand it the dark-ink artwork on a near-black field.
+   */
+  tone?: Theme;
+}) {
   const { theme } = useTheme();
   return (
     <Image
-      src={LOCKUP_SRC[theme]}
+      src={LOCKUP_SRC[tone ?? theme]}
       alt={BRAND_NAME}
       width={Math.round(height * LOCKUP_RATIO)}
       height={height}
@@ -55,11 +69,20 @@ export function BrandLockup({ height = 30, className = "" }: { height?: number; 
  * it is tall, so squaring it off would squash the curve that makes it the
  * mark; callers give it the room instead.
  */
-export function BrandMark({ size = 32, className = "" }: { size?: number; className?: string }) {
+export function BrandMark({
+  size = 32,
+  className = "",
+  tone,
+}: {
+  size?: number;
+  className?: string;
+  /** Which ink to use, when the surface has already committed to one. */
+  tone?: Theme;
+}) {
   const { theme } = useTheme();
   return (
     <Image
-      src={MARK_SRC[theme]}
+      src={MARK_SRC[tone ?? theme]}
       alt={BRAND_NAME}
       width={Math.round(size * MARK_RATIO)}
       height={size}

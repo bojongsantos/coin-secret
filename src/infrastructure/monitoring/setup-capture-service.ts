@@ -2,7 +2,7 @@ import "server-only";
 
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service";
-import { publishedBaseIndex, ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
+import { publishedBaseIndex, publishedScanLimit } from "@/core/domain/analysis/supply-demand";
 import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { isFilledStatus } from "@/core/domain/promo/capture-trigger";
@@ -145,11 +145,30 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
   for (const setup of candidates) {
     if (captured >= MAX_CAPTURES_PER_RUN) break;
 
+    // Deep enough to hold the bar the zone formed on, however long ago the
+    // setup was published. Three hundred bars covered three days of the
+    // fifteen-minute chart, and a setup older than that was replayed from the
+    // middle of its own trade — a wrong status written straight to the row.
     const history = await marketData
-      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: ZONE_SCAN_WINDOW })
+      .fetchKlines({
+        symbol: setup.symbol,
+        timeframe: setup.timeframe as Timeframe,
+        limit: publishedScanLimit(setup.zoneBaseTime, setup.timeframe as Timeframe),
+      })
       .catch(() => [] as Candle[]);
     if (history.length === 0) {
       if (!report.skippedSymbols.includes(setup.symbol)) report.skippedSymbols.push(setup.symbol);
+      continue;
+    }
+
+    const baseIndex = publishedBaseIndex(history, setup.zoneBaseTime);
+    if (baseIndex < 0) {
+      // Older than the deepest window one request returns. Nothing can be said
+      // about it; the row is stamped so the queue rotates past it.
+      await prisma.trackedSetup.update({
+        where: { id: setup.id },
+        data: { resultCheckedAt: now },
+      });
       continue;
     }
 
@@ -162,7 +181,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
         target1: setup.target1,
         target2: setup.target2,
       },
-      publishedBaseIndex(history, setup.zoneBaseTime),
+      baseIndex,
       history[history.length - 1].close,
     );
 
@@ -255,12 +274,16 @@ async function resolveResults(now: Date): Promise<number> {
       target1: setup.target1,
       target2: setup.target2,
     };
-    const life = traceSetupLifecycle(
-      history,
-      plan,
-      publishedBaseIndex(history, setup.zoneBaseTime),
-      history[history.length - 1].close,
-    );
+    const baseIndex = publishedBaseIndex(history, setup.zoneBaseTime);
+    if (baseIndex < 0) {
+      await prisma.trackedSetup.update({
+        where: { id: setup.id },
+        data: { resultCheckedAt: now },
+      });
+      continue;
+    }
+
+    const life = traceSetupLifecycle(history, plan, baseIndex, history[history.length - 1].close);
 
     // Not finished, or finished the wrong way. Either way there is no proof to
     // publish; the stop is what the loop below records so the sweep moves on.

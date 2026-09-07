@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   detectSupplyDemand,
+  MAX_KLINES_PER_REQUEST,
+  publishedBaseIndex,
+  isBeyondScanReach,
+  publishedScanLimit,
+  readPublishedSetup,
   ZONE_SCAN_WINDOW,
+  type PublishedSetup,
 } from "@/core/domain/analysis/supply-demand";
 import type { Candle } from "@/core/domain/models";
 
@@ -93,4 +99,110 @@ test("a caller with less than the window still gets a usable result", () => {
   assert.ok(Array.isArray(result.zones));
   assert.ok(Number.isFinite(result.support));
   assert.ok(Number.isFinite(result.resistance));
+});
+
+
+const BAR = 900;
+const OPEN = 1_700_000_000;
+
+/**
+ * A short that was published, filled, and stopped out — long ago.
+ *
+ * Bars 0-400 sit below the entry, so the plan is armed and waiting. Price
+ * climbs into the entry around bar 420, takes the stop by bar 460, and then
+ * spends the rest of the tape far above every level, never coming back. The
+ * last three hundred bars therefore look like a market that has nothing to do
+ * with this plan at all.
+ */
+function stoppedOutTape(): Candle[] {
+  const out: Candle[] = [];
+  for (let i = 0; i < 1_000; i++) {
+    let close: number;
+    if (i <= 400) close = 100;
+    else if (i <= 460) close = 100 + ((i - 400) / 60) * 5; // 100 → 105
+    else close = 110;
+    const open = out[i - 1]?.close ?? close;
+    out.push({
+      time: OPEN + i * BAR,
+      open,
+      high: Math.max(open, close) + 0.2,
+      low: Math.min(open, close) - 0.2,
+      close,
+      volume: 100,
+    });
+  }
+  return out;
+}
+
+const PUBLISHED: PublishedSetup = {
+  direction: "short",
+  entry: 102,
+  stopLoss: 104,
+  target1: 100,
+  target2: 98,
+  confidence: 80,
+  zoneTop: 102.5,
+  zoneBottom: 102,
+  zoneBaseTime: OPEN + 400 * BAR,
+};
+
+test("a zone that is not in the window is reported missing, not as bar zero", () => {
+  // Zero is not an absence, it is a claim: that the zone formed on the
+  // leftmost bar loaded. Every wrong reading below started there.
+  const tape = stoppedOutTape();
+  assert.equal(publishedBaseIndex(tape, PUBLISHED.zoneBaseTime), 400);
+  assert.equal(publishedBaseIndex(tape.slice(-ZONE_SCAN_WINDOW), PUBLISHED.zoneBaseTime), -1);
+});
+
+test("a published plan reads the same however much history was loaded", () => {
+  // The board fetched three hundred bars and the analysis page fetched three
+  // months, and they disagreed about the same stored plan: the table
+  // advertised XPLUSDT at 80% while the chart refused to draw it and fell back
+  // to a setup of its own. Reaching the zone's own bar is what makes the two
+  // agree.
+  const tape = stoppedOutTape();
+  const deep = readPublishedSetup(tape, PUBLISHED, tape[tape.length - 1].close);
+  const enough = readPublishedSetup(tape.slice(-600), PUBLISHED, tape[tape.length - 1].close);
+  assert.equal(deep.status, "Invalidated (SL hit)", "the stop was taken and the replay says so");
+  assert.equal(deep.setup, null, "so the plan is not shown");
+  assert.deepEqual(enough.status, deep.status, "a smaller window that still reaches the zone agrees");
+  assert.equal(enough.setup, null);
+});
+
+test("a window that cannot reach the zone refuses to answer", () => {
+  // Read from the leftmost bar it happened to have, this same finished setup
+  // came back as a live "Limit Order" — price is nowhere near the entry in the
+  // last three hundred bars, so nothing appears to have happened yet.
+  const tape = stoppedOutTape();
+  const short = readPublishedSetup(tape.slice(-ZONE_SCAN_WINDOW), PUBLISHED, tape[tape.length - 1].close);
+  assert.equal(short.status, null, "no reading rather than a confident wrong one");
+  assert.equal(short.setup, null);
+});
+
+test("the fetch window reaches back to the setup it is judging", () => {
+  const now = OPEN + 999 * BAR;
+  const needed = publishedScanLimit(PUBLISHED.zoneBaseTime, "15m", now);
+  assert.ok(needed > 599, `599 bars separate the zone from now; asked for ${needed}`);
+  assert.ok(needed <= MAX_KLINES_PER_REQUEST, "and never more than one request returns");
+
+  // A fresh setup still gets the ordinary window, so a quiet board costs no
+  // extra bars.
+  assert.equal(publishedScanLimit(now - 60 * BAR, "15m", now), ZONE_SCAN_WINDOW);
+  // An hourly setup is counted in hourly bars, not in fifteen-minute ones:
+  // four hundred hours is four hundred bars there and sixteen hundred here.
+  assert.equal(publishedScanLimit(now - 400 * 3_600, "1H", now), 410);
+  assert.equal(publishedScanLimit(now - 400 * 3_600, "15m", now), MAX_KLINES_PER_REQUEST);
+});
+
+test("a setup older than any window we can fetch is let go", () => {
+  const now = OPEN + 999 * BAR;
+  // Still reachable: the replay can start on its own bar.
+  assert.equal(isBeyondScanReach(PUBLISHED.zoneBaseTime, "15m", now), false);
+  // Eleven days of fifteen-minute bars is past a thousand, so this plan can
+  // never be judged again. Kept anyway it would hold the symbol forever:
+  // unjudgeable, so never terminal, so never released — which is how SPKUSDT
+  // stayed on the board with a plan the chart would not draw.
+  assert.equal(isBeyondScanReach(now - 1_100 * BAR, "15m", now), true);
+  // The same age on the hourly chart is only forty-six bars.
+  assert.equal(isBeyondScanReach(now - 1_100 * BAR, "1H", now), false);
 });

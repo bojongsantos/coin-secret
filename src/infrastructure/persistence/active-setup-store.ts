@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import { isTerminalSetupStatus } from "@/core/domain/analysis/setup-lifecycle";
+import { isBeyondScanReach } from "@/core/domain/analysis/supply-demand";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -45,6 +46,10 @@ export const activeSetupStore: ActiveSetupPort = {
       // has no identity, so it is left to the archive and a fresh setup is
       // chosen instead of pinning the reader to a plan we cannot locate.
       if (row.zoneBaseTime === 0) continue;
+      // Nor can one whose zone has scrolled past the deepest window a klines
+      // request returns. Held anyway it would sit on the symbol forever:
+      // unjudgeable, so never terminal, so never released.
+      if (isBeyondScanReach(row.zoneBaseTime, row.timeframe as Timeframe)) continue;
       bySymbol.set(row.symbol, {
         symbol: row.symbol,
         timeframe: row.timeframe as Timeframe,

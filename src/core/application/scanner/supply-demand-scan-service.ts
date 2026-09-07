@@ -3,6 +3,7 @@ import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import {
   ACTIVE_SETUP_STATUSES,
   detectSupplyDemand,
+  publishedScanLimit,
   readPublishedSetup,
   ZONE_SCAN_WINDOW,
   type SdResult,
@@ -165,17 +166,27 @@ export async function runSdScan(
         // than nursed to its conclusion: the board exists to show what can be
         // acted on now, and nothing else would ever refresh those symbols.
         if (held && SD_SETUP_TIMEFRAMES.includes(held.timeframe)) {
+          // Reach back to the bar the zone formed on. Read against a window
+          // that starts after it, the replay begins mid-trade and answers for
+          // a different setup — which is how this table kept advertising
+          // plans price had already invalidated while the chart, loading more
+          // history, refused to draw them.
+          const limit = publishedScanLimit(held.zoneBaseTime, held.timeframe);
           const candles =
-            held.timeframe === SD_SCAN_TIMEFRAME
+            held.timeframe === SD_SCAN_TIMEFRAME && limit <= ZONE_SCAN_WINDOW
               ? fast
               : await marketData.fetchKlines({
                   symbol,
                   timeframe: held.timeframe,
-                  limit: ZONE_SCAN_WINDOW,
+                  limit,
                 });
           const price = candles[candles.length - 1]?.close ?? held.entry;
           const reading = readPublishedSetup(candles, held, price);
-          if (reading.status !== held.status) changed.push({ ...held, status: reading.status });
+          // No reading means the setup outran the deepest window we can fetch.
+          // Its stored status stands rather than being overwritten by a guess.
+          if (reading.status && reading.status !== held.status) {
+            changed.push({ ...held, status: reading.status });
+          }
 
           const setup = reading.setup;
           if (setup) {

@@ -3,6 +3,7 @@ import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import { emaSeries, rsiSeries } from "@/core/domain/analysis/analysis-engine";
 import {
   detectSupplyDemand,
+  publishedScanLimit,
   readPublishedSetup,
   ZONE_SCAN_WINDOW,
 } from "@/core/domain/analysis/supply-demand";
@@ -81,7 +82,11 @@ export async function runScanner(
         // disagree with the board about which trade a symbol is carrying.
         const held = active.get(symbol);
         const timeframe = held?.timeframe ?? SCAN_TIMEFRAME;
-        const candles = await marketData.fetchKlines({ symbol, timeframe, limit: ZONE_SCAN_WINDOW });
+        // A held plan is replayed from the bar its zone formed on, so the
+        // window has to reach that far back; without it this page read the
+        // same setup differently from the board.
+        const limit = held ? publishedScanLimit(held.zoneBaseTime, timeframe) : ZONE_SCAN_WINDOW;
+        const candles = await marketData.fetchKlines({ symbol, timeframe, limit });
         const sd = detectSupplyDemand(candles);
         const published = held
           ? readPublishedSetup(candles, held, candles[candles.length - 1]?.close ?? held.entry).setup

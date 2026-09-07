@@ -342,3 +342,37 @@ test("the opportunities board reads the same published plan", async () => {
   assert.equal(row.setup, "long");
   assert.equal(row.timeframe, "1H", "reported on the chart it lives on");
 });
+
+test("a held setup the window cannot reach is dropped, not relabelled", async () => {
+  // The bug this pins: the board fetched three hundred bars, the zone had
+  // formed four hundred and forty back, and the replay started on whatever bar
+  // happened to be leftmost. It read "Limit Order" and kept advertising
+  // XPLUSDT at 80% while the chart, holding more history, replayed the same
+  // plan from its own bar, found the stop had been taken, and drew a different
+  // setup entirely.
+  const candles = series(400, 33);
+  const { port } = marketFor({}, candles);
+  const held: ActiveSetup = {
+    symbol: "BTCUSDT",
+    timeframe: "15m",
+    direction: "short",
+    entry: 120,
+    target1: 110,
+    target2: 100,
+    stopLoss: 130,
+    confidence: 80,
+    zoneTop: 121,
+    zoneBottom: 120,
+    // Formed on a bar older than anything the market hands back.
+    zoneBaseTime: START - 500 * BAR,
+    status: "Limit Order",
+  };
+  const { port: setups, writes } = store([held]);
+
+  const result = await runSdScan(port, ["BTCUSDT"], { activeSetups: setups });
+
+  const advertised = [...result.demand, ...result.supply].filter((hit) => hit.entry === 120);
+  assert.equal(advertised.length, 0, "a plan that cannot be replayed is not advertised");
+  const relabelled = writes.filter((w) => w.entry === 120);
+  assert.equal(relabelled.length, 0, "and its stored status is not overwritten by a guess");
+});

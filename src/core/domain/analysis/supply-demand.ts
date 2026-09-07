@@ -1,4 +1,5 @@
-import type { Candle, SetupDirection } from "@/core/domain/models";
+import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
+import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import {
   isTerminalSetupStatus,
   traceSetupLifecycle,
@@ -393,11 +394,68 @@ export interface PublishedSetup {
   zoneBaseTime: number;
 }
 
-/** Index of the bar a published zone formed on, or 0 once it has scrolled away. */
+/**
+ * Index of the bar a published zone formed on, or -1 when it is not in the
+ * window.
+ *
+ * It used to answer 0 for "not here". Zero is not an absence, it is a claim:
+ * that the zone formed on the leftmost bar loaded. The lifecycle replay then
+ * started in the middle of the trade, so the same stored plan came out
+ * differently depending on how much history the caller happened to fetch —
+ * XPLUSDT read `Limit Order` against three hundred bars and
+ * `Invalidated (SL hit)` against a thousand. The board fetches three hundred
+ * and the chart fetches three months, which is precisely how the board came to
+ * advertise a setup at 80% while the chart refused to draw it and fell back to
+ * a different one entirely.
+ */
 export function publishedBaseIndex(candles: Candle[], zoneBaseTime: number): number {
-  const found = candles.findIndex((candle) => candle.time === zoneBaseTime);
-  return found >= 0 ? found : 0;
+  return candles.findIndex((candle) => candle.time === zoneBaseTime);
 }
+
+/**
+ * Bars to fetch so a published setup's own history is in the window.
+ *
+ * The replay must begin on the bar the zone formed on, so the window has to
+ * reach back that far however long the setup has been waiting. Three hundred
+ * bars is three days on the fifteen-minute chart, and setups outlive that.
+ * A thousand is the most one request returns.
+ */
+export function publishedScanLimit(
+  zoneBaseTime: number,
+  timeframe: Timeframe,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): number {
+  return Math.min(
+    MAX_KLINES_PER_REQUEST,
+    Math.max(ZONE_SCAN_WINDOW, barsSincePublished(zoneBaseTime, timeframe, nowSeconds)),
+  );
+}
+
+/**
+ * Whether a setup's zone has scrolled past the deepest window one request can
+ * return, and so can never be replayed again.
+ *
+ * Such a plan is held against its symbol forever otherwise: never judged, so
+ * never terminal, so never released, and the symbol carries a trade nobody can
+ * verify instead of one it could show today.
+ */
+export function isBeyondScanReach(
+  zoneBaseTime: number,
+  timeframe: Timeframe,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): boolean {
+  return barsSincePublished(zoneBaseTime, timeframe, nowSeconds) > MAX_KLINES_PER_REQUEST;
+}
+
+/** Bars between a zone's base and now, with a little margin. */
+function barsSincePublished(zoneBaseTime: number, timeframe: Timeframe, nowSeconds: number): number {
+  const age = Math.max(0, nowSeconds - zoneBaseTime);
+  // A few bars of margin so the base bar is never the very first one loaded.
+  return Math.ceil(age / TIMEFRAME_SECONDS[timeframe]) + 10;
+}
+
+/** Most candles one klines request returns. */
+export const MAX_KLINES_PER_REQUEST = 1_000;
 
 /**
  * Re-reads a published setup against the market, without re-choosing it.
@@ -412,8 +470,12 @@ export function publishedBaseIndex(candles: Candle[], zoneBaseTime: number): num
  * caller that the symbol is free to carry a new one.
  */
 export interface PublishedReading {
-  /** What price has made of the plan, terminal or not. */
-  status: Status;
+  /**
+   * What price has made of the plan, terminal or not — or null when the bar
+   * the zone formed on is not in the window, and there is nothing honest to
+   * say about it.
+   */
+  status: Status | null;
   /** The plan as it should be shown, or null once price has finished it. */
   setup: SdSetup | null;
 }
@@ -423,6 +485,13 @@ export function readPublishedSetup(
   published: PublishedSetup,
   price: number,
 ): PublishedReading {
+  const baseIndex = publishedBaseIndex(candles, published.zoneBaseTime);
+  // Without the bar the zone formed on, the tape that made this plan is not
+  // here to replay, and a guess at where to start is what put a finished setup
+  // on the board. Callers fetch `publishedScanLimit` bars so this is rare;
+  // when it happens the answer is that there is no answer.
+  if (baseIndex < 0) return { status: null, setup: null };
+
   const life = traceSetupLifecycle(
     candles,
     {
@@ -432,7 +501,7 @@ export function readPublishedSetup(
       target1: published.target1,
       target2: published.target2,
     },
-    publishedBaseIndex(candles, published.zoneBaseTime),
+    baseIndex,
     price,
   );
   if (isTerminalSetupStatus(life.status)) return { status: life.status, setup: null };
@@ -443,7 +512,7 @@ export function readPublishedSetup(
     type: isLong ? "demand" : "supply",
     top: published.zoneTop,
     bottom: published.zoneBottom,
-    baseIndex: publishedBaseIndex(candles, published.zoneBaseTime),
+    baseIndex,
     baseTime: published.zoneBaseTime,
     touches: 1,
     strength: "tested",

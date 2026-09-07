@@ -1,4 +1,8 @@
-import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
+import type {
+  ActiveSetup,
+  ActiveSetupPort,
+  RetiredZone,
+} from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import {
   ACTIVE_SETUP_STATUSES,
@@ -8,7 +12,7 @@ import {
   ZONE_SCAN_WINDOW,
   type SdResult,
 } from "@/core/domain/analysis/supply-demand";
-import type { Candle, Timeframe } from "@/core/domain/models";
+import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { mapConcurrent } from "@/shared/lib/async";
 
 /** The timeframe a symbol's sparkline and 24h figures are drawn from. */
@@ -147,6 +151,16 @@ export async function runSdScan(
     ? await options.activeSetups.loadActive(symbols).catch(() => [] as ActiveSetup[])
     : [];
   const active = new Map(stored.map((entry) => [entry.symbol, entry]));
+  // Zones these symbols have already finished. The detector keeps offering
+  // them back — it re-measures the same base bar on every pass — and a base
+  // bar is a setup's identity, so publishing one again is not a new setup but
+  // the old one reopened.
+  const retiredZones = options.activeSetups
+    ? await options.activeSetups.loadRetiredZones(symbols).catch(() => [] as RetiredZone[])
+    : [];
+  const retired = new Set(
+    retiredZones.map((zone) => zoneKey(zone.symbol, zone.timeframe, zone.direction, zone.zoneBaseTime)),
+  );
 
   await mapConcurrent(
     symbols,
@@ -162,9 +176,6 @@ export async function runSdScan(
         sparklineMap.set(symbol, fast.slice(-96).map((candle) => candle.close));
 
         const held = active.get(symbol);
-        // Zone base of a setup finished on this pass. It has had its life and
-        // cannot be published again.
-        let retired: number | null = null;
         // A setup on a timeframe the scanner no longer reads is let go rather
         // than nursed to its conclusion: the board exists to show what can be
         // acted on now, and nothing else would ever refresh those symbols.
@@ -226,7 +237,9 @@ export async function runSdScan(
           // this way: released at "Invalidated (SL hit)" and re-published as
           // "Filled" with a stop a fraction wider than the one price had
           // already taken out.
-          retired = held.zoneBaseTime;
+          // Finished on this pass. Remembered immediately so the fall-through
+          // below cannot re-publish it before the store has been written.
+          retired.add(zoneKey(symbol, held.timeframe, held.direction, held.zoneBaseTime));
         }
 
         // Nothing held: look across every timeframe and take the best read.
@@ -243,7 +256,7 @@ export async function runSdScan(
           const sd: SdResult = detectSupplyDemand(candles);
           const setup = sd.setup;
           if (!setup) continue;
-          if (setup.zone.baseTime === retired) continue;
+          if (retired.has(zoneKey(symbol, timeframe, setup.direction, setup.zone.baseTime))) continue;
           if (!ACTIVE_SETUP_STATUSES.includes(setup.status as (typeof ACTIVE_SETUP_STATUSES)[number])) {
             continue;
           }
@@ -346,6 +359,16 @@ export function rankTopSetups(result: SdScanResult, limit = 5): TopSetup[] {
   });
 
   return ranked.slice(0, limit).map((hit, index) => ({ hit, rank: index + 1 }));
+}
+
+/** A zone's identity: the same four fields the stored signature is built from. */
+function zoneKey(
+  symbol: string,
+  timeframe: Timeframe,
+  direction: SetupDirection,
+  zoneBaseTime: number,
+): string {
+  return `${symbol}|${timeframe}|${direction}|${zoneBaseTime}`;
 }
 
 const SD_CACHE_TTL_MS = 60_000;

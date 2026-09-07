@@ -6,6 +6,7 @@ import { runScanner } from "@/core/application/scanner/scanner-service";
 import { runSdScan, SD_SETUP_TIMEFRAMES } from "@/core/application/scanner/supply-demand-scan-service";
 import { buildAnalysisResult } from "@/core/domain/analysis/analysis-engine";
 import { detectSupplyDemand, type PublishedSetup } from "@/core/domain/analysis/supply-demand";
+import { isTerminalSetupStatus } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, Timeframe } from "@/core/domain/models";
 
 const BAR = 900;
@@ -57,18 +58,50 @@ function marketFor(perTimeframe: Partial<Record<Timeframe, Candle[]>>, fallback:
   return { port, calls };
 }
 
-/** An in-memory stand-in for the database store. */
+/**
+ * An in-memory stand-in for the database store.
+ *
+ * Keyed by the setup's signature, and it holds the same rule the real adapter
+ * enforces in SQL: a finished setup stays finished, and a live one is never
+ * handed back for a symbol that has one. Without that rule here the fake would
+ * be easier to satisfy than the database and would hide the bug it exists to
+ * catch.
+ */
 function store(initial: ActiveSetup[] = []) {
-  const rows = new Map(initial.map((s) => [s.symbol, s]));
+  const key = (s: ActiveSetup) => `${s.symbol}|${s.timeframe}|${s.direction}|${s.zoneBaseTime}`;
+  const rows = new Map(initial.map((s) => [key(s), s]));
   const writes: ActiveSetup[] = [];
   const port: ActiveSetupPort = {
     async loadActive(symbols) {
-      return symbols.map((s) => rows.get(s)).filter((s): s is ActiveSetup => s !== undefined);
+      const wanted = new Set(symbols);
+      const live: ActiveSetup[] = [];
+      const seen = new Set<string>();
+      for (const row of rows.values()) {
+        if (!wanted.has(row.symbol) || seen.has(row.symbol)) continue;
+        if (isTerminalSetupStatus(row.status)) continue;
+        seen.add(row.symbol);
+        live.push(row);
+      }
+      return live;
+    },
+    async loadRetiredZones(symbols) {
+      const wanted = new Set(symbols);
+      return [...rows.values()]
+        .filter((row) => wanted.has(row.symbol) && isTerminalSetupStatus(row.status))
+        .map((row) => ({
+          symbol: row.symbol,
+          timeframe: row.timeframe,
+          direction: row.direction,
+          zoneBaseTime: row.zoneBaseTime,
+        }));
     },
     async persist(setups) {
       for (const s of setups) {
+        const existing = rows.get(key(s));
+        // The row has had its life; nothing may reopen it.
+        if (existing && isTerminalSetupStatus(existing.status)) continue;
         writes.push(s);
-        rows.set(s.symbol, s);
+        rows.set(key(s), s);
       }
     },
   };
@@ -377,50 +410,62 @@ test("a held setup the window cannot reach is dropped, not relabelled", async ()
   assert.equal(relabelled.length, 0, "and its stored status is not overwritten by a guess");
 });
 
-test("a finished setup does not rise from the dead on the next scan", async () => {
-  // The failure this pins, measured on WALUSDT: the scan correctly released a
-  // short whose stop price had taken out, then re-detected the very same zone
-  // on the very same base bar. A zone is re-measured on every pass, so it came
-  // back with a stop a fraction wider — wide enough that the bar which had
-  // just stopped the trade no longer reached it — and was published as
-  // "Filled". Identity is the zone's base bar, so that second write landed on
-  // the same row and overwrote the status that had just closed it. Every scan
-  // resurrected it, and the board went on advertising a trade whose stop had
-  // already gone.
+test("a finished setup is never published again, on this pass or any later one", async () => {
+  // The bug this pins, measured on WALUSDT: its stop had gone at 04:00 and the
+  // board went on advertising it. The scan released it correctly, but a zone
+  // is re-measured on every pass, so the detector kept offering the same base
+  // bar back — and a base bar *is* the setup's identity, so publishing it
+  // again reopened the very row that had just closed. Across passes the board
+  // flip-flopped between released and live.
   const candles = series(400, 21);
-  const detected = detectSupplyDemand(candles);
-  const found = detected.setup;
-  assert.ok(found, "the fixture must actually produce a zone to re-detect");
+  // Only the hourly chart carries a tape. With no second candidate to take the
+  // slot, a released symbol stays empty — which is the situation the bug
+  // actually needed, and the one a fixture that offers an alternative on every
+  // pass quietly papers over.
+  const { port: market } = marketFor({ "1H": candles }, []);
 
-  // The same zone, published earlier with a tighter stop — one price has
-  // certainly taken out by now.
+  // Calibrate on the fixture rather than guessing: whatever this tape
+  // publishes with nothing held is exactly what must not come back.
+  const { port: empty } = store([]);
+  const first = await runSdScan(market, ["BTCUSDT"], { activeSetups: empty });
+  const published = [...first.demand, ...first.supply][0];
+  assert.ok(published, "the fixture must publish a setup to retire");
+
+  const identity = (x: { symbol: string; timeframe: string; direction: string; zoneBaseTime: number }) =>
+    `${x.symbol}|${x.timeframe}|${x.direction}|${x.zoneBaseTime}`;
+
+  // The same setup, as it would have been published earlier — with a stop
+  // price has certainly taken out by now.
   const held: ActiveSetup = {
-    symbol: "BTCUSDT",
-    timeframe: "15m",
-    direction: found.direction,
-    entry: found.entry,
-    target1: found.target1,
-    target2: found.target2,
-    stopLoss: found.direction === "short" ? found.entry * 1.0001 : found.entry * 0.9999,
-    confidence: found.confidence,
-    zoneTop: found.zone.top,
-    zoneBottom: found.zone.bottom,
-    zoneBaseTime: found.zone.baseTime,
+    symbol: published.symbol,
+    timeframe: published.timeframe,
+    direction: published.direction,
+    entry: published.entry,
+    target1: published.target1,
+    target2: published.target2,
+    stopLoss: published.direction === "short" ? published.entry * 1.0001 : published.entry * 0.9999,
+    confidence: published.confidence,
+    zoneTop: published.zoneTop,
+    zoneBottom: published.zoneBottom,
+    zoneBaseTime: published.zoneBaseTime,
     status: "Filled",
   };
-  const { port: market } = marketFor({}, candles);
-  const { port: setups, writes } = store([held]);
+  const { port: setups, rows, writes } = store([held]);
 
-  const result = await runSdScan(market, ["BTCUSDT"], { activeSetups: setups });
+  for (let pass = 1; pass <= 3; pass++) {
+    const result = await runSdScan(market, ["BTCUSDT"], { activeSetups: setups });
+    const advertised = [...result.demand, ...result.supply].filter(
+      (hit) => identity(hit) === identity(held),
+    );
+    assert.equal(advertised.length, 0, `pass ${pass}: the finished setup is back on the board`);
+  }
 
-  const sameZone = writes.filter((w) => w.zoneBaseTime === held.zoneBaseTime);
-  assert.equal(sameZone.length, 1, "the zone is written once, not released and re-published");
+  const written = writes.filter((w) => identity(w) === identity(held));
+  assert.equal(written.length, 1, "it is closed once, not closed and reopened");
   assert.ok(
-    ["Invalidated (SL hit)", "Target 2 reached", "Missed"].includes(sameZone[0].status),
-    `the one write closes it, but says "${sameZone[0].status}"`,
+    isTerminalSetupStatus(written[0].status),
+    `the one write closes it, but says "${written[0].status}"`,
   );
-  const advertised = [...result.demand, ...result.supply].filter(
-    (hit) => hit.zoneBaseTime === held.zoneBaseTime,
-  );
-  assert.equal(advertised.length, 0, "and it is not on the board any more");
+  const final = rows.get(identity(held));
+  assert.ok(final && isTerminalSetupStatus(final.status), "and the row stays closed");
 });

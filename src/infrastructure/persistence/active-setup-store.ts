@@ -1,8 +1,13 @@
 import "server-only";
 
-import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
+import type {
+  ActiveSetup,
+  ActiveSetupPort,
+  RetiredZone,
+} from "@/core/application/ports/active-setup-port";
 import { isTerminalSetupStatus } from "@/core/domain/analysis/setup-lifecycle";
-import { isBeyondScanReach } from "@/core/domain/analysis/supply-demand";
+import { isBeyondScanReach, ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
+import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -68,6 +73,25 @@ export const activeSetupStore: ActiveSetupPort = {
     return [...bySymbol.values()];
   },
 
+  async loadRetiredZones(symbols: string[]): Promise<RetiredZone[]> {
+    if (symbols.length === 0) return [];
+    // Bounded to what the detector could still offer back. It only ever looks
+    // at the last `ZONE_SCAN_WINDOW` bars, so a zone older than that on the
+    // slowest timeframe scanned can never be re-detected and does not need
+    // remembering here.
+    const oldest = Math.floor(Date.now() / 1000) - ZONE_SCAN_WINDOW * TIMEFRAME_SECONDS["1H"];
+    const rows = await prisma.trackedSetup.findMany({
+      where: { symbol: { in: symbols }, status: { in: TERMINAL }, zoneBaseTime: { gte: oldest } },
+      select: { symbol: true, timeframe: true, direction: true, zoneBaseTime: true },
+    });
+    return rows.map((row) => ({
+      symbol: row.symbol,
+      timeframe: row.timeframe as Timeframe,
+      direction: row.direction as SetupDirection,
+      zoneBaseTime: row.zoneBaseTime,
+    }));
+  },
+
   async persist(setups: ActiveSetup[]): Promise<void> {
     for (const setup of setups) {
       const signature = setupSignature({
@@ -76,34 +100,52 @@ export const activeSetupStore: ActiveSetupPort = {
         direction: setup.direction,
         zoneBaseTime: setup.zoneBaseTime,
       });
-      await prisma.trackedSetup.upsert({
-        where: { signature },
-        create: {
-          signature,
-          symbol: setup.symbol,
-          timeframe: setup.timeframe,
-          direction: setup.direction,
-          entry: setup.entry,
-          target1: setup.target1,
-          target2: setup.target2,
-          stopLoss: setup.stopLoss,
-          riskReward: 2,
-          confidence: Math.round(setup.confidence),
-          zoneTop: setup.zoneTop,
-          zoneBottom: setup.zoneBottom,
-          zoneBaseTime: setup.zoneBaseTime,
-          status: setup.status,
-          // Recorded once, on the row's first write. The archive needs to know
-          // whether a setup was published before it filled, and no later
-          // observation can recover that.
-          firstStatus: setup.status,
-        },
+      // A finished setup stays finished. Written as a conditional update
+      // rather than an upsert because that is the whole guarantee: the
+      // detector re-measures a zone on every pass and keeps offering the same
+      // base bar back, and since the base bar *is* the identity, a plain
+      // upsert landed on the row that had just closed and reopened it.
+      // WALUSDT flip-flopped between released and live on alternating scans
+      // for exactly this reason — its stop had gone at 04:00 and the board
+      // kept advertising it anyway.
+      const revived = await prisma.trackedSetup.updateMany({
+        where: { signature, status: { notIn: TERMINAL } },
         // Levels are never rewritten: they are the plan the reader was given,
         // and the archive's snapshots are photographs of it. The base time is
         // written because it is part of the signature and therefore cannot
         // differ — rows created before the column existed need it filled in.
-        update: { status: setup.status, zoneBaseTime: setup.zoneBaseTime },
+        data: { status: setup.status, zoneBaseTime: setup.zoneBaseTime },
       });
+      if (revived.count > 0) continue;
+
+      // Nothing was updated: either this zone has never been published, or it
+      // has already had its life. `create` settles which — the signature is
+      // unique, so a row that exists rejects it, and that row is a finished
+      // one we must leave alone.
+      await prisma.trackedSetup
+        .create({
+          data: {
+            signature,
+            symbol: setup.symbol,
+            timeframe: setup.timeframe,
+            direction: setup.direction,
+            entry: setup.entry,
+            target1: setup.target1,
+            target2: setup.target2,
+            stopLoss: setup.stopLoss,
+            riskReward: 2,
+            confidence: Math.round(setup.confidence),
+            zoneTop: setup.zoneTop,
+            zoneBottom: setup.zoneBottom,
+            zoneBaseTime: setup.zoneBaseTime,
+            status: setup.status,
+            // Recorded once, on the row's first write. The archive needs to
+            // know whether a setup was published before it filled, and no
+            // later observation can recover that.
+            firstStatus: setup.status,
+          },
+        })
+        .catch(() => undefined);
     }
   },
 };

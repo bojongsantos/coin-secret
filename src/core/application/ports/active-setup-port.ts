@@ -25,9 +25,27 @@ export interface ActiveSetup {
   status: string;
 }
 
+/** A zone that has already had its life, so it may not be published again. */
+export interface RetiredZone {
+  symbol: string;
+  timeframe: Timeframe;
+  direction: SetupDirection;
+  zoneBaseTime: number;
+}
+
 export interface ActiveSetupPort {
   /** Setups still in play for these symbols, at most one per symbol. */
   loadActive(symbols: string[]): Promise<ActiveSetup[]>;
+  /**
+   * Zones these symbols have already finished, recent enough that the
+   * detector can still see them.
+   *
+   * Without this the scan has no memory across passes: it releases a setup on
+   * one run, finds the same zone on the next because the symbol is free again,
+   * and publishes it back. A zone's base bar is the setup's identity, so that
+   * is not a new setup — it is the old one reopened.
+   */
+  loadRetiredZones(symbols: string[]): Promise<RetiredZone[]>;
   /**
    * Records new setups and status changes.
    *

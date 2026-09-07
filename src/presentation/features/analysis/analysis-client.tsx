@@ -11,6 +11,7 @@ import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Loader2, RefreshCw } from "lucide-react";
+import { useT } from "@/presentation/hooks/use-translate";
 
 export function AnalysisClient({
   initialSymbol,
@@ -22,6 +23,7 @@ export function AnalysisClient({
   // The same gate as the navbar. Leaving one way in open would make the
   // limit look like a bug rather than a plan.
   const { canAccess } = usePlan();
+  const { t } = useT();
   const canSearch = canAccess("symbolSearch");
   const [symbol, setSymbol] = useState<string>(initialSymbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
@@ -86,7 +88,7 @@ export function AnalysisClient({
                 if (e.key === "Enter") pick(e.currentTarget.value);
               }}
               disabled={!canSearch}
-              placeholder={canSearch ? "Cari simbol…" : "Pencarian simbol tersedia di Pro"}
+              placeholder={canSearch ? t("analysis.searchSymbol") : "Pencarian simbol tersedia di Pro"}
               className="w-56 rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[12px] font-semibold text-foreground placeholder:text-muted-2 focus:border-accent/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             />
             <datalist id="symbol-options">

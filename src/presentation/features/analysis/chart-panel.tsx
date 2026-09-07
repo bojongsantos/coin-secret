@@ -31,6 +31,7 @@ import type { Candle, ChartData, PatternSummary, Timeframe, TradeLevel } from "@
 import { formatPrice } from "@/shared/lib/format";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useTheme } from "@/presentation/hooks/use-ui-preference";
+import { useT } from "@/presentation/hooks/use-translate";
 import type { HistoryState } from "@/presentation/hooks/use-live-analysis";
 
 /**
@@ -247,6 +248,7 @@ export function ChartPanel({
   }, []);
 
   const { theme } = useTheme();
+  const { t } = useT();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -609,7 +611,7 @@ export function ChartPanel({
   // stops short of what the range asked for, and scrolling loads more.
   const truncationNotice =
     !history.loading && !history.reachedStart && history.truncated
-      ? "Batas pemuatan tercapai. Geser ke kiri untuk menambah."
+      ? t("chart.loadLimit")
       : null;
 
   return (

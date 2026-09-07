@@ -186,6 +186,266 @@ export const MESSAGES = {
   "chart.downloadFailed": { id: "Gagal", en: "Failed" },
   "chart.imageFailed": { id: "Gambar gagal dibuat.", en: "The image could not be produced." },
 
+  // ----------------------------------------------------------------- pricing
+  "pricing.headline": {
+    id: "Mulai baca pasar dengan aturan, bukan tebakan",
+    en: "Read the market by rule, not by guess",
+  },
+  "pricing.subhead": {
+    id: "Satu paket berbayar, tanpa tingkatan tersembunyi. Seluruh analisis dihasilkan dari aturan teknikal terprogram, dan Coin Secret tidak mengeksekusi transaksi.",
+    en: "One paid plan, with no hidden tiers. Every analysis comes from programmed technical rules, and Coin Secret never places a trade.",
+  },
+  "pricing.periodGroup": { id: "Periode langganan", en: "Billing period" },
+  "pricing.period.monthly": { id: "Bulanan", en: "Monthly" },
+  "pricing.period.sixMonth": { id: "6 Bulan", en: "6 Months" },
+  "pricing.period.annual": { id: "Tahunan", en: "Annual" },
+  "pricing.savings": { id: "Hemat {percent}%", en: "Save {percent}%" },
+  "pricing.freeBlurb": {
+    id: "Untuk mengenal cara kerja zona dan setup.",
+    en: "To learn how zones and setups work.",
+  },
+  "pricing.forever": { id: "Selamanya", en: "Forever" },
+  "pricing.currentPlan": { id: "Paket Anda saat ini", en: "Your current plan" },
+  "pricing.includedInPro": { id: "Termasuk dalam Pro", en: "Included in Pro" },
+  "pricing.registerFree": { id: "Daftar gratis", en: "Sign up free" },
+  "pricing.popular": { id: "Populer", en: "Popular" },
+  "pricing.proBlurb": {
+    id: "Seluruh coin dan seluruh trading plan.",
+    en: "Every coin and every trading plan.",
+  },
+  "pricing.perMonth": { id: "/ bulan", en: "/ month" },
+  "pricing.billedMonthly": { id: "Ditagih {total} tiap bulan", en: "Billed {total} every month" },
+  "pricing.billedOnce": {
+    id: "Ditagih {total} sekali untuk {months} bulan",
+    en: "Billed {total} once for {months} months",
+  },
+  "pricing.noAutoRenew": { id: "tanpa perpanjangan otomatis", en: "no automatic renewal" },
+  "pricing.signInToSubscribe": { id: "Masuk untuk berlangganan", en: "Sign in to subscribe" },
+  "pricing.proActive": { id: "Pro aktif", en: "Pro is active" },
+  "pricing.activeUntil": { id: "Berlaku sampai {date}", en: "Active until {date}" },
+  "pricing.payVia": { id: "Bayar {total} melalui {provider}", en: "Pay {total} via {provider}" },
+  "pricing.checkoutFailed": {
+    id: "Checkout tidak dapat dibuat.",
+    en: "The checkout could not be created.",
+  },
+  "pricing.checkoutOffline": {
+    id: "Checkout tidak dapat dibuat. Periksa koneksi Anda.",
+    en: "The checkout could not be created. Check your connection.",
+  },
+  "pricing.included": { id: "Termasuk", en: "Included" },
+  "pricing.notIncluded": { id: "Tidak termasuk", en: "Not included" },
+  "pricing.comparison": { id: "Perbandingan lengkap", en: "Full comparison" },
+  "pricing.capabilityColumn": { id: "Kemampuan", en: "Capability" },
+  "pricing.beforeYouPay": {
+    id: "Yang perlu Anda ketahui sebelum membayar",
+    en: "What to know before you pay",
+  },
+  "pricing.noteUpfront": {
+    id: "Pro dibayar sekali di muka untuk periode yang Anda pilih dan **tidak** diperpanjang otomatis. Tidak ada tagihan berulang.",
+    en: "Pro is paid once up front for the period you choose and does **not** renew automatically. There is no recurring charge.",
+  },
+  "pricing.noteExpiry": {
+    id: "Setelah masa aktif berakhir, akun kembali ke Free. Riwayat pembayaran dan data akun Anda tetap tersimpan.",
+    en: "When the period ends the account returns to Free. Your payment history and account data are kept.",
+  },
+  "pricing.noteDisclaimer": {
+    id: "Coin Secret adalah alat analisis teknikal berbasis aturan. Ia tidak memberi nasihat investasi dan tidak menjanjikan hasil.",
+    en: "Coin Secret is a rule-based technical analysis tool. It gives no investment advice and promises no outcome.",
+  },
+
+  // ------------------------------------------------------------ capabilities
+  "capability.coins": { id: "Coin dan token", en: "Coins and tokens" },
+  "capability.tradingPlan": { id: "Rencana trading", en: "Trading plan" },
+  "capability.reasoning": {
+    id: "Analisis teknikal & alasan",
+    en: "Technical analysis & reasoning",
+  },
+  "capability.confidence": { id: "Skor confidence", en: "Confidence score" },
+  "capability.marketContext": { id: "Konteks pasar", en: "Market context" },
+  "capability.marketSentiment": { id: "Sentimen pasar", en: "Market sentiment" },
+  "capability.limited": { id: "Terbatas", en: "Limited" },
+  "capability.full": { id: "Akses penuh", en: "Full access" },
+
+  // ----------------------------------------------------------------- signals
+  "signals.locked": { id: "Signals terkunci", en: "Signals are locked" },
+  "signals.lockedBody": {
+    id: "Signals lengkap tersedia pada paket Premium.",
+    en: "The full signals board comes with Premium.",
+  },
+  "signals.lockedHint": {
+    id: "Upgrade melalui halaman Akun & Billing.",
+    en: "Upgrade from the Account & Billing page.",
+  },
+
+  // -------------------------------------------------------------------- auth
+  "auth.signInTitle": { id: "Masuk ke akun", en: "Sign in to your account" },
+  "auth.signUpTitle": { id: "Buat akun baru", en: "Create an account" },
+  "auth.signInBlurb": {
+    id: "Lanjutkan ke dashboard Coin Secret.",
+    en: "Carry on to the Coin Secret dashboard.",
+  },
+  "auth.signUpBlurb": {
+    id: "Paket Free aktif setelah registrasi.",
+    en: "The Free plan is active as soon as you register.",
+  },
+  "auth.name": { id: "Nama", en: "Name" },
+  "auth.email": { id: "Email", en: "Email" },
+  "auth.password": { id: "Password", en: "Password" },
+  "auth.forgotPassword": { id: "Lupa password?", en: "Forgotten your password?" },
+  "auth.noAccount": { id: "Belum memiliki akun?", en: "No account yet?" },
+  "auth.haveAccount": { id: "Sudah memiliki akun?", en: "Already have an account?" },
+  "auth.failed": { id: "Autentikasi gagal.", en: "Authentication failed." },
+
+  // ----------------------------------------------------------------- billing
+  "billing.title": { id: "Akun & Billing", en: "Account & Billing" },
+  "billing.subtitle": {
+    id: "Kelola identitas dan paket Coin Secret.",
+    en: "Manage your Coin Secret identity and plan.",
+  },
+  "billing.profile": { id: "Profil", en: "Profile" },
+  "billing.role": { id: "Role", en: "Role" },
+  "billing.plan": { id: "Paket", en: "Plan" },
+  "billing.verified": { id: "Terverifikasi", en: "Verified" },
+  "billing.unverified": { id: "Belum terverifikasi", en: "Not verified" },
+  "billing.changePassword": { id: "Ubah Password", en: "Change Password" },
+  "billing.currentPassword": { id: "Password saat ini", en: "Current password" },
+  "billing.newPassword": { id: "Password baru", en: "New password" },
+  "billing.savePassword": { id: "Simpan password", en: "Save password" },
+  "billing.passwordChanged": { id: "Password berhasil diubah.", en: "Your password was changed." },
+  "billing.passwordFailed": { id: "Password gagal diubah.", en: "The password could not be changed." },
+  "billing.proPitch": {
+    id: "Seluruh coin dan seluruh trading plan, tanpa batas pencarian.",
+    en: "Every coin and every trading plan, with no search limit.",
+  },
+  "billing.perMonthAnnual": {
+    id: "/ bulan pada paket tahunan",
+    en: "/ month on the annual plan",
+  },
+  "billing.proActive": { id: "Pro aktif.", en: "Pro is active." },
+  "billing.seePlans": { id: "Lihat paket", en: "See the plans" },
+  "billing.history": { id: "Riwayat Pembayaran", en: "Payment History" },
+  "billing.noPayments": { id: "Belum ada pembayaran.", en: "No payments yet." },
+
+  // ---------------------------------------------------------- market context
+  // Each explanation states the measurement first and what a move in it
+  // implies second, so a reader can stop after one sentence and still be
+  // better off.
+  "metric.dom": {
+    id: "Bagian dari total kapitalisasi pasar kripto yang dipegang Bitcoin. Ketika angkanya naik, modal cenderung berpindah dari altcoin ke Bitcoin.",
+    en: "Bitcoin's share of the whole crypto market capitalisation. When it rises, money tends to be moving out of altcoins and into Bitcoin.",
+  },
+  "metric.funding": {
+    id: "Biaya berkala yang dibayarkan antar pemegang posisi perpetual. Nilai positif berarti posisi beli membayar posisi jual, tanda pasar sedang condong ke arah beli.",
+    en: "The periodic fee perpetual holders pay each other. A positive value means longs are paying shorts, which says the market is leaning long.",
+  },
+  "metric.oi": {
+    id: "Nilai seluruh posisi futures yang masih terbuka. Kenaikan yang searah dengan harga menunjukkan tren ditopang modal baru, bukan sekadar penutupan posisi lama.",
+    en: "The value of every futures position still open. Rising alongside price means the move is carried by new money rather than by positions being closed.",
+  },
+  "metric.fng": {
+    id: "Indeks sentimen pasar berskala 0 sampai 100 dari Alternative.me. Angka rendah menandakan pasar cenderung takut, angka tinggi menandakan pasar cenderung serakah.",
+    en: "A 0-to-100 market sentiment index from Alternative.me. Low readings say the market is fearful, high ones that it is greedy.",
+  },
+  "metric.unavailableNote": {
+    id: "Sumber datanya sedang tidak dapat dijangkau.",
+    en: "Its data source cannot be reached right now.",
+  },
+  "metric.unavailable": { id: "Data tidak tersedia", en: "Data unavailable" },
+  "rail.marketContext": { id: "Konteks Pasar", en: "Market Context" },
+  "rail.marketSentiment": { id: "Sentimen Pasar", en: "Market Sentiment" },
+  "rail.convictionScore": { id: "Skor Keyakinan", en: "Conviction Score" },
+  "rail.confidenceScore": { id: "Skor Confidence", en: "Confidence Score" },
+  "rail.waitingForData": { id: "Menunggu data live", en: "Waiting for live data" },
+  "conviction.quality": {
+    id: "Rasio kerapatan zona terhadap volatilitas pasar. Semakin sempit, semakin akurat sebagai level entry.",
+    en: "How tight the zone is against the market's volatility. The narrower it is, the sharper it works as an entry level.",
+  },
+  "conviction.freshness": {
+    id: "Status integritas zona. Fresh: belum diuji. Tested: sudah retested. Broken: harga telah menembus.",
+    en: "Whether the zone is still intact. Fresh: never tested. Tested: revisited. Broken: price has gone through it.",
+  },
+  "conviction.touches": {
+    id: "Pengurangan skor akibat retest zona. Setiap sentuhan mengurangi 5 poin.",
+    en: "What retests take off the score. Each touch costs 5 points.",
+  },
+  "conviction.base": {
+    id: "Skor dasar yang diberikan pada setiap zona yang berhasil terdeteksi dan tervalidasi.",
+    en: "The starting score every detected and validated zone is given.",
+  },
+
+  // ------------------------------------------------------------ error states
+  "error.pageFailed": { id: "Halaman tidak dapat dimuat.", en: "This page could not load." },
+  "error.pageFailedBody": {
+    id: "Gangguan dapat berasal dari koneksi atau layanan data pasar.",
+    en: "The trouble may be your connection or the market data service.",
+  },
+  "error.reference": { id: "Referensi: {digest}", en: "Reference: {digest}" },
+  "error.notFound": { id: "Halaman tidak ditemukan.", en: "Page not found." },
+  "error.notFoundBody": {
+    id: "Alamat tidak tersedia pada Coin Secret.",
+    en: "There is nothing at this address on Coin Secret.",
+  },
+  "error.backHome": { id: "Kembali ke dashboard", en: "Back to the dashboard" },
+  "loading.app": { id: "Memuat Coin Secret…", en: "Loading Coin Secret…" },
+
+  // ---------------------------------------------------------------- recovery
+  "recovery.forgotTitle": { id: "Lupa password", en: "Forgotten password" },
+  "recovery.resetTitle": { id: "Atur password baru", en: "Set a new password" },
+  "recovery.forgotBlurb": {
+    id: "Kami akan mengirim tautan reset ke email terdaftar.",
+    en: "We will send a reset link to the registered address.",
+  },
+  "recovery.resetBlurb": { id: "Gunakan minimal 10 karakter.", en: "Use at least 10 characters." },
+  "recovery.requestFailed": { id: "Permintaan gagal.", en: "The request failed." },
+  "recovery.linkSent": {
+    id: "Jika akun tersedia, tautan reset telah dikirim.",
+    en: "If an account exists, a reset link has been sent.",
+  },
+  "recovery.badToken": { id: "Token reset tidak valid.", en: "That reset token is not valid." },
+  "recovery.sendLink": { id: "Kirim tautan reset", en: "Send the reset link" },
+  "recovery.backToLogin": { id: "Kembali ke login", en: "Back to sign in" },
+  "recovery.redirecting": {
+    id: "Mengalihkan ke halaman login dalam {seconds} detik…",
+    en: "Taking you to sign in in {seconds} seconds…",
+  },
+
+  // ------------------------------------------------------------------- chart
+  "chart.loadLimit": {
+    id: "Batas pemuatan tercapai. Geser ke kiri untuk menambah.",
+    en: "The load limit is reached. Scroll left to fetch more.",
+  },
+
+  // ------------------------------------------------------------------ admin
+  "admin.gatingBlurb": {
+    id: "Aturan akses global per paket dari database.",
+    en: "Global per-plan access rules, read from the database.",
+  },
+  "admin.healthBlurb": {
+    id: "Status seluruh layanan eksternal Coin Secret.",
+    en: "The state of every external service Coin Secret depends on.",
+  },
+  "admin.recheck": { id: "Cek Ulang", en: "Re-check" },
+  "admin.summary": { id: "Ringkasan", en: "Summary" },
+  "admin.configReadiness": { id: "Kesiapan konfigurasi", en: "Configuration readiness" },
+  "admin.ready": { id: "Siap", en: "Ready" },
+  "admin.halted": { id: "Terhenti", en: "Halted" },
+  "admin.overviewBlurb": { id: "Data langsung dari PostgreSQL.", en: "Read live from PostgreSQL." },
+  "admin.allStatuses": { id: "Semua status", en: "All statuses" },
+  "admin.paymentsBlurb": {
+    id: "Status pembayaran berasal dari webhook penyedia pembayaran.",
+    en: "Payment status comes from the payment provider's webhook.",
+  },
+  "admin.scanNow": { id: "Scan Sekarang", en: "Scan Now" },
+  "admin.resultsFailed": { id: "Gagal memuat hasil.", en: "The results could not be loaded." },
+  "admin.usersBlurb": {
+    id: "Role dan paket dikelola terpisah.",
+    en: "Role and plan are managed separately.",
+  },
+  "admin.direction": { id: "Arah", en: "Direction" },
+  "analysis.searchSymbol": { id: "Cari simbol…", en: "Search a symbol…" },
+  "admin.image": { id: "Gambar", en: "Image" },
+  "admin.finished": { id: "Selesai", en: "Finished" },
+
   // ---------------------------------------------------------------- language
   "language.switchTo": { id: "Switch to English", en: "Ganti ke Bahasa Indonesia" },
   "language.current": { id: "ID", en: "EN" },

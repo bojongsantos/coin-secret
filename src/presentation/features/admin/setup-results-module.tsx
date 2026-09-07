@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, ImageIcon, Loader2 } from "lucide-react";
+import { useT } from "@/presentation/hooks/use-translate";
 
 interface ResultRow {
   id: string;
@@ -23,6 +24,7 @@ interface ResultRow {
  * result, only look at what the market actually did.
  */
 export function SetupResultsModule() {
+  const { t } = useT();
   const [rows, setRows] = useState<ResultRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -32,7 +34,9 @@ export function SetupResultsModule() {
       try {
         const response = await fetch("/api/admin/setup-results", { cache: "no-store" });
         const payload = (await response.json()) as { results?: ResultRow[]; error?: { message: string } };
-        if (!response.ok) throw new Error(payload.error?.message ?? "Gagal memuat hasil.");
+        // Empty means "the server gave no reason"; the wording is chosen at
+        // render, so the effect does not have to re-run when the language does.
+        if (!response.ok) throw new Error(payload.error?.message ?? "");
         setRows(payload.results ?? []);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
@@ -53,9 +57,9 @@ export function SetupResultsModule() {
         </p>
       </div>
 
-      {error && (
+      {error !== null && (
         <p className="rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-[12px] text-negative">
-          {error}
+          {error || t("admin.resultsFailed")}
         </p>
       )}
 
@@ -65,7 +69,7 @@ export function SetupResultsModule() {
         </div>
       )}
 
-      {rows !== null && rows.length === 0 && !error && (
+      {rows !== null && rows.length === 0 && error === null && (
         <div className="card p-6 text-center text-[12px] text-muted-2">
           Belum ada hasil. Gambar terbentuk sendiri ketika sebuah setup terisi lalu mencapai
           Target 2 — tidak ada yang perlu dijalankan manual.
@@ -77,11 +81,11 @@ export function SetupResultsModule() {
           <table className="w-full border-collapse text-left text-[12px]">
             <thead>
               <tr className="border-b border-border bg-surface-2/40 text-[10px] uppercase text-muted-2">
-                <th className="px-3 py-2 font-semibold">Pair</th>
-                <th className="px-3 py-2 font-semibold">Arah</th>
-                <th className="px-3 py-2 font-semibold">Confidence</th>
-                <th className="px-3 py-2 font-semibold">Selesai</th>
-                <th className="px-3 py-2 text-right font-semibold">Gambar</th>
+                <th className="px-3 py-2 font-semibold">{t("zones.pair")}</th>
+                <th className="px-3 py-2 font-semibold">{t("admin.direction")}</th>
+                <th className="px-3 py-2 font-semibold">{t("zones.confidence")}</th>
+                <th className="px-3 py-2 font-semibold">{t("admin.finished")}</th>
+                <th className="px-3 py-2 text-right font-semibold">{t("admin.image")}</th>
               </tr>
             </thead>
             <tbody>

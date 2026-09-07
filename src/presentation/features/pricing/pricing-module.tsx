@@ -13,6 +13,8 @@ import {
 } from "@/core/domain/billing/plans";
 import type { SubscriptionPlan } from "@/core/domain/identity";
 import type { ProviderCopy } from "@/core/domain/billing/provider-copy";
+import { useT, type Translate } from "@/presentation/hooks/use-translate";
+import { domainMessageKey, type MessageKey } from "@/shared/i18n/messages";
 
 interface PricingModuleProps {
   authenticated: boolean;
@@ -21,14 +23,23 @@ interface PricingModuleProps {
   provider: ProviderCopy;
 }
 
-const dateFormatter = new Intl.DateTimeFormat("id-ID", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
+/** A capability's wording, in the reader's language. */
+function capabilityText(t: Translate, value: string | true, fallback: string): string | true {
+  if (value === true) return true;
+  const key = domainMessageKey("capability", value === "Terbatas" ? "limited" : "full");
+  return key ? t(key) : fallback;
+}
 
 /** Renders a capability cell as either a qualifier or a plain yes. */
-function CapabilityValue({ value, strong }: { value: string | boolean; strong?: boolean }) {
+function CapabilityValue({
+  value,
+  strong,
+  t,
+}: {
+  value: string | boolean;
+  strong?: boolean;
+  t: Translate;
+}) {
   if (typeof value === "string") {
     return (
       <span className={`text-[12px] ${strong ? "font-semibold text-foreground" : "text-muted"}`}>
@@ -37,9 +48,22 @@ function CapabilityValue({ value, strong }: { value: string | boolean; strong?: 
     );
   }
   return value ? (
-    <Check className={`size-4 ${strong ? "text-accent-2" : "text-positive"}`} aria-label="Termasuk" />
+    <Check
+      className={`size-4 ${strong ? "text-accent-2" : "text-positive"}`}
+      aria-label={t("pricing.included")}
+    />
   ) : (
-    <Minus className="size-4 text-muted-2" aria-label="Tidak termasuk" />
+    <Minus className="size-4 text-muted-2" aria-label={t("pricing.notIncluded")} />
+  );
+}
+
+/**
+ * Renders `**bold**` runs, so a sentence can stress its own word in whichever
+ * position that language puts it.
+ */
+function emphasise(text: string) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, index) =>
+    index % 2 === 1 ? <strong key={index}>{part}</strong> : part,
   );
 }
 
@@ -57,7 +81,24 @@ function PlanFeature({ label, value }: { label: string; value: string | true }) 
 }
 
 export function PricingModule({ authenticated, plan, periodEnd, provider }: PricingModuleProps) {
+  const { t, locale } = useT();
   const [period, setPeriod] = useState<BillingPeriod>("annual");
+  // Dates read the way each reader writes them: "7 September 2026" one way,
+  // "September 7, 2026" the other.
+  const dateFormatter = new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const rows = PLAN_CAPABILITIES.map((capability) => {
+    const key = domainMessageKey("capability", capability.id);
+    return {
+      ...capability,
+      name: key ? t(key) : capability.label,
+      freeText: capabilityText(t, capability.free, capability.label),
+      proText: capabilityText(t, capability.pro, capability.label),
+    };
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isPremium = plan === "PREMIUM";
@@ -77,13 +118,13 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
         error?: { message?: string };
       };
       if (!response.ok || !payload.redirectUrl) {
-        setError(payload.error?.message ?? "Checkout tidak dapat dibuat.");
+        setError(payload.error?.message ?? t("pricing.checkoutFailed"));
         setLoading(false);
         return;
       }
       window.location.assign(payload.redirectUrl);
     } catch {
-      setError("Checkout tidak dapat dibuat. Periksa koneksi Anda.");
+      setError(t("pricing.checkoutOffline"));
       setLoading(false);
     }
   }
@@ -91,10 +132,9 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <header className="text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Mulai baca pasar dengan aturan, bukan tebakan</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("pricing.headline")}</h1>
         <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted">
-          Satu paket berbayar, tanpa tingkatan tersembunyi. Seluruh analisis dihasilkan dari aturan
-          teknikal terprogram, dan Coin Secret tidak mengeksekusi transaksi.
+          {t("pricing.subhead")}
         </p>
       </header>
 
@@ -103,7 +143,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
       <div
         className="mx-auto mt-6 flex w-fit items-center gap-1 rounded-full border border-border bg-surface-2 p-1"
         role="group"
-        aria-label="Periode langganan"
+        aria-label={t("pricing.periodGroup")}
       >
         {BILLING_PERIODS.map((option) => {
           const savings = savingsPercent(option);
@@ -118,14 +158,14 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
                 active ? "bg-surface text-foreground shadow-sm" : "text-muted-2 hover:text-muted"
               }`}
             >
-              {billingPlan(option).label}
+              {t(`pricing.period.${option}` as MessageKey)}
               {savings > 0 && (
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
                     active ? "bg-accent text-white" : "bg-accent/15 text-accent-2"
                   }`}
                 >
-                  Hemat {savings}%
+                  {t("pricing.savings", { percent: savings })}
                 </span>
               )}
             </button>
@@ -135,28 +175,28 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <section className="card flex flex-col p-6">
-          <h2 className="text-sm font-bold">Free</h2>
-          <p className="mt-1 text-xs text-muted">Untuk mengenal cara kerja zona dan setup.</p>
+          <h2 className="text-sm font-bold">{t("common.free")}</h2>
+          <p className="mt-1 text-xs text-muted">{t("pricing.freeBlurb")}</p>
           <p className="mt-5 text-3xl font-bold tabular-nums">$0</p>
-          <p className="mt-1 text-[11px] text-muted-2">Selamanya</p>
+          <p className="mt-1 text-[11px] text-muted-2">{t("pricing.forever")}</p>
 
           <ul className="mt-5 space-y-2">
-            {PLAN_CAPABILITIES.map((capability) => (
-              <PlanFeature key={capability.label} label={capability.label} value={capability.free} />
+            {rows.map((row) => (
+              <PlanFeature key={row.id} label={row.name} value={row.freeText} />
             ))}
           </ul>
 
           <div className="mt-6">
             {authenticated ? (
               <p className="rounded-lg border border-border bg-surface-3 px-3 py-2.5 text-center text-xs font-semibold text-muted">
-                {isPremium ? "Termasuk dalam Pro" : "Paket Anda saat ini"}
+                {isPremium ? t("pricing.includedInPro") : t("pricing.currentPlan")}
               </p>
             ) : (
               <Link
                 href="/register"
                 className="block rounded-lg border border-border px-4 py-2.5 text-center text-sm font-bold transition-colors hover:border-border-strong"
               >
-                Daftar gratis
+                {t("pricing.registerFree")}
               </Link>
             )}
           </div>
@@ -164,28 +204,32 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
 
         <section className="card relative flex flex-col border-accent/40 p-6">
           <span className="absolute -top-2.5 left-6 rounded-full bg-gradient-to-r from-accent to-accent-blue px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-            Populer
+            {t("pricing.popular")}
           </span>
           <div className="flex items-center gap-2">
             <Crown className="size-4 text-warning" />
-            <h2 className="text-sm font-bold">Pro</h2>
+            <h2 className="text-sm font-bold">{t("common.pro")}</h2>
           </div>
-          <p className="mt-1 text-xs text-muted">Seluruh coin dan seluruh trading plan.</p>
+          <p className="mt-1 text-xs text-muted">{t("pricing.proBlurb")}</p>
 
           <p className="mt-5 flex items-baseline gap-1.5">
             <span className="text-3xl font-bold tabular-nums">{formatUsd(selected.perMonthUsd)}</span>
-            <span className="text-xs font-medium text-muted-2">/ bulan</span>
+            <span className="text-xs font-medium text-muted-2">{t("pricing.perMonth")}</span>
           </p>
           <p className="mt-1 text-[11px] text-muted-2">
             {selected.months === 1
-              ? `Ditagih ${formatUsd(selected.totalUsd)} tiap bulan`
-              : `Ditagih ${formatUsd(selected.totalUsd)} sekali untuk ${selected.months} bulan`}
-            {" · tanpa perpanjangan otomatis"}
+              ? t("pricing.billedMonthly", { total: formatUsd(selected.totalUsd) })
+              : t("pricing.billedOnce", {
+                  total: formatUsd(selected.totalUsd),
+                  months: selected.months,
+                })}
+            {" · "}
+            {t("pricing.noAutoRenew")}
           </p>
 
           <ul className="mt-5 space-y-2">
-            {PLAN_CAPABILITIES.map((capability) => (
-              <PlanFeature key={capability.label} label={capability.label} value={capability.pro} />
+            {rows.map((row) => (
+              <PlanFeature key={row.id} label={row.name} value={row.proText} />
             ))}
           </ul>
 
@@ -195,14 +239,14 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
                 href="/login?next=/pricing"
                 className="block rounded-lg bg-gradient-to-r from-accent to-accent-blue px-4 py-2.5 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"
               >
-                Masuk untuk berlangganan
+                {t("pricing.signInToSubscribe")}
               </Link>
             ) : isPremium ? (
               <div className="rounded-lg border border-positive/30 bg-positive/10 px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-positive">Pro aktif</p>
+                <p className="text-xs font-bold text-positive">{t("pricing.proActive")}</p>
                 {periodEnd && (
                   <p className="mt-0.5 text-[11px] text-muted">
-                    Berlaku sampai {dateFormatter.format(new Date(periodEnd))}
+                    {t("pricing.activeUntil", { date: dateFormatter.format(new Date(periodEnd)) })}
                   </p>
                 )}
               </div>
@@ -214,7 +258,10 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-accent to-accent-blue px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 {loading && <Loader2 className="size-4 animate-spin" />}
-                Bayar {formatUsd(selected.totalUsd)} melalui {provider.name}
+                {t("pricing.payVia", {
+                  total: formatUsd(selected.totalUsd),
+                  provider: provider.name,
+                })}
               </button>
             )}
             {error && <p className="mt-2 text-center text-[11px] text-negative">{error}</p>}
@@ -223,27 +270,27 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
       </div>
 
       <section className="mt-8">
-        <h2 className="text-sm font-bold">Perbandingan lengkap</h2>
+        <h2 className="text-sm font-bold">{t("pricing.comparison")}</h2>
         <div className="mt-3 overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[520px] text-left">
             <thead className="bg-surface-3">
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">
-                <th scope="col" className="p-3">Kemampuan</th>
-                <th scope="col" className="w-32 p-3">Free</th>
-                <th scope="col" className="w-32 p-3">Pro</th>
+                <th scope="col" className="p-3">{t("pricing.capabilityColumn")}</th>
+                <th scope="col" className="w-32 p-3">{t("common.free")}</th>
+                <th scope="col" className="w-32 p-3">{t("common.pro")}</th>
               </tr>
             </thead>
             <tbody>
-              {PLAN_CAPABILITIES.map((capability) => (
-                <tr key={capability.label} className="border-t border-border align-top">
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t border-border align-top">
                   <td className="p-3">
-                    <p className="text-[12px] font-medium">{capability.label}</p>
+                    <p className="text-[12px] font-medium">{row.name}</p>
                   </td>
                   <td className="p-3">
-                    <CapabilityValue value={capability.free} />
+                    <CapabilityValue value={row.freeText} t={t} />
                   </td>
                   <td className="p-3">
-                    <CapabilityValue value={capability.pro} strong />
+                    <CapabilityValue value={row.proText} strong t={t} />
                   </td>
                 </tr>
               ))}
@@ -255,21 +302,12 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
       <section className="card mt-6 flex gap-3 p-5">
         <ShieldCheck className="size-5 shrink-0 text-muted-2" />
         <div className="text-[12px] leading-relaxed text-muted">
-          <p className="font-semibold text-foreground">Yang perlu Anda ketahui sebelum membayar</p>
+          <p className="font-semibold text-foreground">{t("pricing.beforeYouPay")}</p>
           <ul className="mt-2 space-y-1.5">
             <li>{provider.assurance}</li>
-            <li>
-              Pro dibayar sekali di muka untuk periode yang Anda pilih dan <strong>tidak</strong>{" "}
-              diperpanjang otomatis. Tidak ada tagihan berulang.
-            </li>
-            <li>
-              Setelah masa aktif berakhir, akun kembali ke Free. Riwayat pembayaran dan data akun
-              Anda tetap tersimpan.
-            </li>
-            <li>
-              Coin Secret adalah alat analisis teknikal berbasis aturan. Ia tidak memberi nasihat
-              investasi dan tidak menjanjikan hasil.
-            </li>
+            <li>{emphasise(t("pricing.noteUpfront"))}</li>
+            <li>{t("pricing.noteExpiry")}</li>
+            <li>{t("pricing.noteDisclaimer")}</li>
           </ul>
         </div>
       </section>

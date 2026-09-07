@@ -16,6 +16,8 @@ import { Badge } from "@/presentation/ui/badge";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { formatCompact } from "@/shared/lib/format";
+import { useT } from "@/presentation/hooks/use-translate";
+import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 
 const STATUS_TONES: Record<string, "warning" | "blue" | "positive" | "negative" | "neutral"> = {
   "Limit Order": "warning",
@@ -47,7 +49,16 @@ function VolumeBar({ volume, max }: { volume: number; max: number }) {
   );
 }
 
-function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; tone: "green" | "red" }) {
+function ZoneTable({
+  title,
+  hits,
+  tone,
+}: {
+  title: MessageKey;
+  hits: SdScanHit[];
+  tone: "green" | "red";
+}) {
+  const { t } = useT();
   const color = tone === "green" ? "var(--color-positive)" : "var(--color-negative)";
   const Icon = tone === "green" ? TrendingUp : TrendingDown;
   const maxVol = Math.max(1, ...hits.map((h) => h.volume24h));
@@ -75,7 +86,7 @@ function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; to
             <Icon className="size-4" />
           </span>
           <div>
-            <h3 className="text-[14px] font-bold tracking-tight">{title}</h3>
+            <h3 className="text-[14px] font-bold tracking-tight">{t(title)}</h3>
             <p className="text-[10px] text-muted-2">
               {filtered.length} setup aktif
             </p>
@@ -93,10 +104,10 @@ function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; to
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-surface-2/40 text-[8px] uppercase text-muted-2">
-              <th className="px-1.5 py-2 font-semibold">Pair</th>
-              <th className="px-1.5 py-2 font-semibold">Volume 24H</th>
-              <th className="px-1.5 py-2 font-semibold">Status</th>
-              <th className="px-1.5 py-2 text-right font-semibold">Confidence</th>
+              <th className="px-1.5 py-2 font-semibold">{t("zones.pair")}</th>
+              <th className="px-1.5 py-2 font-semibold">{t("zones.volume24h")}</th>
+              <th className="px-1.5 py-2 font-semibold">{t("zones.status")}</th>
+              <th className="px-1.5 py-2 text-right font-semibold">{t("zones.confidence")}</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +144,13 @@ function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; to
                     <VolumeBar volume={hit.volume24h} max={maxVol} />
                   </td>
                   <td className="px-1.5 py-2">
-                    {hit.status && <Badge tone={statusTone(hit.status)}>{hit.status}</Badge>}
+                    {hit.status && (
+                      <Badge tone={statusTone(hit.status)}>
+                        {statusMessageKey(hit.status)
+                          ? t(statusMessageKey(hit.status)!)
+                          : hit.status}
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-1.5 py-2 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -164,6 +181,7 @@ function ZoneTable({ title, hits, tone }: { title: string; hits: SdScanHit[]; to
 }
 
 export function PatternsView() {
+  const { t } = useT();
   const { canAccess } = usePlan();
   const signalsEnabled = canAccess("signals");
   const { result, loading, error, refresh } = useSdScan(signalsEnabled);
@@ -187,7 +205,7 @@ export function PatternsView() {
           className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent-blue px-3.5 py-2 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          {loading ? "Scanning…" : "Scan Semua"}
+          {loading ? t("dashboard.scanning") : t("zones.scanAll")}
         </button>
       </div>
 
@@ -197,15 +215,15 @@ export function PatternsView() {
           <div className="relative flex flex-col items-center gap-3 text-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent-2">
               <Sparkles className="size-3" />
-              Premium
+              {t("common.premium")}
             </span>
-            <h3 className="text-[16px] font-bold">Signals terkunci</h3>
+            <h3 className="text-[16px] font-bold">{t("signals.locked")}</h3>
             <p className="max-w-sm text-[12px] leading-snug text-muted">
-              Signals lengkap tersedia pada paket Premium.
+              {t("signals.lockedBody")}
             </p>
             <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-2">
               <Lock className="size-3.5" />
-              Upgrade melalui halaman Akun & Billing.
+              {t("signals.lockedHint")}
             </p>
           </div>
         </div>
@@ -226,8 +244,8 @@ export function PatternsView() {
 
       {signalsEnabled && result && (
         <div className="grid items-start gap-4 xl:grid-cols-2">
-          <ZoneTable title="Demand Zones (Buy)" hits={result.demand} tone="green" />
-          <ZoneTable title="Supply Zones (Sell)" hits={result.supply} tone="red" />
+          <ZoneTable title="zones.demand" hits={result.demand} tone="green" />
+          <ZoneTable title="zones.supply" hits={result.supply} tone="red" />
         </div>
       )}
     </div>

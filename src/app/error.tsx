@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useT } from "@/presentation/hooks/use-translate";
 
 export default function AppError({
   error,
@@ -9,6 +10,7 @@ export default function AppError({
   error: Error & { digest?: string };
   retry: () => void;
 }) {
+  const { t } = useT();
   useEffect(() => {
     console.error("Coin Secret route error", error);
   }, [error]);
@@ -16,15 +18,19 @@ export default function AppError({
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <section className="card max-w-md p-6 text-center">
-        <p className="text-sm font-bold">Halaman tidak dapat dimuat.</p>
-        <p className="mt-2 text-xs text-muted">Gangguan dapat berasal dari koneksi atau layanan data pasar.</p>
-        {error.digest && <p className="mt-2 text-[10px] text-muted-2">Reference: {error.digest}</p>}
+        <p className="text-sm font-bold">{t("error.pageFailed")}</p>
+        <p className="mt-2 text-xs text-muted">{t("error.pageFailedBody")}</p>
+        {error.digest && (
+          <p className="mt-2 text-[10px] text-muted-2">
+            {t("error.reference", { digest: error.digest })}
+          </p>
+        )}
         <button
           type="button"
           onClick={retry}
           className="mt-4 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white"
         >
-          Coba lagi
+          {t("common.retry")}
         </button>
       </section>
     </main>

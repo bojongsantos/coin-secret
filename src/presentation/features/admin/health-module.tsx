@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CapabilityReport } from "@/core/domain/ops/readiness";
 import { Badge } from "@/presentation/ui/badge";
 import { Loader2 } from "lucide-react";
+import { useT } from "@/presentation/hooks/use-translate";
 
 interface HealthResult {
   id: string;
@@ -15,6 +16,7 @@ interface HealthResult {
 }
 
 export function HealthModule() {
+  const { t } = useT();
   const [results, setResults] = useState<HealthResult[]>([]);
   const [configuration, setConfiguration] = useState<CapabilityReport[]>([]);
   const [checking, setChecking] = useState(true);
@@ -55,7 +57,7 @@ export function HealthModule() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold tracking-tight">API Health</h2>
-          <p className="mt-0.5 text-[12px] text-muted">Status seluruh layanan eksternal Coin Secret.</p>
+          <p className="mt-0.5 text-[12px] text-muted">{t("admin.healthBlurb")}</p>
         </div>
         <button
           type="button"
@@ -63,7 +65,7 @@ export function HealthModule() {
           disabled={checking}
           className="rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[11px] font-semibold text-muted disabled:opacity-60"
         >
-          {checking ? "Checking…" : "Cek Ulang"}
+          {checking ? "Checking…" : t("admin.recheck")}
         </button>
       </div>
 
@@ -98,7 +100,7 @@ export function HealthModule() {
       {configuration.length > 0 && (
         <section className="flex flex-col gap-3">
           <div>
-            <h3 className="text-[13px] font-semibold">Kesiapan konfigurasi</h3>
+            <h3 className="text-[13px] font-semibold">{t("admin.configReadiness")}</h3>
             <p className="mt-0.5 text-[12px] text-muted">
               Kunci yang belum diisi tidak memunculkan galat apa pun sampai ada pengguna yang
               mencobanya.
@@ -117,7 +119,7 @@ export function HealthModule() {
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-[13px] font-semibold">{item.name}</h4>
                   <Badge tone={item.level === "ready" ? "positive" : "negative"}>
-                    {item.level === "ready" ? "Siap" : "Terhenti"}
+                    {item.level === "ready" ? t("admin.ready") : t("admin.halted")}
                   </Badge>
                 </div>
                 {item.missing.length > 0 ? (
@@ -146,7 +148,7 @@ export function HealthModule() {
       )}
 
       <section className="card p-4">
-        <h3 className="text-[13px] font-semibold">Ringkasan</h3>
+        <h3 className="text-[13px] font-semibold">{t("admin.summary")}</h3>
         <p className="mt-2 text-[12px] text-muted">
           {results.length ? `${ok}/${results.length} layanan online.` : "Belum ada hasil pemeriksaan."}
         </p>

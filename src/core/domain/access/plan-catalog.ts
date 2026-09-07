@@ -1,4 +1,10 @@
 export interface PlanCapability {
+  /**
+   * Stable name for the row, used as its React key and to look its wording up
+   * in the reader's language. `label` stays the canonical text and the
+   * fallback, so a row is never nameless.
+   */
+  id: string;
   label: string;
   /** What a free account gets: a qualifier, or a plain yes. */
   free: string | true;
@@ -15,12 +21,12 @@ export interface PlanCapability {
  * has no way to judge whether the paid one is worth anything.
  */
 export const PLAN_CAPABILITIES: PlanCapability[] = [
-  { label: "Coin dan token", free: "Terbatas", pro: "Akses penuh" },
-  { label: "Trading plan", free: "Terbatas", pro: "Akses penuh" },
-  { label: "Technical analysis & reasoning", free: true, pro: true },
-  { label: "Confidence score", free: true, pro: true },
-  { label: "Market context", free: true, pro: true },
-  { label: "Market sentiment", free: true, pro: true },
+  { id: "coins", label: "Coin dan token", free: "Terbatas", pro: "Akses penuh" },
+  { id: "tradingPlan", label: "Trading plan", free: "Terbatas", pro: "Akses penuh" },
+  { id: "reasoning", label: "Technical analysis & reasoning", free: true, pro: true },
+  { id: "confidence", label: "Confidence score", free: true, pro: true },
+  { id: "marketContext", label: "Market context", free: true, pro: true },
+  { id: "marketSentiment", label: "Market sentiment", free: true, pro: true },
 ];
 
 /** Days of access one settled monthly payment grants. */

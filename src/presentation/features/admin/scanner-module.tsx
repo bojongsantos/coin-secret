@@ -4,8 +4,10 @@ import { useScanner } from "@/presentation/hooks/use-scanner";
 import { Badge } from "@/presentation/ui/badge";
 import { Loader2, RefreshCw } from "lucide-react";
 import { formatPrice } from "@/shared/lib/format";
+import { useT } from "@/presentation/hooks/use-translate";
 
 export function ScannerModule() {
+  const { t } = useT();
   const { opportunities, loading, error, lastRun, refresh } = useScanner();
 
   return (
@@ -24,7 +26,7 @@ export function ScannerModule() {
           className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent-blue px-3.5 py-2 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          {loading ? "Scanning…" : "Scan Sekarang"}
+          {loading ? "Scanning…" : t("admin.scanNow")}
         </button>
       </div>
 

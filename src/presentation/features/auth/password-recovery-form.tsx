@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/infrastructure/auth/auth-client";
+import { useT } from "@/presentation/hooks/use-translate";
 
 /**
  * Seconds the confirmation stays on screen before the login page takes over.
@@ -21,6 +22,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const { t } = useT();
   const [error, setError] = useState<string | null>(params.get("error"));
   const [pending, setPending] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -48,24 +50,24 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
           email,
           redirectTo: `${window.location.origin}/reset-password`,
         });
-        if (result.error) setError(result.error.message ?? "Permintaan gagal.");
+        if (result.error) setError(result.error.message ?? t("recovery.requestFailed"));
         // Worded the same whether or not the address exists, so the form
         // cannot be used to discover who has an account here.
-        else setMessage("Jika akun tersedia, tautan reset telah dikirim.");
+        else setMessage(t("recovery.linkSent"));
         return;
       }
 
       const token = params.get("token");
       if (!token) {
-        setError("Token reset tidak valid.");
+        setError(t("recovery.badToken"));
         return;
       }
       const result = await authClient.resetPassword({ newPassword: password, token });
       if (result.error) {
-        setError(result.error.message ?? "Password gagal diubah.");
+        setError(result.error.message ?? t("billing.passwordFailed"));
         return;
       }
-      setMessage("Password berhasil diubah.");
+      setMessage(t("billing.passwordChanged"));
       setCountdown(REDIRECT_SECONDS);
     } finally {
       setPending(false);
@@ -81,19 +83,17 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
     <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6">
         <h1 className="text-xl font-bold">
-          {mode === "request" ? "Lupa password" : "Atur password baru"}
+          {t(mode === "request" ? "recovery.forgotTitle" : "recovery.resetTitle")}
         </h1>
         <p className="mt-1 text-sm text-muted">
-          {mode === "request"
-            ? "Kami akan mengirim tautan reset ke email terdaftar."
-            : "Gunakan minimal 10 karakter."}
+          {t(mode === "request" ? "recovery.forgotBlurb" : "recovery.resetBlurb")}
         </p>
 
         {done ? (
           <div className="mt-6 space-y-2" role="status" aria-live="polite">
             <p className="text-sm font-semibold text-positive">{message}</p>
             <p className="text-xs text-muted">
-              Mengalihkan ke halaman login dalam {countdown} detik…
+              {t("recovery.redirecting", { seconds: countdown ?? 0 })}
             </p>
           </div>
         ) : (
@@ -115,7 +115,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
                 maxLength={128}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password baru"
+                placeholder={t("billing.newPassword")}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
               />
             )}
@@ -126,13 +126,13 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
               disabled={pending}
               className="w-full rounded-lg bg-accent py-2.5 text-sm font-bold text-white disabled:opacity-60"
             >
-              {mode === "request" ? "Kirim tautan reset" : "Simpan password"}
+              {t(mode === "request" ? "recovery.sendLink" : "billing.savePassword")}
             </button>
           </form>
         )}
 
         <Link href="/login" className="mt-5 block text-center text-xs font-semibold text-accent-2">
-          Kembali ke login
+          {t("recovery.backToLogin")}
         </Link>
       </div>
     </main>

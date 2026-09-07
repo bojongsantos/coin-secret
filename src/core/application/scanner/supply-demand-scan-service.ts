@@ -162,6 +162,9 @@ export async function runSdScan(
         sparklineMap.set(symbol, fast.slice(-96).map((candle) => candle.close));
 
         const held = active.get(symbol);
+        // Zone base of a setup finished on this pass. It has had its life and
+        // cannot be published again.
+        let retired: number | null = null;
         // A setup on a timeframe the scanner no longer reads is let go rather
         // than nursed to its conclusion: the board exists to show what can be
         // acted on now, and nothing else would ever refresh those symbols.
@@ -214,7 +217,16 @@ export async function runSdScan(
             else supply.push(hit);
             return;
           }
-          // Finished. The symbol is free to carry a new setup again.
+          // Finished. The symbol is free to carry a new setup again — but not
+          // the one that just ended. The detector re-measures a zone on every
+          // pass, so the same base bar comes back with slightly different
+          // levels a few minutes later, and since identity is the zone's base
+          // bar the republish lands on the same row and overwrites the status
+          // that had just closed it. WALUSDT rose from the dead on every scan
+          // this way: released at "Invalidated (SL hit)" and re-published as
+          // "Filled" with a stop a fraction wider than the one price had
+          // already taken out.
+          retired = held.zoneBaseTime;
         }
 
         // Nothing held: look across every timeframe and take the best read.
@@ -231,6 +243,7 @@ export async function runSdScan(
           const sd: SdResult = detectSupplyDemand(candles);
           const setup = sd.setup;
           if (!setup) continue;
+          if (setup.zone.baseTime === retired) continue;
           if (!ACTIVE_SETUP_STATUSES.includes(setup.status as (typeof ACTIVE_SETUP_STATUSES)[number])) {
             continue;
           }

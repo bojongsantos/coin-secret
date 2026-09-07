@@ -376,3 +376,51 @@ test("a held setup the window cannot reach is dropped, not relabelled", async ()
   const relabelled = writes.filter((w) => w.entry === 120);
   assert.equal(relabelled.length, 0, "and its stored status is not overwritten by a guess");
 });
+
+test("a finished setup does not rise from the dead on the next scan", async () => {
+  // The failure this pins, measured on WALUSDT: the scan correctly released a
+  // short whose stop price had taken out, then re-detected the very same zone
+  // on the very same base bar. A zone is re-measured on every pass, so it came
+  // back with a stop a fraction wider — wide enough that the bar which had
+  // just stopped the trade no longer reached it — and was published as
+  // "Filled". Identity is the zone's base bar, so that second write landed on
+  // the same row and overwrote the status that had just closed it. Every scan
+  // resurrected it, and the board went on advertising a trade whose stop had
+  // already gone.
+  const candles = series(400, 21);
+  const detected = detectSupplyDemand(candles);
+  const found = detected.setup;
+  assert.ok(found, "the fixture must actually produce a zone to re-detect");
+
+  // The same zone, published earlier with a tighter stop — one price has
+  // certainly taken out by now.
+  const held: ActiveSetup = {
+    symbol: "BTCUSDT",
+    timeframe: "15m",
+    direction: found.direction,
+    entry: found.entry,
+    target1: found.target1,
+    target2: found.target2,
+    stopLoss: found.direction === "short" ? found.entry * 1.0001 : found.entry * 0.9999,
+    confidence: found.confidence,
+    zoneTop: found.zone.top,
+    zoneBottom: found.zone.bottom,
+    zoneBaseTime: found.zone.baseTime,
+    status: "Filled",
+  };
+  const { port: market } = marketFor({}, candles);
+  const { port: setups, writes } = store([held]);
+
+  const result = await runSdScan(market, ["BTCUSDT"], { activeSetups: setups });
+
+  const sameZone = writes.filter((w) => w.zoneBaseTime === held.zoneBaseTime);
+  assert.equal(sameZone.length, 1, "the zone is written once, not released and re-published");
+  assert.ok(
+    ["Invalidated (SL hit)", "Target 2 reached", "Missed"].includes(sameZone[0].status),
+    `the one write closes it, but says "${sameZone[0].status}"`,
+  );
+  const advertised = [...result.demand, ...result.supply].filter(
+    (hit) => hit.zoneBaseTime === held.zoneBaseTime,
+  );
+  assert.equal(advertised.length, 0, "and it is not on the board any more");
+});

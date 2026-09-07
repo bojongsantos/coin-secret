@@ -535,6 +535,20 @@ export const MESSAGES = {
     en: "A sweep across all {pairs} pairs, ranked so the ones worth a look sit at the top.",
   },
 
+  "landing.pricing.title": {
+    id: "Satu paket berbayar, dibayar di muka",
+    en: "One paid plan, paid up front",
+  },
+  "landing.pricing.body": {
+    id: "Tidak ada tingkatan tersembunyi dan tidak ada perpanjangan otomatis. Yang dijual adalah jangkauan — seluruh coin dan seluruh rencana — bukan kedalaman analisisnya.",
+    en: "No hidden tiers and no automatic renewal. What is sold is reach — every coin and every plan — not the depth of the analysis.",
+  },
+  "landing.pricing.buy": { id: "Ambil Pro — {total}", en: "Get Pro — {total}" },
+  "landing.pricing.note": {
+    id: "Pembayaran diproses di halaman akun karena butuh akun. Setelah masa aktif berakhir, akun kembali ke Free dan riwayat pembayarannya tetap tersimpan.",
+    en: "Payment is handled on the account page because it needs an account. When the period ends the account returns to Free, and its payment history is kept.",
+  },
+
   "landing.cta.title": { id: "Lihat papannya sekarang", en: "Open the board now" },
   "landing.cta.body": {
     id: "Tidak perlu akun untuk melihat. Paket Free membuka tiga setup teratas di tiap sisi beserta seluruh analisisnya.",

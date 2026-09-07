@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback } from "react";
-import { Sparkles } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Check, Crown, Sparkles } from "lucide-react";
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
+import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
+import {
+  billingPlan,
+  BILLING_PERIODS,
+  formatUsd,
+  savingsPercent,
+  type BillingPeriod,
+} from "@/core/domain/billing/plans";
 import { BrandLockup, BrandMark } from "@/presentation/ui/brand-logo";
 import { LanguageToggle } from "@/presentation/ui/language-toggle";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
-import type { MessageKey } from "@/shared/i18n/messages";
+import { domainMessageKey, type MessageKey } from "@/shared/i18n/messages";
 
 /**
  * The public front door.
@@ -70,14 +78,33 @@ function scrollToSection(id: string): void {
   }
 
   const started = performance.now();
+  let settled = false;
+  // The last position the tween itself set, so it can tell its own work apart
+  // from the reader taking over the scroll halfway.
+  let applied = from;
+
   const step = (now: number) => {
+    if (settled) return;
     const progress = Math.min(1, (now - started) / SCROLL_MS);
     // Ease-out cubic: quick to leave, gentle to arrive.
     const eased = 1 - Math.pow(1 - progress, 3);
-    root.scrollTop = from + (to - from) * eased;
+    applied = from + (to - from) * eased;
+    root.scrollTop = applied;
     if (progress < 1) requestAnimationFrame(step);
+    else settled = true;
   };
   requestAnimationFrame(step);
+
+  // A window that is open but covered by another one reports itself visible
+  // and still gets no frames — measured here: `document.hidden` false,
+  // `requestAnimationFrame` never called. Left to rAF alone the nav would
+  // simply do nothing. If the frames never arrived, finish the journey; if the
+  // reader has scrolled somewhere themselves in the meantime, leave them be.
+  window.setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    if (Math.round(root.scrollTop) === Math.round(applied)) root.scrollTop = to;
+  }, SCROLL_MS + 120);
 }
 
 /** A four-pointed star, the decoration scattered across the hero. */
@@ -147,18 +174,22 @@ function LandingNav({ t }: { t: Translate }) {
         </Link>
 
         <div className="flex flex-1 items-center justify-end gap-3">
-          <Link
-            href="/pricing"
+          {/* Both stay on this page. Sending someone straight to the app's
+              own pricing screen from here skipped the pitch entirely. */}
+          <button
+            type="button"
+            onClick={() => jump("pricing")}
             className="text-[13px] font-medium text-white/70 transition-colors hover:text-white"
           >
             {t("nav.pricing")}
-          </Link>
-          <Link
-            href="/pricing"
+          </button>
+          <button
+            type="button"
+            onClick={() => jump("pricing")}
             className="hidden text-[13px] font-medium text-white/70 transition-colors hover:text-white lg:block"
           >
             {t("landing.nav.buyPremium")}
-          </Link>
+          </button>
           <LanguageToggle className="border-white/15 bg-white/5 text-white/70 hover:border-white/30 hover:text-white" />
           <Link
             href="/dashboard"
@@ -174,7 +205,10 @@ function LandingNav({ t }: { t: Translate }) {
 
 function Hero({ t }: { t: Translate }) {
   return (
-    <section className="relative overflow-hidden">
+    // Exactly one screen tall. `dvh` rather than `vh` because a phone's
+    // address bar eats into `vh`, which would push the next section into view
+    // by the height of that bar — the very thing this is meant to prevent.
+    <section className="relative flex min-h-dvh flex-col overflow-hidden">
       {/* The glow the design pools at the foot of the hero. Two layers: a wide
           soft wash, and a tighter core so the centre reads as a source rather
           than as an evenly lit panel. */}
@@ -190,7 +224,10 @@ function Hero({ t }: { t: Translate }) {
         <Star key={star.className} className={star.className} size={star.size} />
       ))}
 
-      <div className="relative mx-auto flex min-h-[86vh] max-w-4xl flex-col items-center justify-center px-5 pb-28 pt-32 text-center sm:pt-36">
+      {/* The nav is fixed and overlays the top 64px, so the padding is
+          lopsided on purpose: it puts the block on the optical centre of what
+          the reader can actually see rather than of the box. */}
+      <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-5 pb-20 pt-28 text-center">
         <p className="text-[13px] font-medium tracking-wide text-white/55">{t("landing.eyebrow")}</p>
 
         <h1 className="mt-4 text-balance text-[34px] font-semibold leading-[1.14] tracking-[-0.02em] text-white sm:text-[46px] lg:text-[56px]">
@@ -257,6 +294,152 @@ function Section({
           {title}
         </h2>
         <div className="mt-9">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The plans, priced from the same catalogue the checkout charges against.
+ *
+ * Nothing here is typed in twice: the figures and the savings badges come from
+ * `billingPlan` and `savingsPercent`, so a page that quotes a discount the
+ * arithmetic does not support cannot happen.
+ */
+function LandingPricing({ t }: { t: Translate }) {
+  const [period, setPeriod] = useState<BillingPeriod>("annual");
+  const plan = billingPlan(period);
+
+  const rows = PLAN_CAPABILITIES.map((capability) => {
+    const key = domainMessageKey("capability", capability.id);
+    const limited = (value: string | true) =>
+      value === true ? null : domainMessageKey("capability", value === "Terbatas" ? "limited" : "full");
+    return {
+      id: capability.id,
+      name: key ? t(key) : capability.label,
+      free: limited(capability.free),
+      pro: limited(capability.pro),
+    };
+  });
+
+  return (
+    <section id="pricing" className="scroll-mt-24 border-t border-white/[0.07] py-20 sm:py-24">
+      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-accent-2">
+          {t("nav.pricing")}
+        </p>
+        <h2 className="mt-3 max-w-2xl text-balance text-[26px] font-semibold leading-tight tracking-[-0.01em] text-white sm:text-[32px]">
+          {t("landing.pricing.title")}
+        </h2>
+        <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/55">
+          {t("landing.pricing.body")}
+        </p>
+
+        <div
+          role="group"
+          aria-label={t("pricing.periodGroup")}
+          className="mt-8 flex w-fit items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1"
+        >
+          {BILLING_PERIODS.map((option) => {
+            const savings = savingsPercent(option);
+            const active = option === period;
+            return (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setPeriod(option)}
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
+                  active ? "bg-white text-[#0a0d16]" : "text-white/60 hover:text-white"
+                }`}
+              >
+                {t(`pricing.period.${option}` as MessageKey)}
+                {savings > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      active ? "bg-accent text-white" : "bg-accent/20 text-accent-2"
+                    }`}
+                  >
+                    {t("pricing.savings", { percent: savings })}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            <h3 className="text-[15px] font-bold text-white">{t("common.free")}</h3>
+            <p className="mt-1 text-[12px] text-white/50">{t("pricing.freeBlurb")}</p>
+            <p className="mt-5 text-3xl font-bold tabular-nums text-white">$0</p>
+            <p className="mt-1 text-[11px] text-white/40">{t("pricing.forever")}</p>
+            <ul className="mt-6 space-y-2">
+              {rows.map((row) => (
+                <li key={row.id} className="flex items-start gap-2 text-[12.5px] leading-snug text-white/60">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-positive" aria-hidden="true" />
+                  <span>
+                    {row.name}
+                    {row.free && <span className="ml-1 font-semibold text-white/80">({t(row.free)})</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/dashboard"
+              className="mt-7 block rounded-lg border border-white/20 px-4 py-2.5 text-center text-[13px] font-bold text-white transition-colors hover:border-white/45 hover:bg-white/5"
+            >
+              {t("landing.launchApp")}
+            </Link>
+          </div>
+
+          <div className="relative rounded-2xl border border-accent/40 bg-white/[0.04] p-6">
+            <span className="absolute -top-2.5 left-6 rounded-full bg-gradient-to-r from-accent to-accent-blue px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              {t("pricing.popular")}
+            </span>
+            <div className="flex items-center gap-2">
+              <Crown className="size-4 text-warning" />
+              <h3 className="text-[15px] font-bold text-white">{t("common.pro")}</h3>
+            </div>
+            <p className="mt-1 text-[12px] text-white/50">{t("pricing.proBlurb")}</p>
+            <p className="mt-5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold tabular-nums text-white">
+                {formatUsd(plan.perMonthUsd)}
+              </span>
+              <span className="text-xs font-medium text-white/45">{t("pricing.perMonth")}</span>
+            </p>
+            <p className="mt-1 text-[11px] text-white/40">
+              {plan.months === 1
+                ? t("pricing.billedMonthly", { total: formatUsd(plan.totalUsd) })
+                : t("pricing.billedOnce", { total: formatUsd(plan.totalUsd), months: plan.months })}
+              {" · "}
+              {t("pricing.noAutoRenew")}
+            </p>
+            <ul className="mt-6 space-y-2">
+              {rows.map((row) => (
+                <li key={row.id} className="flex items-start gap-2 text-[12.5px] leading-snug text-white/60">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-accent-2" aria-hidden="true" />
+                  <span>
+                    {row.name}
+                    {row.pro && <span className="ml-1 font-semibold text-white/85">({t(row.pro)})</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {/* The one deliberate step into the app: payment needs an account,
+                and the checkout lives where the account does. */}
+            <Link
+              href="/pricing"
+              className="mt-7 block rounded-lg bg-gradient-to-r from-accent to-accent-blue px-4 py-2.5 text-center text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+            >
+              {t("landing.pricing.buy", { total: formatUsd(plan.totalUsd) })}
+            </Link>
+          </div>
+        </div>
+
+        <p className="mt-5 text-[11.5px] leading-relaxed text-white/40">
+          {t("landing.pricing.note")}
+        </p>
       </div>
     </section>
   );
@@ -329,6 +512,8 @@ export function LandingPage() {
           </div>
         </Section>
 
+        <LandingPricing t={t} />
+
         <section className="border-t border-white/[0.07] py-20">
           <div className="mx-auto max-w-3xl px-5 text-center">
             <h2 className="text-balance text-[26px] font-semibold leading-tight text-white sm:text-[30px]">
@@ -345,12 +530,13 @@ export function LandingPage() {
                 {t("landing.launchApp")}
                 <Sparkles className="size-4 text-accent" />
               </Link>
-              <Link
-                href="/pricing"
+              <button
+                type="button"
+                onClick={() => scrollToSection("pricing")}
                 className="inline-flex h-11 items-center rounded-full border border-white/25 px-6 text-[14px] font-semibold text-white transition-colors hover:border-white/50 hover:bg-white/5"
               >
                 {t("nav.pricing")}
-              </Link>
+              </button>
             </div>
           </div>
         </section>

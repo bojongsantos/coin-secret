@@ -2,8 +2,12 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import {
+  DEFAULT_LOCALE,
   DEFAULT_SIDEBAR,
   DEFAULT_THEME,
+  LOCALE_ATTRIBUTE,
+  LOCALE_STORAGE_KEY,
+  normalizeLocale,
   normalizeSidebar,
   normalizeTheme,
   PREFERENCE_EVENT,
@@ -11,6 +15,7 @@ import {
   SIDEBAR_STORAGE_KEY,
   THEME_ATTRIBUTE,
   THEME_STORAGE_KEY,
+  type Locale,
   type SidebarState,
   type Theme,
 } from "@/shared/lib/ui-preferences";
@@ -68,4 +73,18 @@ export function useSidebarState(): {
     write(SIDEBAR_ATTRIBUTE, SIDEBAR_STORAGE_KEY, next);
   }, []);
   return { sidebar, setSidebar };
+}
+
+export function useLocale(): { locale: Locale; setLocale: (locale: Locale) => void } {
+  const locale = useSyncExternalStore(
+    subscribe,
+    () => normalizeLocale(document.documentElement.getAttribute(LOCALE_ATTRIBUTE)),
+    // The server renders the default; the inline preference script has already
+    // corrected the attribute by the time the browser reads it back.
+    () => DEFAULT_LOCALE,
+  );
+  const setLocale = useCallback((next: Locale) => {
+    write(LOCALE_ATTRIBUTE, LOCALE_STORAGE_KEY, next);
+  }, []);
+  return { locale, setLocale };
 }

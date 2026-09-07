@@ -16,6 +16,7 @@ import type { PublishedSetup } from "@/core/domain/analysis/supply-demand";
 import { applyRecentCandles, olderThan, upsertLatestCandle } from "@/core/domain/market/candles";
 import type { AnalysisResult, Candle, MarketTicker, Timeframe } from "@/core/domain/models";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
+import { useLocale } from "@/presentation/hooks/use-ui-preference";
 import {
   subscribeBinanceMarket,
   type BinanceStreamStatus,
@@ -74,6 +75,10 @@ export function useLiveAnalysis(
   timeframe: Timeframe,
   range: HistoryRange,
 ): LiveAnalysis {
+  // The analysis writes prose, so it needs the reader's language. The render
+  // loop below closes over it and the effect lists it as a dependency, so a
+  // language change rebuilds the analysis rather than waiting for a tick.
+  const { locale } = useLocale();
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -237,6 +242,7 @@ export function useLiveAnalysis(
         candles.slice(-ANALYSIS_WINDOW_SIZE),
         ticker,
         publishedRef.current,
+        locale,
       );
       setAnalysis({ ...result, chartData: { ...result.chartData, candles } });
       setError(null);
@@ -428,7 +434,9 @@ export function useLiveAnalysis(
       if (publishTimer) clearTimeout(publishTimer);
       loadMoreRef.current = async () => undefined;
     };
-  }, [symbol, timeframe, range]);
+    // `locale` re-runs the effect so the prose is rewritten the moment the
+    // language changes, rather than at the next tick.
+  }, [symbol, timeframe, range, locale]);
 
   return { analysis, loading, error, streamStatus, history, loadMoreHistory, publishedTimeframe };
 }

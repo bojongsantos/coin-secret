@@ -5,6 +5,8 @@ import { Layers, Loader2, RefreshCw } from "lucide-react";
 import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
 import { MIN_DASHBOARD_CONFIDENCE } from "@/core/domain/analysis/signal-display";
 import { usePlan } from "@/presentation/features/access/plan-provider";
+import { useT } from "@/presentation/hooks/use-translate";
+import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 import { useSdScan } from "@/presentation/hooks/use-scanner";
 import { Badge } from "@/presentation/ui/badge";
 import type { Timeframe } from "@/core/domain/models";
@@ -56,6 +58,8 @@ function ZoneRow({
   maxVol: number;
   onSelect?: (symbol: string, timeframe: Timeframe) => void;
 }) {
+  const { t } = useT();
+  const statusKey = statusMessageKey(hit.status);
   return (
     <tr
       data-zone-row={hit.symbol}
@@ -90,7 +94,9 @@ function ZoneRow({
         <VolumeBar volume={hit.volume24h} max={maxVol} />
       </td>
       <td className="px-1.5 py-2">
-        {hit.status && <Badge tone={statusTone(hit.status)}>{hit.status}</Badge>}
+        {hit.status && (
+          <Badge tone={statusTone(hit.status)}>{statusKey ? t(statusKey) : hit.status}</Badge>
+        )}
       </td>
       <td className="px-1.5 py-2 text-right">
         <div className="flex items-center justify-end gap-2">
@@ -113,7 +119,7 @@ function ZoneCard({
   tone,
   onSelect,
 }: {
-  title: string;
+  title: MessageKey;
   hits: SdScanHit[];
   totalCount?: number;
   tone: "green" | "red";
@@ -121,6 +127,7 @@ function ZoneCard({
 }) {
   const router = useRouter();
   const { canAccess } = usePlan();
+  const { t } = useT();
   const extended = canAccess("scannerExtended");
   const color = tone === "green" ? "var(--color-positive)" : "var(--color-negative)";
   // Defensive: never mix directions — Buy table only shows long, Sell only short.
@@ -138,9 +145,9 @@ function ZoneCard({
     <section className="card flex min-w-0 flex-col p-4 sm:p-6" style={{ borderRadius: 12 }}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[14px] font-bold tracking-tight" style={{ color }}>
-          {title}
+          {t(title)}
         </h3>
-        <span className="text-[11px] text-muted-2">{total} setup</span>
+        <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: total })}</span>
       </div>
 
       {/* Internal scroll area — header/footer stay fixed outside this box */}
@@ -156,12 +163,12 @@ function ZoneCard({
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-surface-2/40 text-[8px] uppercase text-muted-2">
-              <th className="px-1.5 py-2 font-semibold">Pair</th>
+              <th className="px-1.5 py-2 font-semibold">{t("zones.pair")}</th>
               {/* Dropped on narrow screens so confidence, the column the
                   table exists for, is not pushed behind a sideways scroll. */}
-              <th className="hidden px-1.5 py-2 font-semibold sm:table-cell">Volume 24H</th>
-              <th className="px-1.5 py-2 font-semibold">Status</th>
-              <th className="px-1.5 py-2 text-right font-semibold">Confidence</th>
+              <th className="hidden px-1.5 py-2 font-semibold sm:table-cell">{t("zones.volume24h")}</th>
+              <th className="px-1.5 py-2 font-semibold">{t("zones.status")}</th>
+              <th className="px-1.5 py-2 text-right font-semibold">{t("zones.confidence")}</th>
             </tr>
           </thead>
           <tbody>
@@ -174,14 +181,14 @@ function ZoneCard({
         {hiddenCount > 0 && (
           <LockedOverlay feature="scannerExtended" className="border-t border-border">
             <div className="flex h-24 items-center justify-center text-xs text-muted-2">
-              {hiddenCount} setup tambahan
+              {t("zones.moreSetups", { count: hiddenCount })}
             </div>
           </LockedOverlay>
         )}
 
         {total === 0 && (
           <p className="px-3 py-5 text-center text-[11px] text-muted-2">
-            Belum ada zona dengan confidence di atas {MIN_DASHBOARD_CONFIDENCE}%.
+            {t("zones.noneAboveThreshold", { threshold: MIN_DASHBOARD_CONFIDENCE })}
           </p>
         )}
       </div>
@@ -192,7 +199,7 @@ function ZoneCard({
           onClick={() => router.push("/patterns")}
           className="mt-3 inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-foreground"
         >
-          Lihat semua ({total})
+          {t("zones.seeAll", { count: total })}
         </button>
       )}
     </section>
@@ -205,6 +212,7 @@ export function SupplyDemandSection({
   onSelect?: (symbol: string, timeframe: Timeframe) => void;
 }) {
   const { result, loading, error, refresh } = useSdScan();
+  const { t } = useT();
 
   // Rows and totals both arrive already filtered by the API. A free plan is
   // sent only the first three, so the totals are what tells the locked overlay
@@ -216,7 +224,7 @@ export function SupplyDemandSection({
         <div>
           <h2 className="flex items-center gap-2 text-[16px] font-bold">
             <Layers className="size-4.5 text-accent-2" />
-            Signals
+            {t("nav.signals")}
           </h2>
         </div>
         <button
@@ -226,7 +234,7 @@ export function SupplyDemandSection({
           className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent-blue px-3.5 py-2 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          {loading ? "Scanning…" : "Scan Semua"}
+          {loading ? t("dashboard.scanning") : t("zones.scanAll")}
         </button>
       </div>
 
@@ -246,14 +254,14 @@ export function SupplyDemandSection({
       {result && (
         <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
           <ZoneCard
-            title="Demand Zones (Buy)"
+            title="zones.demand"
             hits={result.demand}
             totalCount={result.demandTotal}
             tone="green"
             onSelect={onSelect}
           />
           <ZoneCard
-            title="Supply Zones (Sell)"
+            title="zones.supply"
             hits={result.supply}
             totalCount={result.supplyTotal}
             tone="red"

@@ -14,23 +14,26 @@ import {
   X,
 } from "lucide-react";
 import { usePlan } from "@/presentation/features/access/plan-provider";
+import { useT } from "@/presentation/hooks/use-translate";
+import type { MessageKey } from "@/shared/i18n/messages";
 
 /** Destinations that earn a permanent slot on a phone-width bar. */
-const PRIMARY = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/patterns", label: "Signals", icon: Layers },
+const PRIMARY: Array<{ href: string; label: MessageKey; icon: typeof LayoutDashboard }> = [
+  { href: "/", label: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/patterns", label: "nav.signals", icon: Layers },
 ];
 
 /** Everything else, reachable through the overflow sheet. */
-const SECONDARY = [
-  { href: "/scanner", label: "Scanner", icon: Radar },
-  { href: "/pricing", label: "Pricing", icon: CreditCard },
-  { href: "/account", label: "Akun", icon: UserCog },
+const SECONDARY: Array<{ href: string; label: MessageKey; icon: typeof LayoutDashboard }> = [
+  { href: "/scanner", label: "nav.scanner", icon: Radar },
+  { href: "/pricing", label: "nav.pricing", icon: CreditCard },
+  { href: "/account", label: "nav.account", icon: UserCog },
 ];
 
 export function MobileNav() {
   const pathname = usePathname();
   const { canAccess } = usePlan();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
 
   // The sheet is a navigation overlay, so it must not survive a route change.
@@ -59,22 +62,22 @@ export function MobileNav() {
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
             type="button"
-            aria-label="Tutup menu"
+            aria-label={t("nav.closeMenu")}
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-background/70 backdrop-blur-sm"
           />
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Menu lainnya"
+            aria-label={t("nav.moreMenu")}
             className="absolute inset-x-0 bottom-16 rounded-t-2xl border-t border-border bg-surface p-3 shadow-2xl"
           >
             <div className="mb-1 flex items-center justify-between px-1">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-2">Lainnya</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-2">{t("nav.more")}</p>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                aria-label="Tutup menu"
+                aria-label={t("nav.closeMenu")}
                 className="rounded-lg border border-border p-1.5 text-muted-2 transition-colors hover:text-foreground"
               >
                 <X className="size-3.5" />
@@ -92,7 +95,7 @@ export function MobileNav() {
                   }`}
                 >
                   <item.icon className="size-4 text-muted-2" />
-                  {item.label}
+                  {t(item.label)}
                 </Link>
               ))}
             </div>
@@ -101,7 +104,7 @@ export function MobileNav() {
       )}
 
       <nav
-        aria-label="Navigasi utama"
+        aria-label={t("nav.primary")}
         className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-5 border-t border-border bg-surface/95 backdrop-blur lg:hidden"
       >
         {PRIMARY.map((item) => {
@@ -117,7 +120,7 @@ export function MobileNav() {
               }`}
             >
               <item.icon className="size-4" />
-              {item.label}
+              {t(item.label)}
               {locked && <Lock className="absolute right-1/2 top-2 size-2.5 translate-x-4 text-warning" />}
             </Link>
           );
@@ -127,13 +130,13 @@ export function MobileNav() {
           type="button"
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
-          aria-label="Menu lainnya"
+          aria-label={t("nav.moreMenu")}
           className={`flex flex-col items-center justify-center gap-1 text-[10px] font-medium ${
             open || secondaryActive ? "text-accent-2" : "text-muted-2"
           }`}
         >
           <MoreHorizontal className="size-4" />
-          Lainnya
+          {t("nav.more")}
         </button>
       </nav>
     </>

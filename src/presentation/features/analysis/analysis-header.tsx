@@ -4,6 +4,8 @@ import { useState, type MutableRefObject } from "react";
 import { CalendarDays, Download, Loader2 } from "lucide-react";
 import type { PairSummary, PatternSummary, Timeframe, TradeLevel } from "@/core/domain/models";
 import { composeShareImage } from "@/presentation/features/analysis/share-image";
+import { useT } from "@/presentation/hooks/use-translate";
+import type { MessageKey } from "@/shared/i18n/messages";
 
 interface AnalysisHeaderProps {
   pair: PairSummary;
@@ -17,11 +19,11 @@ interface AnalysisHeaderProps {
 
 type ShareState = "idle" | "working" | "done" | "error";
 
-const LABEL: Record<ShareState, string> = {
-  idle: "Download",
-  working: "Menyiapkan…",
-  done: "Tersimpan",
-  error: "Gagal",
+const LABEL: Record<ShareState, MessageKey> = {
+  idle: "chart.download",
+  working: "chart.downloadWorking",
+  done: "chart.downloadDone",
+  error: "chart.downloadFailed",
 };
 
 export function AnalysisHeader({
@@ -33,9 +35,12 @@ export function AnalysisHeader({
   riskReward,
   captureRef,
 }: AnalysisHeaderProps) {
+  const { t, locale } = useT();
   const [state, setState] = useState<ShareState>("idle");
   const date = new Date(analyzedAt);
-  const dateLabel = date.toLocaleDateString("en-US", {
+  // The date is formatted in the reader's own language too: "7 Sep 2026" and
+  // "Sep 7, 2026" are the same day written the way each reader expects it.
+  const dateLabel = date.toLocaleDateString(locale === "id" ? "id-ID" : "en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -65,7 +70,7 @@ export function AnalysisHeader({
         levels,
         riskReward,
             });
-      if (!blob) throw new Error("Gambar gagal dibuat.");
+      if (!blob) throw new Error(t("chart.imageFailed"));
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -98,7 +103,7 @@ export function AnalysisHeader({
 
       <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-muted-2">
         <CalendarDays className="size-3.5" />
-        Analyzed {dateLabel}
+        {t("chart.analyzedAt", { date: dateLabel })}
       </span>
 
       <div className="ml-auto flex items-center gap-2">
@@ -106,7 +111,7 @@ export function AnalysisHeader({
           type="button"
           onClick={() => void share()}
           disabled={state === "working"}
-          title="Unduh chart dan trading plan sebagai gambar"
+          title={t("chart.downloadTitle")}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-3 px-3.5 py-2 text-[12px] font-semibold text-foreground transition-colors hover:border-border-strong disabled:opacity-60"
         >
           {state === "working" ? (
@@ -114,7 +119,7 @@ export function AnalysisHeader({
           ) : (
             <Download className="size-3.5" />
           )}
-          {LABEL[state]}
+          {t(LABEL[state])}
         </button>
       </div>
     </div>

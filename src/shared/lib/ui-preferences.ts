@@ -10,12 +10,32 @@
 
 export type Theme = "dark" | "light";
 export type SidebarState = "expanded" | "collapsed";
+// Re-exported so a component reads every viewing preference from one module,
+// while the language itself stays a domain idea: the analysis engine writes in
+// it and cannot depend on anything up here.
+export {
+  DEFAULT_LOCALE,
+  isLocale,
+  normalizeLocale,
+  oppositeLocale,
+  type Locale,
+} from "@/core/domain/i18n/locale";
+import { DEFAULT_LOCALE } from "@/core/domain/i18n/locale";
 
 export const THEME_STORAGE_KEY = "coinsecret:theme";
 export const SIDEBAR_STORAGE_KEY = "coinsecret:sidebar";
+export const LOCALE_STORAGE_KEY = "coinsecret:locale";
 
 export const THEME_ATTRIBUTE = "data-theme";
 export const SIDEBAR_ATTRIBUTE = "data-sidebar";
+/**
+ * The language lives in the standard `lang` attribute rather than a data one.
+ *
+ * It is what a screen reader picks its pronunciation from and what the browser
+ * offers to translate against, so a private attribute would leave both of them
+ * reading Indonesian copy as English. One attribute, both jobs.
+ */
+export const LOCALE_ATTRIBUTE = "lang";
 
 /**
  * Dark is the default rather than the system setting.
@@ -74,5 +94,9 @@ export function preferencesScript(): string {
     SIDEBAR_ATTRIBUTE,
   )},s==="collapsed"||s==="expanded"?s:${JSON.stringify(
     DEFAULT_SIDEBAR,
-  )});}catch(e){}})()`;
+  )});var l=localStorage.getItem(${JSON.stringify(
+    LOCALE_STORAGE_KEY,
+  )});d.setAttribute(${JSON.stringify(
+    LOCALE_ATTRIBUTE,
+  )},l==="en"||l==="id"?l:${JSON.stringify(DEFAULT_LOCALE)});}catch(e){}})()`;
 }

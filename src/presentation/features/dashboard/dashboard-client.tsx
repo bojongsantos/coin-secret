@@ -7,6 +7,7 @@ import type { Timeframe } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { SupplyDemandSection } from "@/presentation/features/dashboard/supply-demand-section";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
+import { useT } from "@/presentation/hooks/use-translate";
 import { useTopSetups } from "@/presentation/hooks/use-scanner";
 import { MIN_DASHBOARD_CONFIDENCE } from "@/core/domain/analysis/signal-display";
 import { AppShell } from "@/presentation/layout/app-shell";
@@ -16,6 +17,7 @@ import { CoinIcon } from "@/presentation/ui/coin-icon";
 export function DashboardClient() {
   // The API applies the confidence floor before ranking, so this list and the
   // Signals tables cannot disagree on the same screen.
+  const { t } = useT();
   const { top, loading: topLoading, error: topError } = useTopSetups(5);
   const [symbol, setSymbol] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
@@ -70,7 +72,7 @@ export function DashboardClient() {
         {loading && (
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-2">
             <Loader2 className="size-3.5 animate-spin" />
-            Memuat data live…
+            {t("common.loadingLive")}
           </span>
         )}
 
@@ -78,7 +80,7 @@ export function DashboardClient() {
             single most useful thing on the page cost a click to reach. */}
         <section className="rounded-xl border border-border bg-surface p-3">
           <div className="mb-2.5 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-wide">Top 5 setup hari ini</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide">{t("dashboard.topSetups")}</p>
           </div>
 
           {topLoading && (
@@ -89,21 +91,21 @@ export function DashboardClient() {
 
           {!topLoading && top.length === 0 && (
             <p className="py-6 text-center text-[11px] text-muted-2">
-              Belum ada setup dengan confidence di atas {MIN_DASHBOARD_CONFIDENCE}%.
+              {t("dashboard.noneAboveThreshold", { threshold: MIN_DASHBOARD_CONFIDENCE })}
             </p>
           )}
 
           {!topLoading && top.length > 0 && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {top.map((t) => {
-                const up = t.hit.direction === "long";
-                const activeCard = t.hit.symbol === activeSymbol;
-                const confidence = Math.round(t.hit.confidence);
+              {top.map((entry) => {
+                const up = entry.hit.direction === "long";
+                const activeCard = entry.hit.symbol === activeSymbol;
+                const confidence = Math.round(entry.hit.confidence);
                 return (
                   <button
-                    key={t.hit.symbol}
+                    key={entry.hit.symbol}
                     type="button"
-                    onClick={() => pick(t.hit.symbol, t.hit.timeframe)}
+                    onClick={() => pick(entry.hit.symbol, entry.hit.timeframe)}
                     className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors ${
                       activeCard
                         ? "border-accent/50 bg-accent/10"
@@ -111,12 +113,12 @@ export function DashboardClient() {
                     }`}
                   >
                     <span className="w-3 shrink-0 text-[10px] font-bold tabular-nums text-muted-2">
-                      {t.rank}
+                      {entry.rank}
                     </span>
-                    <CoinIcon symbol={t.hit.symbol} size={28} />
+                    <CoinIcon symbol={entry.hit.symbol} size={28} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[12px] font-bold leading-tight">
-                        {t.hit.base}
+                        {entry.hit.base}
                       </span>
                       <span
                         className={`mt-0.5 inline-block rounded border px-1 py-px text-[9px] font-bold uppercase leading-none ${
@@ -125,7 +127,7 @@ export function DashboardClient() {
                             : "border-negative/40 bg-negative/10 text-negative"
                         }`}
                       >
-                        {up ? "Long" : "Short"}
+                        {t(up ? "direction.long" : "direction.short")}
                       </span>
                     </span>
                     <span

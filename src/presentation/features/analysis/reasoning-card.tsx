@@ -1,5 +1,6 @@
 import { CheckCircle2, ChartNoAxesCombined } from "lucide-react";
 import type { ReasoningSection } from "@/core/domain/models";
+import { useT } from "@/presentation/hooks/use-translate";
 
 function renderPoint(text: string) {
   const parts = text.split(/\*\*(.+?)\*\*/g);
@@ -31,11 +32,12 @@ function SectionBlock({ section }: { section: ReasoningSection }) {
 }
 
 export function ReasoningCard({ sections }: { sections: ReasoningSection[] }) {
+  const { t } = useT();
   return (
     <section className="card flex flex-col p-4">
       <div className="flex items-center gap-1.5">
         <ChartNoAxesCombined className="size-4 text-accent-2" />
-        <h3 className="text-[13px] font-semibold">Technical Analysis &amp; Reasoning</h3>
+        <h3 className="text-[13px] font-semibold">{t("plan.reasoning")}</h3>
       </div>
 
       <div className="mt-3 flex-1 space-y-4">

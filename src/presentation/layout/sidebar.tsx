@@ -12,30 +12,34 @@ import {
 } from "lucide-react";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useSidebarState } from "@/presentation/hooks/use-ui-preference";
+import { useT } from "@/presentation/hooks/use-translate";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { BrandLockup, BrandMark, BRAND_NAME } from "@/presentation/ui/brand-logo";
 import { toggledSidebar } from "@/shared/lib/ui-preferences";
 
 interface NavItem {
   id: string;
-  label: string;
+  /** Looked up per render, so the sidebar follows the language toggle. */
+  label: MessageKey;
   href: string;
   icon: typeof LayoutDashboard;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { id: "signals", label: "Signals", href: "/patterns", icon: Layers },
-  { id: "pricing", label: "Pricing", href: "/pricing", icon: CreditCard },
+  { id: "dashboard", label: "nav.dashboard", href: "/", icon: LayoutDashboard },
+  { id: "signals", label: "nav.signals", href: "/patterns", icon: Layers },
+  { id: "pricing", label: "nav.pricing", href: "/pricing", icon: CreditCard },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { authenticated, plan, canAccess } = usePlan();
   const { sidebar, setSidebar } = useSidebarState();
+  const { t } = useT();
 
   const collapsed = sidebar === "collapsed";
   const lockedItems = new Set<string>(canAccess("signals") ? [] : ["signals"]);
-  const toggleLabel = collapsed ? "Buka sidebar" : "Tutup sidebar";
+  const toggleLabel = t(collapsed ? "nav.openSidebar" : "nav.closeSidebar");
 
   return (
     <aside
@@ -48,7 +52,7 @@ export function Sidebar() {
           collapsed ? "justify-center px-2" : "px-5"
         }`}
       >
-        <Link href="/" aria-label={`${BRAND_NAME} dashboard`}>
+        <Link href="/" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
           {/* The mark alone when collapsed: the wordmark would be clipped
               mid-name, which reads as a broken image rather than a compact one. */}
           {collapsed ? <BrandMark size={24} /> : <BrandLockup height={26} />}
@@ -66,7 +70,7 @@ export function Sidebar() {
               aria-current={active ? "page" : undefined}
               // Collapsed, the icon is the only cue left, so the name moves
               // into the tooltip rather than disappearing entirely.
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? t(item.label) : undefined}
               className={`group relative flex w-full items-center rounded-lg text-[13px] transition-colors ${
                 collapsed ? "justify-center px-0 py-2.5" : "gap-3 py-2.5 pl-4 pr-3"
               } ${
@@ -88,7 +92,7 @@ export function Sidebar() {
               />
               {!collapsed && (
                 <>
-                  <span className="flex-1 truncate">{item.label}</span>
+                  <span className="flex-1 truncate">{t(item.label)}</span>
                   {locked && <Lock className="size-3.5 shrink-0 text-warning" />}
                 </>
               )}
@@ -97,7 +101,7 @@ export function Sidebar() {
               )}
               {/* Collapsed, the link's only content is an icon, so the name
                   has to reach assistive tech some other way. */}
-              {collapsed && <span className="sr-only">{item.label}</span>}
+              {collapsed && <span className="sr-only">{t(item.label)}</span>}
             </Link>
           );
         })}
@@ -119,7 +123,7 @@ export function Sidebar() {
           ) : (
             <>
               <PanelLeftClose className="size-4" />
-              Tutup sidebar
+              {t("nav.closeSidebar")}
             </>
           )}
         </button>
@@ -127,14 +131,16 @@ export function Sidebar() {
         {!collapsed && (
           <div className="card mt-3 p-4">
             <p className="text-[12px] font-semibold">
-              {authenticated ? `Paket ${plan === "premium" ? "Premium" : "Free"}` : "Akun Coin Secret"}
+              {authenticated
+                ? t("plan.cardTitle", { plan: t(plan === "premium" ? "common.premium" : "common.free") })
+                : t("account.title", { brand: BRAND_NAME })}
             </p>
             <p className="mt-1 text-[11px] leading-snug text-muted">
               {!authenticated
-                ? "Masuk untuk mengaktifkan Premium dan membuka seluruh signals."
+                ? t("plan.signedOut")
                 : plan === "premium"
-                  ? "Premium aktif. Seluruh fitur dan scanner tersedia."
-                  : "Free aktif. Tiga setup teratas per sisi terbuka untuk Anda."}
+                  ? t("plan.premiumActive")
+                  : t("plan.freeActive")}
             </p>
           </div>
         )}

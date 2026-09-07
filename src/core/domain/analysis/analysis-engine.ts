@@ -14,6 +14,8 @@ import {
   type PublishedSetup,
 } from "@/core/domain/analysis/supply-demand";
 import { formatPrice } from "@/shared/lib/format";
+import { DEFAULT_LOCALE, type Locale } from "@/core/domain/i18n/locale";
+import { say, type ReasoningKey } from "@/core/domain/analysis/reasoning-copy";
 
 export function emaSeries(closes: number[], period: number): number[] {
   const k = 2 / (period + 1);
@@ -77,6 +79,8 @@ export interface ReasoningContext {
   /** Zone quality, so the risk block can cite it instead of asserting it. */
   zoneStrength?: "fresh" | "tested" | "broken";
   zoneTouches?: number;
+  /** Language the sentences are written in. Indonesian when unstated. */
+  locale?: Locale;
 }
 
 /**
@@ -116,8 +120,12 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
   const low = Math.min(...range.map((c) => c.low));
 
   const { direction, entry, target1, target2, stopLoss, status, bias, support, resistance } = ctx;
+  const locale = ctx.locale ?? DEFAULT_LOCALE;
+  const line = (key: ReasoningKey, vars?: Record<string, string | number>) => say(locale, key, vars);
   const isLong = direction !== "short";
-  const biasLabel = bias === "bullish" ? "bullish" : bias === "bearish" ? "bearish" : "netral";
+  const biasLabel = line(
+    bias === "bullish" ? "word.bullish" : bias === "bearish" ? "word.bearish" : "word.neutral",
+  );
 
   const aboveEma20 = price >= ema20[ema20.length - 1];
   const aboveEma50 = price >= ema50[ema50.length - 1];
@@ -145,29 +153,31 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
     const stopAtr = atr > 1e-9 ? stopDistance / atr : 0;
 
     riskPoints.push(
-      `Stop loss **${formatPrice(stopLoss)}** berjarak **${stopPct.toFixed(2)}%** dari entry **${formatPrice(entry)}**.`,
+      line("risk.stopDistance", {
+        stopLoss: formatPrice(stopLoss),
+        percent: stopPct.toFixed(2),
+        entry: formatPrice(entry),
+      }),
     );
 
     if (stopAtr > 0) {
       riskPoints.push(
-        stopAtr < 1
-          ? `Jarak stop hanya **${stopAtr.toFixed(1)}×ATR(14)**, masih di dalam ayunan normal, sehingga rawan tersentuh noise.`
-          : `Jarak stop **${stopAtr.toFixed(1)}×ATR(14)**, berada di luar ayunan normal pada timeframe ini.`,
+        line(stopAtr < 1 ? "risk.stopInsideSwing" : "risk.stopOutsideSwing", {
+          atr: stopAtr.toFixed(1),
+        }),
       );
     }
 
     // Position size that keeps one loss at 1% of capital.
     const sizePct = Math.min(100, (1 / stopPct) * 100);
-    riskPoints.push(
-      `Dengan risiko **1% modal** per posisi, ukuran posisi maksimal **${sizePct.toFixed(1)}%** dari modal.`,
-    );
+    riskPoints.push(line("risk.positionSize", { percent: sizePct.toFixed(1) }));
   }
 
   if (riskReward !== undefined) {
     riskPoints.push(
-      riskReward >= 2
-        ? `Risk-Reward **1:${riskReward.toFixed(1)}** memenuhi ambang minimum 1:2.`
-        : `Risk-Reward **1:${riskReward.toFixed(1)}** berada di bawah ambang 1:2, sehingga setup ini menuntut win rate lebih tinggi.`,
+      line(riskReward >= 2 ? "risk.rewardMeets" : "risk.rewardBelow", {
+        ratio: riskReward.toFixed(1),
+      }),
     );
   }
 
@@ -175,8 +185,8 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
     const touches = ctx.zoneTouches ?? 0;
     riskPoints.push(
       ctx.zoneStrength === "fresh"
-        ? `Zona belum pernah disentuh ulang, sehingga likuiditas di dalamnya masih utuh.`
-        : `Zona sudah tersentuh **${touches}×**; tiap sentuhan mengikis likuiditas yang tersisa dan menurunkan confidence ke **${ctx.confidence}%**.`,
+        ? line("risk.zoneFresh")
+        : line("risk.zoneTouched", { touches, confidence: ctx.confidence }),
     );
   }
 
@@ -184,21 +194,26 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
     const gapPct = ((price - entry) / entry) * 100;
     riskPoints.push(
       Math.abs(gapPct) < 0.05
-        ? `Harga **${formatPrice(price)}** sudah berada tepat pada entry.`
-        : `Harga **${formatPrice(price)}** masih **${Math.abs(gapPct).toFixed(2)}%** ${gapPct > 0 ? "di atas" : "di bawah"} entry, jadi posisi dipasang sebagai limit order, bukan market.`,
+        ? line("risk.priceAtEntry", { price: formatPrice(price) })
+        : line("risk.priceAwayFromEntry", {
+            price: formatPrice(price),
+            percent: Math.abs(gapPct).toFixed(2),
+            side: line(gapPct > 0 ? "word.above" : "word.below"),
+          }),
     );
   }
 
   if (stopLoss) {
     riskPoints.push(
-      `Setup batal apabila candle ditutup ${isLong ? "di bawah" : "di atas"} **${formatPrice(stopLoss)}**.`,
+      line("risk.invalidation", {
+        side: line(isLong ? "word.below" : "word.above"),
+        stopLoss: formatPrice(stopLoss),
+      }),
     );
   }
 
   if (riskPoints.length === 0) {
-    riskPoints.push(
-      `Belum ada level entry maupun stop yang valid, sehingga belum ada risiko yang dapat diukur.`,
-    );
+    riskPoints.push(line("risk.nothingToMeasure"));
   }
 
   const summaryZone =
@@ -211,53 +226,75 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
   return [
     {
       id: "summary",
-      title: "Ringkasan Setup",
+      title: line("section.summary"),
       points: [
         summaryZone
-          ? `Zona ${summaryZone} aktif pada ${ctx.pair ?? "aset"}. Arah setup ${isLong ? "long" : "short"}.`
-          : `Belum terdapat zona supply atau demand yang valid.`,
-        summaryZone ? `Confidence **${ctx.confidence}%**.` : "",
+          ? line("summary.zoneActive", {
+              zone: line(summaryZone === "demand" ? "word.demand" : "word.supply"),
+              pair: ctx.pair ?? line("word.asset"),
+              direction: line(isLong ? "word.long" : "word.short"),
+            })
+          : line("summary.noZone"),
+        summaryZone ? line("summary.confidence", { confidence: ctx.confidence }) : "",
         direction && entry
-          ? `Entry **${formatPrice(entry)}**. Stop loss **${formatPrice(stopLoss ?? 0)}**.`
-          : `Bias pasar ${biasLabel}.`,
+          ? line("summary.entryStop", {
+              entry: formatPrice(entry),
+              stopLoss: formatPrice(stopLoss ?? 0),
+            })
+          : line("summary.bias", { bias: biasLabel }),
         direction && entry
-          ? `Target **${formatPrice(target1 ?? 0)}** dan **${formatPrice(target2 ?? 0)}**.`
-          : `Support **${formatPrice(support ?? 0)}**. Resistance **${formatPrice(resistance ?? 0)}**.`,
-        status ? `Status setup: ${status}.` : "",
+          ? line("summary.targets", {
+              target1: formatPrice(target1 ?? 0),
+              target2: formatPrice(target2 ?? 0),
+            })
+          : line("summary.supportResistance", {
+              support: formatPrice(support ?? 0),
+              resistance: formatPrice(resistance ?? 0),
+            }),
+        status ? line("summary.status", { status }) : "",
       ].filter(Boolean),
     },
     {
       id: "structure",
-      title: "Market Structure",
+      title: line("section.structure"),
       points: [
-        `Harga berada di ${aboveEma20 ? "atas" : "bawah"} EMA 20.`,
-        `Harga berada di ${aboveEma50 ? "atas" : "bawah"} EMA 50.`,
-        `Struktur pasar ${structure}.`,
+        line("structure.ema20", { side: line(aboveEma20 ? "word.above" : "word.below") }),
+        line("structure.ema50", { side: line(aboveEma50 ? "word.above" : "word.below") }),
+        line("structure.market", {
+          structure: line(
+            structure === "bullish"
+              ? "word.bullish"
+              : structure === "bearish"
+                ? "word.bearish"
+                : "word.sideways",
+          ),
+        }),
       ],
     },
     {
       id: "levels",
-      title: "Key Level",
+      title: line("section.levels"),
       points: [
-        `Resistance terdekat **${formatPrice(resistance ?? high)}**.`,
-        `Support terdekat **${formatPrice(support ?? low)}**.`,
+        line("levels.resistance", { price: formatPrice(resistance ?? high) }),
+        line("levels.support", { price: formatPrice(support ?? low) }),
       ],
     },
     {
       id: "momentum",
-      title: "Momentum",
+      title: line("section.momentum"),
       points: [
-        `RSI(14) **${rsiNow.toFixed(0)}** menunjukkan momentum ${
-          rsiNow > 50 ? "bullish" : rsiNow < 50 ? "bearish" : "netral"
-        }.`,
+        line("momentum.rsi", {
+          value: rsiNow.toFixed(0),
+          tone: line(rsiNow > 50 ? "word.bullish" : rsiNow < 50 ? "word.bearish" : "word.neutral"),
+        }),
         riskReward !== undefined
-          ? `Risk-Reward **1:${Math.round(riskReward)}**.`
+          ? line("momentum.riskReward", { ratio: Math.round(riskReward) })
           : "",
       ].filter(Boolean),
     },
     {
       id: "risk",
-      title: "Risk Management",
+      title: line("section.risk"),
       points: riskPoints,
     },
   ];
@@ -343,6 +380,8 @@ export function buildAnalysisResult(
    * the plan the reader was handed.
    */
   published?: PublishedSetup | null,
+  /** Language the analysis prose is written in. Indonesian when unstated. */
+  locale: Locale = DEFAULT_LOCALE,
 ): AnalysisResult {
   const price = ticker.lastPrice;
   const now = new Date();
@@ -431,6 +470,7 @@ export function buildAnalysisResult(
       levels: [],
       riskReward: 0,
       reasoning: buildReasoning(candles, {
+        locale,
         sdName: "No Zone Setup",
         confidence: 0,
         pair: `${base}/${quote}`,
@@ -505,6 +545,7 @@ export function buildAnalysisResult(
     levels,
     riskReward: setup.riskReward,
     reasoning: buildReasoning(candles, {
+      locale,
       sdName: `${zoneLabel} (${setup.confidence}%)`,
       confidence: setup.confidence,
       pair: `${base}/${quote}`,

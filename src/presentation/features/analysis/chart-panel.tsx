@@ -248,7 +248,7 @@ export function ChartPanel({
   }, []);
 
   const { theme } = useTheme();
-  const { t } = useT();
+  const { t, locale } = useT();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -668,8 +668,11 @@ export function ChartPanel({
         )}
         {history.loading && history.progress && history.progress.totalPages > 1 && (
           <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-border bg-surface/90 px-3 py-1 text-[10px] font-semibold text-muted shadow-sm backdrop-blur">
-            Memuat histori {history.progress.loadedPages}/{history.progress.totalPages} ·{" "}
-            {history.progress.candles.toLocaleString("id-ID")} candle
+            {t("chart.loadingHistory", {
+              page: history.progress.loadedPages,
+              total: history.progress.totalPages,
+              candles: history.progress.candles.toLocaleString(locale === "id" ? "id-ID" : "en-US"),
+            })}
           </div>
         )}
       </div>

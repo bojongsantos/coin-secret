@@ -121,7 +121,16 @@ export const MESSAGES = {
   "language.title": { id: "Bahasa", en: "Language" },
 
   // --------------------------------------------------------------- dashboard
-  "dashboard.topSetups": { id: "Top 5 setup hari ini", en: "Today's top 5 setups" },
+  "dashboard.topSetups": { id: "Top Setup Hari Ini", en: "Today's Top Setups" },
+  "dashboard.marketOverview": { id: "Ringkasan Pasar", en: "Market Overview" },
+
+  // --------------------------------------------------------------------- ads
+  "ads.label": { id: "Iklan", en: "Ad" },
+  "ads.placeholderTitle": { id: "Slot iklan {index}", en: "Ad slot {index}" },
+  "ads.placeholderBody": {
+    id: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ruang ini menunggu materi iklan; teksnya sengaja bukan berita agar tidak terbaca sebagai informasi pasar.",
+    en: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. This space is waiting for its creative; the filler is deliberately not a headline so it cannot read as market information.",
+  },
   "dashboard.scanning": { id: "Memindai…", en: "Scanning…" },
   "dashboard.noSetups": {
     id: "Belum ada setup yang lolos ambang hari ini.",
@@ -380,9 +389,27 @@ export const MESSAGES = {
   "metric.unavailable": { id: "Data tidak tersedia", en: "Data unavailable" },
   "rail.marketContext": { id: "Konteks Pasar", en: "Market Context" },
   "rail.marketSentiment": { id: "Sentimen Pasar", en: "Market Sentiment" },
+  "rail.indexScale": { id: "Skala Indeks", en: "Index Scale" },
+  "rail.sentimentUnavailable": {
+    id: "Data Fear & Greed belum tersedia.",
+    en: "Fear & Greed data is not available yet.",
+  },
+  "scan.partialFailure": {
+    id: "{count} simbol gagal dipindai.",
+    en: "{count} symbols could not be scanned.",
+  },
   "rail.convictionScore": { id: "Skor Keyakinan", en: "Conviction Score" },
   "rail.confidenceScore": { id: "Skor Confidence", en: "Confidence Score" },
   "rail.waitingForData": { id: "Menunggu data live", en: "Waiting for live data" },
+  "grade.A": { id: "Setup berkualitas tinggi", en: "High quality setup" },
+  "grade.B": { id: "Setup layak dipertimbangkan", en: "Worth considering" },
+  "grade.C": { id: "Setup marjinal", en: "Marginal setup" },
+  "grade.D": { id: "Setup lemah", en: "Weak setup" },
+  "grade.F": { id: "Setup tidak direkomendasikan", en: "Not recommended" },
+  "conviction.zoneQuality": { id: "Kualitas Zona", en: "Zone Quality" },
+  "conviction.zoneFreshness": { id: "Kesegaran Zona", en: "Zone Freshness" },
+  "conviction.touchPenalty": { id: "Penalti Sentuhan", en: "Touch Penalty" },
+  "conviction.baseScore": { id: "Skor Dasar", en: "Base Score" },
   "conviction.quality": {
     id: "Rasio kerapatan zona terhadap volatilitas pasar. Semakin sempit, semakin akurat sebagai level entry.",
     en: "How tight the zone is against the market's volatility. The narrower it is, the sharper it works as an entry level.",
@@ -437,6 +464,10 @@ export const MESSAGES = {
   },
 
   // ------------------------------------------------------------------- chart
+  "chart.loadingHistory": {
+    id: "Memuat histori {page}/{total} · {candles} candle",
+    en: "Loading history {page}/{total} · {candles} candles",
+  },
   "chart.loadLimit": {
     id: "Batas pemuatan tercapai. Geser ke kiri untuk menambah.",
     en: "The load limit is reached. Scroll left to fetch more.",

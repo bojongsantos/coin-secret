@@ -33,12 +33,19 @@ export function gradeOfConviction(score: number): ConvictionScore["grade"] {
   return "F";
 }
 
+/**
+ * A grade, said as a sentence.
+ *
+ * Stable English keys rather than finished copy: the card translates the grade
+ * at render, the same way it translates every other value the domain produces.
+ * The text here is the fallback when a caller has no message table to hand.
+ */
 const interpretationByGrade: Record<ConvictionScore["grade"], string> = {
-  A: "Setup berkualitas tinggi",
-  B: "Setup layak dipertimbangkan",
-  C: "Setup marjinal",
-  D: "Setup lemah",
-  F: "Setup tidak direkomendasikan",
+  A: "High quality setup",
+  B: "Worth considering",
+  C: "Marginal setup",
+  D: "Weak setup",
+  F: "Not recommended",
 };
 
 /** Reconstruct the conviction breakdown from the same inputs the detector used. */

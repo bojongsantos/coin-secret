@@ -114,10 +114,12 @@ function Column({
   title,
   hits,
   t,
+  maxHeight,
 }: {
   title: MessageKey;
   hits: SdScanHit[];
   t: Translate;
+  maxHeight: number;
 }) {
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   return (
@@ -133,7 +135,10 @@ function Column({
 
       {/* The board carries a couple of hundred pairs; the column scrolls
           rather than the page growing to the length of the longest side. */}
-      <div className="scrollbar-thin -mx-1 max-h-[600px] min-h-[220px] overflow-y-auto px-1">
+      <div
+        className="scrollbar-thin -mx-1 min-h-[220px] overflow-y-auto px-1"
+        style={{ maxHeight }}
+      >
         {hits.length === 0 ? (
           <p className="px-3 py-10 text-center text-[12px] text-muted-2">{t("zones.empty")}</p>
         ) : (
@@ -161,12 +166,17 @@ export function SignalsBoard({
   loading,
   error,
   onRefresh,
+  failedCount = 0,
+  maxHeight = 600,
 }: {
   demand: SdScanHit[];
   supply: SdScanHit[];
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  failedCount?: number;
+  /** How tall each column may grow before it scrolls on its own. */
+  maxHeight?: number;
 }) {
   const { t } = useT();
   const { canAccess } = usePlan();
@@ -190,16 +200,16 @@ export function SignalsBoard({
         </button>
       </div>
 
-      {error && !locked && (
+      {(error || failedCount > 0) && !locked && (
         <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12px] text-warning">
-          {error}
+          {error ?? t("scan.partialFailure", { count: failedCount })}
         </p>
       )}
 
       <div className={locked ? "pointer-events-none select-none blur-[6px]" : undefined} aria-hidden={locked}>
         <div className="mt-5 grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
-          <Column title="signals.longSetup" hits={demand} t={t} />
-          <Column title="signals.shortSetup" hits={supply} t={t} />
+          <Column title="signals.longSetup" hits={demand} t={t} maxHeight={maxHeight} />
+          <Column title="signals.shortSetup" hits={supply} t={t} maxHeight={maxHeight} />
         </div>
       </div>
 

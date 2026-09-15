@@ -6,7 +6,7 @@ import { AppShell } from "@/presentation/layout/app-shell";
 import { SignalsBoard } from "@/presentation/features/signals/signals-board";
 
 export function SignalsClient() {
-  const { result, loading, error, refresh } = useSdScan();
+  const { result, loading, error, failedCount, refresh } = useSdScan();
 
   return (
     <AppShell>
@@ -21,6 +21,7 @@ export function SignalsClient() {
           loading={loading}
           error={error}
           onRefresh={refresh}
+          failedCount={failedCount}
         />
       )}
     </AppShell>

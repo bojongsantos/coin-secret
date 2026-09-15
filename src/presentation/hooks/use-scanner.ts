@@ -92,12 +92,15 @@ export function useSdScan(enabled = true): {
   result: SdScanResult | null;
   loading: boolean;
   error: string | null;
+  /** Symbols the scan could not read, as a number rather than as a sentence. */
+  failedCount: number;
   lastRun: string | null;
   refresh: () => void;
 } {
   const [result, setResult] = useState<SdScanResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedCount, setFailedCount] = useState(0);
   const [lastRun, setLastRun] = useState<string | null>(null);
 
   const execute = useCallback(async (force: boolean) => {
@@ -105,11 +108,10 @@ export function useSdScan(enabled = true): {
     try {
       const payload = await postScan<SignalsApiPayload>("/api/signals", { force });
       setResult(payload.result);
-      setError(
-        payload.result.errors.length
-          ? `${payload.result.errors.length} simbol gagal dipindai.`
-          : null,
-      );
+      // A count, not a sentence: the wording is chosen at render, where the
+      // reader's language is known.
+      setFailedCount(payload.result.errors.length);
+      setError(null);
       setLastRun(payload.result.scannedAt);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -129,7 +131,7 @@ export function useSdScan(enabled = true): {
     };
   }, [execute, enabled]);
 
-  return { result, loading, error, lastRun, refresh };
+  return { result, loading, error, failedCount, lastRun, refresh };
 }
 
 export function useTopSetups(limit = 5): {

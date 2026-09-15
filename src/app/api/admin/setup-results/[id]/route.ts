@@ -1,15 +1,18 @@
-import { composeProofImage, type ProofInput } from "@/core/domain/promo/proof-image";
+import { composePnlCard } from "@/core/domain/promo/pnl-card";
+import type { ProofInput } from "@/core/domain/promo/proof-image";
 import { requireAdmin } from "@/infrastructure/auth/current-user";
 import { wordmarkDataUri } from "@/infrastructure/promo/brand-asset";
 import { prisma } from "@/infrastructure/database/prisma";
 import { apiError, HttpError } from "@/shared/server/http";
 
 /**
- * Renders the proof image on demand from the stored snapshot data.
+ * Renders the result card on demand from the stored snapshot data.
  *
  * Composed here rather than saved as markup so a change to the layout applies
  * to the whole archive at once, and so the same candles are not stored three
- * times over.
+ * times over. The stored payload is unchanged from the two-panel image this
+ * replaced — it already carried every figure the card states, so the archive
+ * did not have to be rewritten to change what it looks like.
  */
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -30,8 +33,19 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       throw new HttpError(409, "Bukti belum tersedia dalam bentuk terbaru.", "INCOMPLETE");
     }
 
-    const svg = composeProofImage({
-      ...proof,
+    const svg = composePnlCard({
+      symbol: proof.symbol,
+      // Only setups that reached the second target are archived, so a stored
+      // result is a win by construction. The losing branch exists for the
+      // share button, which can be handed any finished setup.
+      outcome: "target",
+      direction: proof.direction,
+      entryPrice: proof.entryFilledPrice,
+      exitPrice: proof.targetReachedPrice,
+      confidence: proof.confidence,
+      riskReward: proof.riskReward,
+      entryTime: proof.entryFilledTime,
+      exitTime: proof.targetReachedTime,
       logoHref: (await wordmarkDataUri()) ?? undefined,
     });
 

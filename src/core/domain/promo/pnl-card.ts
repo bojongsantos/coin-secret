@@ -40,6 +40,14 @@ export interface PnlInput {
   exitTime: number;
   /** Wordmark as a data URI, so the file stands alone once saved. */
   logoHref?: string;
+  /**
+   * The coin's own logo, as a data URI.
+   *
+   * A URL would resolve to nothing once the file leaves the site, and to
+   * nothing at all when the card is rasterised. Absent, the ticker's first
+   * letters are drawn instead — a plainer mark, but never a broken image.
+   */
+  coinIconHref?: string;
   /** Shown bottom right. The place a reader can go and check. */
   domain?: string;
 }
@@ -121,6 +129,39 @@ function backdrop(): string {
 }
 
 /**
+ * The coin's logo in a circle, or its ticker when there is no logo.
+ *
+ * Clipped rather than masked: a logo that is not square would otherwise spill
+ * past the circle, and several of them are not.
+ */
+function coinMark(href: string | undefined, base: string): string {
+  const cx = 135;
+  const cy = 354;
+  const r = 40;
+  if (!href) {
+    return (
+      `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${COLOR.bar}"/>` +
+      text(base.slice(0, 3), cx, cy + 12, {
+        size: 24,
+        weight: 700,
+        fill: COLOR.ink,
+        anchor: "middle",
+      })
+    );
+  }
+  // The id is built from the ticker so two cards rendered into one document
+  // cannot borrow each other's clip path.
+  const id = `coin-clip-${base.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  return (
+    `<defs><clipPath id="${id}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${COLOR.bar}"/>` +
+    `<image href="${escapeXml(href)}" x="${cx - r}" y="${cy - r}" width="${r * 2}" height="${
+      r * 2
+    }" clip-path="url(#${id})" preserveAspectRatio="xMidYMid slice"/>`
+  );
+}
+
+/**
  * The finished card.
  *
  * Two columns: the claim on the left, the decorative field on the right. The
@@ -162,13 +203,7 @@ export function composePnlCard(input: PnlInput): string {
       spacing: 1.5,
     }) +
     // The pair, and what became of it.
-    `<circle cx="135" cy="354" r="40" fill="${COLOR.bar}"/>` +
-    text(base.slice(0, 3), 135, 366, {
-      size: 24,
-      weight: 700,
-      fill: COLOR.ink,
-      anchor: "middle",
-    }) +
+    coinMark(input.coinIconHref, base) +
     text(`${base}/USDT`, 211, 344, { size: 30, weight: 600, spacing: 1 }) +
     text(outcomeLabel, 211, 384, { size: 20, weight: 400, fill: COLOR.muted }) +
     // The claim.

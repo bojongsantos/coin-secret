@@ -2,6 +2,7 @@ import { composePnlCard } from "@/core/domain/promo/pnl-card";
 import type { ProofInput } from "@/core/domain/promo/proof-image";
 import { requireAdmin } from "@/infrastructure/auth/current-user";
 import { wordmarkDataUri } from "@/infrastructure/promo/brand-asset";
+import { coinIconDataUri } from "@/infrastructure/promo/coin-asset";
 import { prisma } from "@/infrastructure/database/prisma";
 import { apiError, HttpError } from "@/shared/server/http";
 
@@ -47,6 +48,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       entryTime: proof.entryFilledTime,
       exitTime: proof.targetReachedTime,
       logoHref: (await wordmarkDataUri()) ?? undefined,
+      coinIconHref: (await coinIconDataUri(proof.symbol)) ?? undefined,
     });
 
     return new Response(svg, {

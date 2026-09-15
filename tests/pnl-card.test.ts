@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { coinIconSources } from "@/core/domain/market/coin-icon";
 import {
   composePnlCard,
   escapeXml,
@@ -113,4 +114,49 @@ test("markup cannot be injected through a symbol name", () => {
     composePnlCard(card({ symbol: "</text><script>alert(1)</script>" })),
     /<script>/i,
   );
+});
+
+test("a coin's logo is drawn when there is one, and its ticker when there is not", () => {
+  const plain = composePnlCard(card());
+  assert.ok(!plain.includes("<image"), "no logo means no image element at all");
+  assert.ok(plain.includes(">BTC<"), "the ticker stands in for it");
+
+  const withLogo = composePnlCard(card({ coinIconHref: "data:image/png;base64,AAAA" }));
+  assert.match(withLogo, /<image href="data:image\/png;base64,AAAA"/);
+  assert.match(withLogo, /clip-path="url\(#coin-clip-btc\)"/, "clipped to the circle");
+  assert.ok(!withLogo.includes(">BTC<"), "the ticker is not drawn under the logo");
+});
+
+test("two cards in one document cannot borrow each other's clip path", () => {
+  // Ids are global to a document. Sharing one would let whichever definition
+  // came first clip both logos — the same trap that left the confidence ring
+  // painting nothing.
+  const btc = composePnlCard(card({ coinIconHref: "data:image/png;base64,AAAA" }));
+  const eth = composePnlCard(card({ symbol: "ETHUSDT", coinIconHref: "data:image/png;base64,AAAA" }));
+  const idOf = (svg: string) => /<clipPath id="([^"]+)"/.exec(svg)?.[1];
+  assert.ok(idOf(btc));
+  assert.notEqual(idOf(btc), idOf(eth));
+});
+
+test("a clip path id survives a ticker that is not a plain word", () => {
+  // "1000SATS" and "BANANAS31" are real pairs on this board, and an id has to
+  // be a usable name whatever the ticker looks like.
+  const svg = composePnlCard(card({ symbol: "1000SATSUSDT", coinIconHref: "data:image/png;base64,AA" }));
+  const id = /<clipPath id="([^"]+)"/.exec(svg)?.[1];
+  assert.ok(id && /^[a-z0-9-]+$/.test(id), `unusable clip id: ${id}`);
+  assert.ok(svg.includes(`url(#${id})`), "and the image points at it");
+});
+
+test("logos are looked for at Binance first, then the older source", () => {
+  // Measured across the whole watchlist: Binance answered for 193 of 193 and
+  // the older source for 138. The 55 it missed included PEPE, TRUMP, ORDI and
+  // IOTA, every one of which showed two grey letters where a logo belonged.
+  const sources = coinIconSources("PEPEUSDT");
+  assert.equal(sources.length, 2, "one CDN is a single point of failure");
+  assert.match(sources[0], /^https:\/\/bin\.bnbstatic\.com\/static\/assets\/logos\/PEPE\.png$/);
+  assert.match(sources[1], /^https:\/\/assets\.coincap\.io\/assets\/icons\/pepe@2x\.png$/);
+
+  // The pair suffix never reaches the URL, in either case.
+  for (const url of coinIconSources("btcusdt")) assert.ok(!/usdt/i.test(url), url);
+  assert.deepEqual(coinIconSources(""), []);
 });

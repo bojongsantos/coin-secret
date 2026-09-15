@@ -22,6 +22,13 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      // Binance's own logo host. The board is made of Binance pairs and it has
+      // a logo for every one of them; the source below covers 138 of the 193.
+      {
+        protocol: "https",
+        hostname: "bin.bnbstatic.com",
+        pathname: "/static/assets/logos/**",
+      },
       {
         protocol: "https",
         hostname: "assets.coincap.io",

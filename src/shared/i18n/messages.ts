@@ -119,6 +119,7 @@ export const MESSAGES = {
 
   // ---------------------------------------------------------------- language
   "language.title": { id: "Bahasa", en: "Language" },
+  "theme.label": { id: "Tema", en: "Theme" },
 
   // --------------------------------------------------------------- dashboard
   "dashboard.topSetups": { id: "Top Setup Hari Ini", en: "Today's Top Setups" },

@@ -5,6 +5,22 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useT } from "@/presentation/hooks/use-translate";
 
 /**
+ * A heading in the design's two tones: the first word carries the weight and
+ * the rest recedes. Written as one string in the message table and split here,
+ * so a translator never has to know about the seam.
+ */
+function TwoTone({ text }: { text: string }) {
+  const space = text.indexOf(" ");
+  if (space < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, space)}
+      <span className="font-semibold text-muted"> {text.slice(space + 1)}</span>
+    </>
+  );
+}
+
+/**
  * The outer container every dashboard block sits in.
  *
  * One component rather than the same six classes written out per block: the
@@ -31,7 +47,7 @@ export function Panel({
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
           {icon}
-          {title}
+          <TwoTone text={title} />
         </h2>
         {onRefresh && (
           <button

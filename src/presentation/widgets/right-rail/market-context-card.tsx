@@ -4,6 +4,7 @@ import { Info, ShieldAlert, TrendingDown, TrendingUp } from "lucide-react";
 import type { MarketContext } from "@/core/domain/models";
 import { Delta } from "@/presentation/ui/delta";
 import { Tooltip } from "@/presentation/ui/tooltip";
+import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { domainMessageKey } from "@/shared/i18n/messages";
 
@@ -78,7 +79,7 @@ ${t("metric.unavailableNote")}` : help}>
 export function MarketContextCard({ data }: { data: MarketContext }) {
   const { t } = useT();
   return (
-    <section className="card p-4">
+    <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
       <h3 className="text-[13px] font-semibold">{t("rail.marketContext")}</h3>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -86,10 +87,15 @@ export function MarketContextCard({ data }: { data: MarketContext }) {
           const up = coin.direction === "up";
           const Icon = up ? TrendingUp : TrendingDown;
           return (
-            <div key={coin.id} className="rounded-lg border border-border bg-surface-2 p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">{coin.label}</span>
-                <Icon className={`size-4 ${up ? "text-positive" : "text-negative"}`} />
+            <div key={coin.id} className="rounded-xl border border-border bg-surface-2 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <CoinIcon symbol={`${coin.label}USDT`} size={20} />
+                  <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-2">
+                    {coin.label}/USDT
+                  </span>
+                </span>
+                <Icon className={`size-4 shrink-0 ${up ? "text-positive" : "text-negative"}`} />
               </div>
               <p className="mt-1 text-lg font-bold tabular-nums leading-none">
                 {coin.value === "—" ? coin.value : `$${coin.value}`}

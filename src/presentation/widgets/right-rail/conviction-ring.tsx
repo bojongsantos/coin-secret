@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
-const SIZE = 150;
-const R = 66;
-const STROKE = 9;
+const SIZE = 132;
+const R = 56;
+const STROKE = 11;
 const C = 2 * Math.PI * R;
 
 export const gradeColor: Record<string, string> = {
@@ -24,8 +24,12 @@ interface ConvictionRingProps {
   grade: string;
 }
 
-export function ConvictionRing({ score, grade }: ConvictionRingProps) {
-  const color = gradeColor[grade] ?? gradeColor.F;
+export function ConvictionRing({ score }: ConvictionRingProps) {
+  // A unique gradient id per instance. Pages here can render twice — React's
+  // streaming SSR leaves a hidden copy — and `url(#id)` resolves to whichever
+  // definition comes first in the document. With a shared id the visible ring
+  // reached for the hidden copy's gradient and painted nothing at all.
+  const gradientId = useId();
   const [animated, setAnimated] = useState(0);
 
   useEffect(() => {
@@ -56,13 +60,19 @@ export function ConvictionRing({ score, grade }: ConvictionRingProps) {
           stroke="rgba(255,255,255,0.06)"
           strokeWidth={STROKE}
         />
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="var(--color-accent-blue)" />
+            <stop offset="100%" stopColor="var(--color-accent)" />
+          </linearGradient>
+        </defs>
         {/* Foreground progress — solid, flat, rounded caps */}
         <circle
           cx={SIZE / 2}
           cy={SIZE / 2}
           r={R}
           fill="none"
-          stroke={color}
+          stroke={`url(#${gradientId})`}
           strokeWidth={STROKE}
           strokeLinecap="round"
           strokeDasharray={C}
@@ -74,8 +84,10 @@ export function ConvictionRing({ score, grade }: ConvictionRingProps) {
 
       {/* Center text — no container, transparent */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <span className="text-[38px] font-semibold leading-none text-white">{Math.round(animated)}</span>
-        <span className="ml-1.5 text-[17px] font-medium text-white/50">/100</span>
+        <span className="text-[34px] font-bold leading-none text-foreground">
+          {Math.round(animated)}
+        </span>
+        <span className="ml-1 text-[14px] font-medium text-muted-2">/100</span>
       </div>
     </div>
   );

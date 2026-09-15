@@ -27,12 +27,7 @@ export function MarketSentimentCard({ data }: { data: SentimentData }) {
 
   return (
     <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold">{t("rail.marketSentiment")}</h3>
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-2">
-          {t("rail.indexScale")}
-        </span>
-      </div>
+      <h3 className="text-[13px] font-semibold">{t("rail.marketSentiment")}</h3>
 
       <div className="mt-2 flex justify-center">
         <Gauge score={data.score} label={data.label} />

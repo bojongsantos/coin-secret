@@ -1,7 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { CandlestickChart, Loader2, Lock, RefreshCw } from "lucide-react";
+import {
+  CandlestickChart,
+  Check,
+  Hourglass,
+  Loader2,
+  Lock,
+  MinusCircle,
+  Play,
+  RefreshCw,
+  Sparkle,
+  Trophy,
+  XCircle,
+} from "lucide-react";
 import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
@@ -13,24 +25,30 @@ import { formatCompact } from "@/shared/lib/format";
  * The tone each status is shown in. Terminal outcomes are not neutral news:
  * a stop taken reads red, a target reached reads green.
  */
-const STATUS_TONE: Record<string, string> = {
-  "Limit Order": "border-warning/30 bg-warning/10 text-warning",
-  Filled: "border-accent-blue/30 bg-accent-blue/10 text-accent-blue",
-  Running: "border-positive/30 bg-positive/10 text-positive",
-  "Target 1 reached": "border-accent/30 bg-accent/10 text-accent-2",
-  "Target 2 reached": "border-positive/30 bg-positive/10 text-positive",
-  "Invalidated (SL hit)": "border-negative/30 bg-negative/10 text-negative",
-  Missed: "border-border bg-surface-3 text-muted-2",
+/**
+ * The mark each status carries.
+ *
+ * The chip itself stays dark and only the mark is coloured. A column of
+ * saturated pills competed with the confidence figure beside it, which is the
+ * number the row exists to show.
+ */
+const STATUS_MARK: Record<string, { icon: typeof Check; tone: string }> = {
+  "Limit Order": { icon: Hourglass, tone: "text-warning" },
+  Filled: { icon: Check, tone: "text-accent-blue" },
+  Running: { icon: Play, tone: "text-positive" },
+  "Target 1 reached": { icon: Sparkle, tone: "text-accent-2" },
+  "Target 2 reached": { icon: Trophy, tone: "text-positive" },
+  "Invalidated (SL hit)": { icon: XCircle, tone: "text-negative" },
+  Missed: { icon: MinusCircle, tone: "text-muted-2" },
 };
 
 function StatusPill({ status, t }: { status: string; t: Translate }) {
   const key = statusMessageKey(status);
+  const mark = STATUS_MARK[status];
+  const Icon = mark?.icon ?? Check;
   return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10.5px] font-semibold ${
-        STATUS_TONE[status] ?? "border-border bg-surface-3 text-muted"
-      }`}
-    >
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-3 px-2.5 py-1 text-[10.5px] font-semibold text-foreground">
+      <Icon className={`size-3 shrink-0 ${mark?.tone ?? "text-muted-2"}`} />
       {key ? t(key) : status}
     </span>
   );
@@ -185,7 +203,7 @@ export function SignalsBoard({
   return (
     <div className="relative rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight">
+        <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
           <CandlestickChart className="size-5 text-accent-blue" />
           {t("nav.signals")}
         </h2>

@@ -3,7 +3,6 @@
 import { Scale, TrendingDown, TrendingUp } from "lucide-react";
 import type { PatternSummary, TradeLevel } from "@/core/domain/models";
 import { formatPercent, formatPrice } from "@/shared/lib/format";
-import { ProgressBar } from "@/presentation/ui/progress-bar";
 import { Badge } from "@/presentation/ui/badge";
 import { LockedOverlay } from "@/presentation/ui/locked-overlay";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
@@ -22,20 +21,13 @@ function levelLabel(t: Translate, label: string): string {
   return key ? t(key) : label;
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface-2 p-2.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-2">{label}</p>
-      <p className="mt-0.5 text-[15px] font-bold leading-none">{value}</p>
-      {sub && <p className="mt-0.5 text-[10px] text-muted">{sub}</p>}
-    </div>
-  );
-}
-
 export function PatternCard({ pattern, levels, riskReward, precision }: PatternCardProps) {
   const { t } = useT();
   const bullish = pattern.trend === "bullish";
   const TrendIcon = bullish ? TrendingUp : TrendingDown;
+  const finished =
+    pattern.status === "Invalidated (SL hit)" || pattern.status === "Target 2 reached";
+
   // The engine names patterns, trends and risk in stable English so the rest
   // of the system can compare them. They are turned into the reader's language
   // here and nowhere else.
@@ -43,19 +35,29 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
   const statusKey = statusMessageKey(pattern.status);
   const trendKey = domainMessageKey("trend", pattern.trend);
   const riskKey = domainMessageKey("risk", pattern.riskLevel);
-  const statusInvalid = pattern.status === "Invalidated (SL hit)" || pattern.status === "Target 2 reached";
+
   return (
-    <section className="card flex flex-col p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold">{t("plan.tradingPlan")}</h3>
-        <Badge tone={statusInvalid ? "negative" : "positive"}>
+    <section className="flex flex-col rounded-2xl border border-border bg-surface p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[14px] font-semibold">{t("plan.tradingPlan")}</h3>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-semibold ${
+            finished
+              ? "border-negative/30 bg-negative/10 text-negative"
+              : "border-positive/30 bg-positive/10 text-positive"
+          }`}
+        >
+          <span
+            className={`size-1.5 rounded-full ${finished ? "bg-negative" : "bg-positive"}`}
+            aria-hidden
+          />
           {statusKey ? t(statusKey) : pattern.status}
-        </Badge>
+        </span>
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
-        <span className="text-xl font-bold tracking-tight">
-          <span className="gradient-text">{nameKey ? t(nameKey) : pattern.name}</span>
+      <div className="mt-4 flex flex-wrap items-center gap-2.5">
+        <span className="text-[26px] font-bold leading-none tracking-tight">
+          {nameKey ? t(nameKey) : pattern.name}
         </span>
         {pattern.trend !== "neutral" && (
           <Badge tone={bullish ? "positive" : "negative"}>
@@ -65,68 +67,74 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className="rounded-lg border border-border bg-surface-2 p-2.5">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-2">{t("plan.confidence")}</p>
-            <span className="text-xs font-bold text-accent-2">{pattern.confidence}%</span>
+      {/* Confidence and risk side by side, as two readings of the same plan. */}
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border bg-surface-2 p-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[11px] font-medium text-muted-2">{t("plan.confidence")}</p>
+            <span className="text-[13px] font-bold text-accent-blue">{pattern.confidence}%</span>
           </div>
-          <ProgressBar value={pattern.confidence} className="mt-1.5" />
+          <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-accent-blue to-accent"
+              style={{ width: `${Math.min(100, Math.max(0, pattern.confidence))}%` }}
+            />
+          </div>
         </div>
-        <Stat label={t("plan.riskLevel")} value={riskKey ? t(riskKey) : pattern.riskLevel} />
+        <div className="rounded-xl border border-border bg-surface-2 p-3">
+          <p className="text-[11px] font-medium text-muted-2">{t("plan.riskLevel")}</p>
+          <p className="mt-1.5 text-[17px] font-bold capitalize leading-none">
+            {riskKey ? t(riskKey) : pattern.riskLevel}
+          </p>
+        </div>
       </div>
 
-      <div className="mt-4">
-        <div className="mb-2 flex items-center gap-1.5">
+      <div className="mt-5">
+        <div className="mb-2.5 flex items-center gap-1.5">
           <Scale className="size-3.5 text-muted-2" />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">{t("plan.breakdown")}</span>
+          <span className="text-[11.5px] font-semibold text-muted">{t("plan.breakdown")}</span>
         </div>
+
         <LockedOverlay feature="entryBreakdown">
           <ul className="space-y-1.5">
             {levels.map((level) => {
               const positive = level.changeFromPrice > 0;
-              const isSl = level.id === "sl";
+              const isStop = level.id === "sl";
               return (
                 <li
                   key={level.id}
-                  className="flex items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-2 px-3.5 py-2.5"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-medium text-muted">{levelLabel(t, level.label)}</span>
-                    {level.filled && (
-                      <Badge tone="positive" className="text-[9px]">
-                        {t("status.Filled")}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2.5">
+                  <span className="text-[12.5px] font-medium text-muted">
+                    {levelLabel(t, level.label)}
+                  </span>
+                  <span className="flex items-center gap-2.5">
                     <span
-                      className={`text-[12px] font-semibold tabular-nums ${
-                        isSl ? "text-negative" : positive ? "text-positive" : "text-foreground"
+                      className={`text-[11px] font-medium tabular-nums ${
+                        isStop ? "text-negative" : positive ? "text-positive" : "text-muted-2"
+                      }`}
+                    >
+                      {level.changeFromPrice === 0 ? "" : formatPercent(level.changeFromPrice)}
+                    </span>
+                    <span
+                      className={`text-[13px] font-bold tabular-nums ${
+                        isStop ? "text-negative" : positive ? "text-positive" : "text-foreground"
                       }`}
                     >
                       ${formatPrice(level.price, precision)}
                     </span>
-                    <span
-                      className={`w-16 text-right text-[11px] font-medium tabular-nums ${
-                        isSl ? "text-negative" : positive ? "text-positive" : "text-muted-2"
-                      }`}
-                    >
-                      {level.changeFromPrice === 0 ? "—" : formatPercent(level.changeFromPrice)}
-                    </span>
-                  </div>
+                  </span>
                 </li>
               );
             })}
           </ul>
 
-          <div className="mt-2 flex items-center justify-between rounded-lg bg-gradient-to-r from-accent/15 to-accent-blue/15 px-3 py-2">
-            <span className="text-[12px] font-medium text-muted">{t("plan.riskReward")}</span>
-            <span className="text-[13px] font-bold tabular-nums text-foreground">1 : {riskReward.toFixed(0)}</span>
+          <div className="mt-1.5 flex items-center justify-between rounded-xl border border-accent-blue/30 bg-gradient-to-r from-accent-blue/15 to-accent/15 px-3.5 py-2.5">
+            <span className="text-[12.5px] font-medium text-foreground">{t("plan.riskReward")}</span>
+            <span className="text-[14px] font-bold tabular-nums">1 : {riskReward.toFixed(0)}</span>
           </div>
         </LockedOverlay>
       </div>
-
     </section>
   );
 }

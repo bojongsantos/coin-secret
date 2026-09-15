@@ -1,4 +1,6 @@
-import { CheckCircle2, ChartNoAxesCombined } from "lucide-react";
+"use client";
+
+import { CheckCircle2 } from "lucide-react";
 import type { ReasoningSection } from "@/core/domain/models";
 import { useT } from "@/presentation/hooks/use-translate";
 
@@ -15,15 +17,15 @@ function renderPoint(text: string) {
   );
 }
 
-function SectionBlock({ section }: { section: ReasoningSection }) {
+function SectionCard({ section }: { section: ReasoningSection }) {
   return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-2">{section.title}</p>
-      <ul className="mt-1.5 space-y-1.5">
+    <div className="rounded-2xl border border-border bg-surface p-5">
+      <p className="text-[13.5px] font-bold">{section.title}</p>
+      <ul className="mt-4 space-y-2.5">
         {section.points.map((point, i) => (
-          <li key={i} className="flex items-start gap-2 text-[12px] leading-relaxed text-muted">
-            <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-positive" />
-            <span>{renderPoint(point)}</span>
+          <li key={i} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-muted">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-positive" />
+            <span className="min-w-0">{renderPoint(point)}</span>
           </li>
         ))}
       </ul>
@@ -31,31 +33,36 @@ function SectionBlock({ section }: { section: ReasoningSection }) {
   );
 }
 
+/**
+ * The reasoning, in the design's three tracks.
+ *
+ * Risk management runs to seven or eight lines while the others run to two or
+ * three, so it takes a column of its own and the short blocks stack in the
+ * other two. Stacked in one column it pushed everything else a screen down.
+ */
 export function ReasoningCard({ sections }: { sections: ReasoningSection[] }) {
   const { t } = useT();
-  return (
-    <section className="card flex flex-col p-4">
-      <div className="flex items-center gap-1.5">
-        <ChartNoAxesCombined className="size-4 text-accent-2" />
-        <h3 className="text-[13px] font-semibold">{t("plan.reasoning")}</h3>
-      </div>
+  const risk = sections.find((section) => section.id === "risk");
+  const rest = sections.filter((section) => section.id !== "risk");
+  const left = rest.filter((_, index) => index % 2 === 0);
+  const right = rest.filter((_, index) => index % 2 === 1);
 
-      <div className="mt-3 flex-1 space-y-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-4">
-            {sections.slice(0, 2).map((section) => (
-              <SectionBlock key={section.id} section={section} />
-            ))}
-          </div>
-          <div className="space-y-4">
-            {sections.slice(2, 4).map((section) => (
-              <SectionBlock key={section.id} section={section} />
-            ))}
-          </div>
+  return (
+    <section>
+      <h2 className="text-[20px] font-bold tracking-tight sm:text-[22px]">{t("plan.reasoning")}</h2>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+        <div className="space-y-4">
+          {left.map((section) => (
+            <SectionCard key={section.id} section={section} />
+          ))}
         </div>
-        {sections.slice(4).map((section) => (
-          <SectionBlock key={section.id} section={section} />
-        ))}
+        <div className="space-y-4">
+          {right.map((section) => (
+            <SectionCard key={section.id} section={section} />
+          ))}
+        </div>
+        <div>{risk && <SectionCard section={risk} />}</div>
       </div>
     </section>
   );

@@ -221,8 +221,6 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
             <Languages className="size-[18px]" />
           </button>
 
-          <ThemeToggle className="size-11 shrink-0 rounded-xl" />
-
           {!resolved ? (
             <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl border border-border bg-surface sm:w-44" />
           ) : user ? (
@@ -262,6 +260,10 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                     <Settings className="size-4" />
                     {t("account.settings")}
                   </Link>
+                  <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
+                    <span className="text-[12.5px] font-semibold text-muted">{t("theme.label")}</span>
+                    <ThemeToggle className="size-8 rounded-lg" />
+                  </div>
                   {user.role === "ADMIN" && (
                     <Link
                       href="/admin"

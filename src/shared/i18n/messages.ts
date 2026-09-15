@@ -222,13 +222,18 @@ export const MESSAGES = {
   "chart.imageFailed": { id: "Gambar gagal dibuat.", en: "The image could not be produced." },
 
   // ----------------------------------------------------------------- pricing
-  "pricing.headline": {
-    id: "Mulai baca pasar dengan aturan, bukan tebakan",
-    en: "Read the market by rule, not by guess",
+  "pricing.headlineA": { id: "Berhenti menyisir chart.", en: "Stop scrolling charts." },
+  "pricing.headlineB": { id: "Mulai temukan setup.", en: "Start finding setups." },
+  "pricing.startFree": { id: "Mulai Gratis", en: "Start for Free" },
+  "pricing.subscribe": { id: "Berlangganan", en: "Subscribe" },
+  "pricing.benefits": { id: "Manfaat", en: "Benefits" },
+  "pricing.noteUpfrontPlain": {
+    id: "Pro dibayar sekali di muka untuk periode yang dipilih dan tidak diperpanjang otomatis; tidak ada tagihan berulang.",
+    en: "Pro is paid once up front for the period you choose and does not auto-renew; there are no recurring charges.",
   },
   "pricing.subhead": {
-    id: "Satu paket berbayar, tanpa tingkatan tersembunyi. Seluruh analisis dihasilkan dari aturan teknikal terprogram, dan Coin Secret tidak mengeksekusi transaksi.",
-    en: "One paid plan, with no hidden tiers. Every analysis comes from programmed technical rules, and Coin Secret never places a trade.",
+    id: "Berhenti menyisir chart berjam-jam. CoinSecret memindai pasar untukmu dan menyerahkan rencana trading yang siap dieksekusi.",
+    en: "Stop scrolling charts for hours. CoinSecret scans the market for you and delivers trading plans ready to execute.",
   },
   "pricing.periodGroup": { id: "Periode langganan", en: "Billing period" },
   "pricing.period.monthly": { id: "Bulanan", en: "Monthly" },
@@ -334,10 +339,11 @@ export const MESSAGES = {
   "auth.failed": { id: "Autentikasi gagal.", en: "Authentication failed." },
 
   // ----------------------------------------------------------------- billing
-  "billing.title": { id: "Akun & Billing", en: "Account & Billing" },
+  "billing.title": { id: "Akun & Tagihan", en: "Account & Bill" },
+  "billing.proTitle": { id: "Coin Secret Pro", en: "Coin Secret Pro" },
   "billing.subtitle": {
-    id: "Kelola identitas dan paket Coin Secret.",
-    en: "Manage your Coin Secret identity and plan.",
+    id: "Kelola identitas dan paket Coin Secret Anda.",
+    en: "Manage your identity and Coin Secret packages.",
   },
   "billing.profile": { id: "Profil", en: "Profile" },
   "billing.role": { id: "Role", en: "Role" },
@@ -352,7 +358,7 @@ export const MESSAGES = {
   "billing.passwordFailed": { id: "Password gagal diubah.", en: "The password could not be changed." },
   "billing.proPitch": {
     id: "Seluruh coin dan seluruh trading plan, tanpa batas pencarian.",
-    en: "Every coin and every trading plan, with no search limit.",
+    en: "All coins and all trading plans, with unlimited search.",
   },
   "billing.perMonthAnnual": {
     id: "/ bulan pada paket tahunan",
@@ -469,6 +475,7 @@ export const MESSAGES = {
     id: "Memuat histori {page}/{total} · {candles} candle",
     en: "Loading history {page}/{total} · {candles} candles",
   },
+  "chart.intervalGroup": { id: "Interval candle", en: "Candle interval" },
   "chart.loadLimit": {
     id: "Batas pemuatan tercapai. Geser ke kiri untuk menambah.",
     en: "The load limit is reached. Scroll left to fetch more.",
@@ -514,13 +521,43 @@ export const MESSAGES = {
   "landing.nav.products": { id: "Produk", en: "Products" },
   "landing.nav.buyPremium": { id: "Beli Premium", en: "Buy Premium" },
   "landing.eyebrow": { id: "Coin Secret", en: "Coin Secret" },
+  "landing.heroA": { id: "Berhenti menyisir chart.", en: "Stop scrolling charts." },
+  "landing.heroB": { id: "Mulai temukan setup.", en: "Start finding setups." },
+  "landing.live": { id: "Live", en: "Live" },
+  "landing.nav.features": { id: "Fitur", en: "Features" },
+  "landing.getPro": { id: "Ambil Pro {price}/bulan", en: "Get Pro {price}/month" },
+  "landing.copyright": { id: "©{year} CoinSecret", en: "©{year} CoinSecret" },
+  "landing.aboutBody": {
+    id: "Tiap hari trading dimulai dengan cara yang sama: buka pasar, cari setup, susun rencana. CoinSecret mengerjakan dua yang pertama supaya kamu tinggal hadir untuk yang ketiga.",
+    en: "Every trading day starts the same way. Open the market, find a setup, build a plan. CoinSecret handles the first two so you only have to show up for the third.",
+  },
+  "landing.feature.signals": { id: "Signals", en: "Signals" },
+  "landing.feature.signalsBody": {
+    id: "Zona supply dan demand langsung di lebih dari 190 pair, tiap satunya membawa rencana trading utuh: entry, target, stop-loss, dan rasio risk-reward.",
+    en: "Live supply and demand zones across 190+ pairs, each with a complete trading plan. Entry, targets, stop-loss, and risk-reward ratio.",
+  },
+  "landing.feature.alpha": { id: "Alpha Report", en: "Alpha Report" },
+  "landing.feature.alphaBody": {
+    id: "Riset per aset yang menggabungkan analisis teknikal dan aktivitas on-chain. Tahu apa kata chart dan apa yang sedang dilakukan whale, sebelum pasar bergerak.",
+    en: "Per-asset research combining technical analysis and on-chain activity. Know what the chart shows and what whales are doing, before the market moves.",
+  },
+  "landing.feature.unlock": { id: "Token Unlock", en: "Token Unlock" },
+  "landing.feature.unlockBody": {
+    id: "Lacak jadwal unlock token yang bisa menggerakkan harga. Tahu kapan pasokan besar masuk pasar sebelum itu terjadi.",
+    en: "Track upcoming token unlocks that could affect price. Know when large supply enters the market before it happens.",
+  },
+  "landing.feature.news": { id: "News", en: "News" },
+  "landing.feature.newsBody": {
+    id: "Berita Web3 terkurasi dari kripto, DeFi, dan blockchain.",
+    en: "Curated Web3 news across crypto, DeFi, and blockchain.",
+  },
   "landing.headline": {
     id: "Zona supply dan demand di {pairs} pair, dibaca aturan yang sama setiap kali",
     en: "Supply and demand zones on {pairs} pairs, read by the same rules every time",
   },
   "landing.subhead": {
-    id: "Coin Secret memindai pasar kripto dengan aturan teknikal yang tetap, bukan model yang menebak. Tiap setup datang lengkap dengan entry, dua target, dan level yang membatalkannya — beserta alasan yang bisa kamu periksa sendiri.",
-    en: "Coin Secret scans the crypto market with fixed technical rules, not a model that guesses. Every setup arrives with an entry, two targets and the level that voids it — and the reasoning is there for you to check.",
+    id: "CoinSecret memindai pasar untukmu dan menyerahkan rencana trading yang siap dieksekusi.",
+    en: "CoinSecret scans the market for you and delivers ready-to-execute trading plans.",
   },
   "landing.disclaimer": {
     id: "Not Financial Advice · DYOR · analisis teknikal berbasis aturan, bukan nasihat investasi",

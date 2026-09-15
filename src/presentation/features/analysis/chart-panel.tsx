@@ -25,6 +25,7 @@ import {
 import {
   type HistoryRange,
 } from "@/core/application/market-data/history-plan";
+import { Download } from "lucide-react";
 import { TIMEFRAMES, TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import { EXPORT_CHART_HEIGHT, EXPORT_CHART_WIDTH } from "@/presentation/features/analysis/share-image";
 import type { Candle, ChartData, PatternSummary, Timeframe, TradeLevel } from "@/core/domain/models";
@@ -32,6 +33,7 @@ import { formatPrice } from "@/shared/lib/format";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useTheme } from "@/presentation/hooks/use-ui-preference";
 import { useT } from "@/presentation/hooks/use-translate";
+import { CoinIcon } from "@/presentation/ui/coin-icon";
 import type { HistoryState } from "@/presentation/hooks/use-live-analysis";
 
 /**
@@ -134,6 +136,10 @@ interface ChartPanelProps {
   onLoadMoreHistory: () => Promise<void>;
   /** Filled with a chart snapshot function so the header can build a share image. */
   captureRef?: MutableRefObject<(() => HTMLCanvasElement | null) | null>;
+  /** Runs the image export. Omitted where the panel is only a chart. */
+  onDownload?: () => void;
+  downloadBusy?: boolean;
+  downloadLabel?: string;
 }
 
 /**
@@ -190,6 +196,9 @@ export function ChartPanel({
   history,
   onLoadMoreHistory,
   captureRef,
+  onDownload,
+  downloadBusy,
+  downloadLabel,
 }: ChartPanelProps) {
   const { canAccess } = usePlan();
   const showTradeLevels = canAccess("entryBreakdown");
@@ -615,11 +624,12 @@ export function ChartPanel({
       : null;
 
   return (
-    <div className="card flex flex-col overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
         <div className="flex items-center gap-2.5">
-          <span className="text-sm font-bold">{symbol}</span>
-          <span className="text-sm font-semibold tabular-nums">
+          <CoinIcon symbol={symbol} size={28} />
+          <span className="text-[15px] font-bold">{symbol}</span>
+          <span className="text-[15px] font-semibold tabular-nums">
             ${formatPrice(price || (data.candles.at(-1)?.close ?? 0), precision)}
           </span>
           <span className={`text-xs font-semibold ${change24h >= 0 ? "text-positive" : "text-negative"}`}>
@@ -635,10 +645,25 @@ export function ChartPanel({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* The design keeps the export beside the interval switch rather
+              than in a header row of its own, which is what lets the panel
+              carry the pair's identity on its own line. */}
+          {onDownload && (
+            <button
+              type="button"
+              onClick={onDownload}
+              disabled={downloadBusy}
+              title={t("chart.downloadTitle")}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:border-border-strong hover:text-foreground disabled:opacity-60"
+            >
+              <Download className="size-3.5" />
+              {downloadLabel}
+            </button>
+          )}
           <div
             className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5"
             role="group"
-            aria-label="Interval candle"
+            aria-label={t("chart.intervalGroup")}
           >
             {TIMEFRAMES.map((tf) => (
               <button
@@ -646,8 +671,10 @@ export function ChartPanel({
                 type="button"
                 onClick={() => onTimeframeChange(tf)}
                 aria-pressed={timeframe === tf}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                  timeframe === tf ? "bg-accent/15 text-accent-2" : "text-muted-2 hover:text-foreground"
+                className={`rounded-md px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${
+                  timeframe === tf
+                    ? "bg-accent-blue text-white"
+                    : "text-muted-2 hover:text-foreground"
                 }`}
               >
                 {tf}

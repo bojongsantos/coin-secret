@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import type { Timeframe } from "@/core/domain/models";
-import { isValidBinanceSymbol, mergeSearchableSymbols, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
-import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
-import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
-import { AppShell } from "@/presentation/layout/app-shell";
-import { Loader2, RefreshCw } from "lucide-react";
 import { useT } from "@/presentation/hooks/use-translate";
+import { AppShell } from "@/presentation/layout/app-shell";
 
+/**
+ * One coin, opened on its own.
+ *
+ * Signals rows open this in a new tab, so the page is just the three blocks the
+ * design shows: chart, plan, reasoning. It used to carry a second symbol picker
+ * of its own above them, which duplicated the one in the bar and left two
+ * search boxes on the same screen disagreeing about what was selected.
+ */
 export function AnalysisClient({
   initialSymbol,
   initialTimeframe,
@@ -20,118 +24,37 @@ export function AnalysisClient({
   initialSymbol: string;
   initialTimeframe: Timeframe;
 }) {
-  // The same gate as the navbar. Leaving one way in open would make the
-  // limit look like a bug rather than a plan.
-  const { canAccess } = usePlan();
   const { t } = useT();
-  const canSearch = canAccess("symbolSearch");
-  const [symbol, setSymbol] = useState<string>(initialSymbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
-  // Not a reader's choice any more: how much history to load is decided by the
-  // interval, so the chart always has at least as much market as the detector
-  // that produced the row this page was opened from.
   const range = rangeForTimeframe(timeframe);
-  const [symbols, setSymbols] = useState<string[]>(DEFAULT_WATCHLIST);
-  const [query, setQuery] = useState(initialSymbol.replace(/USDT$/, ""));
-  const { analysis, loading, error, streamStatus, history, loadMoreHistory, publishedTimeframe } =
-    useLiveAnalysis(symbol, timeframe, range);
+  const { analysis, error, history, loadMoreHistory, publishedTimeframe } = useLiveAnalysis(
+    initialSymbol,
+    timeframe,
+    range,
+  );
 
   // Move the chart to the interval the published plan was measured on, unless
-  // the reader has picked one for this symbol themselves. Adjusting during
-  // render is React's own pattern for "state derived from a changing input";
-  // an effect would paint the wrong chart first and then correct it.
-  const [chosenFor, setChosenFor] = useState<string | null>(null);
-  if (publishedTimeframe && publishedTimeframe !== timeframe && chosenFor !== symbol) {
+  // the reader has picked one themselves. Adjusting during render is React's
+  // own pattern for state derived from a changing input; an effect would paint
+  // the wrong chart first and then correct it.
+  const [chosen, setChosen] = useState(false);
+  if (publishedTimeframe && publishedTimeframe !== timeframe && !chosen) {
     setTimeframe(publishedTimeframe);
   }
-  const chooseTimeframe = (next: Timeframe) => {
-    setChosenFor(symbol);
-    setTimeframe(next);
-  };
-
-
-  // The saved-favourites list is gone, so the catalogue is simply the market.
-  useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      setSymbols(mergeSearchableSymbols([], await fetchSearchableSymbols()));
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  const filtered = query.trim()
-    ? symbols.filter((s) => s.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 30)
-    : symbols.slice(0, 20);
-
-  const pick = (value: string) => {
-    const next = normalizeUsdtSymbol(value);
-    if (!isValidBinanceSymbol(next)) return;
-    setQuery(next.replace(/USDT$/i, ""));
-    setSymbol(next);
-  };
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-4 p-3 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-[12px] font-semibold text-muted">Symbol</label>
-            <input
-              list="symbol-options"
-              value={query}
-              onChange={(e) => {
-                const v = e.target.value;
-                setQuery(v);
-                const match = symbols.find((s) => s.replace(/USDT$/, "").toUpperCase() === v.trim().toUpperCase());
-                if (match) setSymbol(match);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") pick(e.currentTarget.value);
-              }}
-              disabled={!canSearch}
-              placeholder={canSearch ? t("analysis.searchSymbol") : "Pencarian simbol tersedia di Pro"}
-              className="w-56 rounded-lg border border-border bg-surface-3 px-3 py-1.5 text-[12px] font-semibold text-foreground placeholder:text-muted-2 focus:border-accent/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            <datalist id="symbol-options">
-              {filtered.map((s) => (
-                <option key={s} value={s.replace(/USDT$/, "")}>
-                  {s}
-                </option>
-              ))}
-            </datalist>
-            <select
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              className="hidden"
-              aria-hidden="true"
-            >
-              {symbols.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </select>
-          </div>
-          {loading && (
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-2">
-              <Loader2 className="size-3.5 animate-spin" />
-              Fetching live data…
-            </span>
-          )}
-          {!loading && analysis && (
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-2">
-              <RefreshCw className="size-3.5" />
-              {streamStatus === "live" ? "Live · realtime stream" : "Live · reconnecting"}
-            </span>
-          )}
-        </div>
-
+      <div className="flex flex-col gap-4 sm:gap-5">
         {error && (
-          <div className="rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-[12px] text-negative">
-            Failed to load {symbol}: {error}
+          <div className="rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-[12.5px] text-negative">
+            {error}
           </div>
         )}
 
         {!analysis && !error && (
-          <div className="flex h-64 items-center justify-center text-muted-2">
-            <Loader2 className="size-5 animate-spin" />
+          <div className="flex h-72 items-center justify-center text-muted-2">
+            <Loader2 className="size-6 animate-spin" />
+            <span className="sr-only">{t("common.loadingLive")}</span>
           </div>
         )}
 
@@ -139,7 +62,10 @@ export function AnalysisClient({
           <AnalysisView
             data={analysis}
             timeframe={timeframe}
-            onTimeframeChange={chooseTimeframe}
+            onTimeframeChange={(next) => {
+              setChosen(true);
+              setTimeframe(next);
+            }}
             range={range}
             history={history}
             onLoadMoreHistory={loadMoreHistory}

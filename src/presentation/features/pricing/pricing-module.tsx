@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Crown, Loader2, Minus, ShieldCheck } from "lucide-react";
+import { Check, Loader2, ShieldCheck } from "lucide-react";
 import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
 import {
   billingPlan,
@@ -23,86 +23,96 @@ interface PricingModuleProps {
   provider: ProviderCopy;
 }
 
-/** A capability's wording, in the reader's language. */
-function capabilityText(t: Translate, value: string | true, fallback: string): string | true {
+/** A capability's qualifier, in the reader's language, or `true` for a plain yes. */
+function qualifier(t: Translate, value: string | true, fallback: string): string | true {
   if (value === true) return true;
   const key = domainMessageKey("capability", value === "Terbatas" ? "limited" : "full");
   return key ? t(key) : fallback;
 }
 
-/** Renders a capability cell as either a qualifier or a plain yes. */
-function CapabilityValue({
-  value,
-  strong,
-  t,
+function PlanCard({
+  name,
+  blurb,
+  price,
+  note,
+  rows,
+  column,
+  action,
+  featured,
 }: {
-  value: string | boolean;
-  strong?: boolean;
-  t: Translate;
+  name: string;
+  blurb: string;
+  price: string;
+  note?: string;
+  rows: Array<{ id: string; name: string; value: string | true }>;
+  column: "free" | "pro";
+  action: React.ReactNode;
+  featured?: boolean;
 }) {
-  if (typeof value === "string") {
-    return (
-      <span className={`text-[12px] ${strong ? "font-semibold text-foreground" : "text-muted"}`}>
-        {value}
-      </span>
-    );
-  }
-  return value ? (
-    <Check
-      className={`size-4 ${strong ? "text-accent-2" : "text-positive"}`}
-      aria-label={t("pricing.included")}
-    />
-  ) : (
-    <Minus className="size-4 text-muted-2" aria-label={t("pricing.notIncluded")} />
-  );
-}
-
-/**
- * Renders `**bold**` runs, so a sentence can stress its own word in whichever
- * position that language puts it.
- */
-function emphasise(text: string) {
-  return text.split(/\*\*(.+?)\*\*/g).map((part, index) =>
-    index % 2 === 1 ? <strong key={index}>{part}</strong> : part,
-  );
-}
-
-/** One feature line inside a plan card. */
-function PlanFeature({ label, value }: { label: string; value: string | true }) {
+  const { t } = useT();
   return (
-    <li className="flex items-start gap-2">
-      <Check className="mt-0.5 size-3.5 shrink-0 text-positive" aria-hidden="true" />
-      <span className="text-[12px] leading-snug text-muted">
-        {label}
-        {value !== true && <span className="ml-1 font-semibold text-foreground">({value})</span>}
-      </span>
-    </li>
+    <section
+      className={`flex flex-col rounded-2xl border p-6 ${
+        featured
+          ? "border-accent-blue/40 bg-gradient-to-br from-accent-blue/12 via-surface to-surface"
+          : "border-border bg-surface"
+      }`}
+    >
+      <p className="text-[13px] font-semibold text-muted">{name}</p>
+      <p className="mt-3 flex items-baseline gap-1">
+        <span className="text-[40px] font-bold leading-none tracking-tight">{price}</span>
+        <span className="text-[14px] font-medium text-muted-2">{t("pricing.perMonth")}</span>
+      </p>
+      <p className="mt-3 text-[12.5px] leading-relaxed text-muted">{blurb}</p>
+      {note && <p className="mt-1.5 text-[11.5px] text-muted-2">{note}</p>}
+
+      <p className="mt-6 text-[12.5px] font-semibold">{t("pricing.included")}</p>
+      <ul className="mt-3 flex-1 space-y-2.5">
+        {rows.map((row) => (
+          <li key={row.id} className="flex items-start gap-2.5 text-[12.5px] leading-snug text-muted">
+            <Check
+              className={`mt-0.5 size-3.5 shrink-0 ${column === "pro" ? "text-accent-blue" : "text-positive"}`}
+              aria-hidden
+            />
+            <span>
+              {row.name}
+              {row.value !== true && (
+                <span className="ml-1 font-semibold text-foreground">({row.value})</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-7">{action}</div>
+    </section>
   );
 }
 
 export function PricingModule({ authenticated, plan, periodEnd, provider }: PricingModuleProps) {
   const { t, locale } = useT();
   const [period, setPeriod] = useState<BillingPeriod>("annual");
-  // Dates read the way each reader writes them: "7 September 2026" one way,
-  // "September 7, 2026" the other.
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selected = billingPlan(period);
+  const isPro = plan === "PREMIUM";
   const dateFormatter = new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
+
   const rows = PLAN_CAPABILITIES.map((capability) => {
     const key = domainMessageKey("capability", capability.id);
+    const name = key ? t(key) : capability.label;
     return {
-      ...capability,
-      name: key ? t(key) : capability.label,
-      freeText: capabilityText(t, capability.free, capability.label),
-      proText: capabilityText(t, capability.pro, capability.label),
+      id: capability.id,
+      name,
+      free: qualifier(t, capability.free, capability.label),
+      pro: qualifier(t, capability.pro, capability.label),
     };
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const isPremium = plan === "PREMIUM";
-  const selected = billingPlan(period);
 
   async function checkout() {
     setLoading(true);
@@ -119,31 +129,33 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
       };
       if (!response.ok || !payload.redirectUrl) {
         setError(payload.error?.message ?? t("pricing.checkoutFailed"));
-        setLoading(false);
         return;
       }
-      window.location.assign(payload.redirectUrl);
+      window.location.href = payload.redirectUrl;
     } catch {
       setError(t("pricing.checkoutOffline"));
+    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <header className="text-center">
-        <h1 className="text-2xl font-bold tracking-tight">{t("pricing.headline")}</h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted">
+    <div className="rounded-3xl border border-border bg-surface/40 p-4 sm:p-8">
+      <header className="mx-auto max-w-2xl text-center">
+        <h1 className="text-balance text-[28px] font-bold leading-tight tracking-tight sm:text-[34px]">
+          {t("pricing.headlineA")}
+          <br />
+          <span className="text-muted">{t("pricing.headlineB")}</span>
+        </h1>
+        <p className="mx-auto mt-4 max-w-xl text-[13px] leading-relaxed text-muted">
           {t("pricing.subhead")}
         </p>
       </header>
 
-      {/* Period switch. Longer commitments carry their discount on the control
-          itself, so the reader sees the trade before they see the price. */}
       <div
-        className="mx-auto mt-6 flex w-fit items-center gap-1 rounded-full border border-border bg-surface-2 p-1"
         role="group"
         aria-label={t("pricing.periodGroup")}
+        className="mx-auto mt-7 flex w-fit items-center gap-1 rounded-full border border-border bg-surface p-1"
       >
         {BILLING_PERIODS.map((option) => {
           const savings = savingsPercent(option);
@@ -152,17 +164,17 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
             <button
               key={option}
               type="button"
-              onClick={() => setPeriod(option)}
               aria-pressed={active}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
-                active ? "bg-surface text-foreground shadow-sm" : "text-muted-2 hover:text-muted"
+              onClick={() => setPeriod(option)}
+              className={`flex items-center gap-2 rounded-full px-4 py-2 text-[12.5px] font-semibold transition-colors ${
+                active ? "bg-accent-blue text-white" : "text-muted hover:text-foreground"
               }`}
             >
               {t(`pricing.period.${option}` as MessageKey)}
               {savings > 0 && (
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    active ? "bg-accent text-white" : "bg-accent/15 text-accent-2"
+                  className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-bold ${
+                    active ? "bg-white/20 text-white" : "bg-accent-blue/20 text-accent-blue"
                   }`}
                 >
                   {t("pricing.savings", { percent: savings })}
@@ -173,79 +185,57 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
         })}
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <section className="card flex flex-col p-6">
-          <h2 className="text-sm font-bold">{t("common.free")}</h2>
-          <p className="mt-1 text-xs text-muted">{t("pricing.freeBlurb")}</p>
-          <p className="mt-5 text-3xl font-bold tabular-nums">$0</p>
-          <p className="mt-1 text-[11px] text-muted-2">{t("pricing.forever")}</p>
-
-          <ul className="mt-5 space-y-2">
-            {rows.map((row) => (
-              <PlanFeature key={row.id} label={row.name} value={row.freeText} />
-            ))}
-          </ul>
-
-          <div className="mt-6">
-            {authenticated ? (
-              <p className="rounded-lg border border-border bg-surface-3 px-3 py-2.5 text-center text-xs font-semibold text-muted">
-                {isPremium ? t("pricing.includedInPro") : t("pricing.currentPlan")}
+      <div className="mt-7 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+        <PlanCard
+          name={t("common.free")}
+          blurb={t("pricing.freeBlurb")}
+          price="$0"
+          rows={rows.map((row) => ({ id: row.id, name: row.name, value: row.free }))}
+          column="free"
+          action={
+            authenticated ? (
+              <p className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-center text-[12.5px] font-semibold text-muted">
+                {isPro ? t("pricing.includedInPro") : t("pricing.currentPlan")}
               </p>
             ) : (
               <Link
                 href="/register"
-                className="block rounded-lg border border-border px-4 py-2.5 text-center text-sm font-bold transition-colors hover:border-border-strong"
+                className="block rounded-xl border border-border px-4 py-2.5 text-center text-[13px] font-bold transition-colors hover:border-border-strong"
               >
-                {t("pricing.registerFree")}
+                {t("pricing.startFree")}
               </Link>
-            )}
-          </div>
-        </section>
+            )
+          }
+        />
 
-        <section className="card relative flex flex-col border-accent/40 p-6">
-          <span className="absolute -top-2.5 left-6 rounded-full bg-gradient-to-r from-accent to-accent-blue px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-            {t("pricing.popular")}
-          </span>
-          <div className="flex items-center gap-2">
-            <Crown className="size-4 text-warning" />
-            <h2 className="text-sm font-bold">{t("common.pro")}</h2>
-          </div>
-          <p className="mt-1 text-xs text-muted">{t("pricing.proBlurb")}</p>
-
-          <p className="mt-5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-bold tabular-nums">{formatUsd(selected.perMonthUsd)}</span>
-            <span className="text-xs font-medium text-muted-2">{t("pricing.perMonth")}</span>
-          </p>
-          <p className="mt-1 text-[11px] text-muted-2">
-            {selected.months === 1
+        <PlanCard
+          featured
+          name={t("common.pro")}
+          blurb={t("pricing.proBlurb")}
+          price={formatUsd(selected.perMonthUsd)}
+          note={
+            selected.months === 1
               ? t("pricing.billedMonthly", { total: formatUsd(selected.totalUsd) })
               : t("pricing.billedOnce", {
                   total: formatUsd(selected.totalUsd),
                   months: selected.months,
-                })}
-            {" · "}
-            {t("pricing.noAutoRenew")}
-          </p>
-
-          <ul className="mt-5 space-y-2">
-            {rows.map((row) => (
-              <PlanFeature key={row.id} label={row.name} value={row.proText} />
-            ))}
-          </ul>
-
-          <div className="mt-6">
-            {!authenticated ? (
+                })
+          }
+          rows={rows.map((row) => ({ id: row.id, name: row.name, value: row.pro }))}
+          column="pro"
+          action={
+            !authenticated ? (
               <Link
                 href="/login?next=/pricing"
-                className="block rounded-lg bg-gradient-to-r from-accent to-accent-blue px-4 py-2.5 text-center text-sm font-bold text-white transition-opacity hover:opacity-90"
+                className="block rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 py-2.5 text-center text-[13px] font-bold text-white transition-opacity hover:opacity-90"
               >
                 {t("pricing.signInToSubscribe")}
               </Link>
-            ) : isPremium ? (
-              <div className="rounded-lg border border-positive/30 bg-positive/10 px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-positive">{t("pricing.proActive")}</p>
+            ) : isPro ? (
+              <div className="rounded-xl border border-positive/30 bg-positive/10 px-4 py-2.5 text-center">
+                <p className="text-[12.5px] font-bold text-positive">{t("pricing.proActive")}</p>
                 {periodEnd && (
-                  <p className="mt-0.5 text-[11px] text-muted">
+                  <p className="mt-0.5 text-[11.5px] text-muted">
                     {t("pricing.activeUntil", { date: dateFormatter.format(new Date(periodEnd)) })}
                   </p>
                 )}
@@ -255,42 +245,51 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
                 type="button"
                 onClick={() => void checkout()}
                 disabled={loading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-accent to-accent-blue px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 {loading && <Loader2 className="size-4 animate-spin" />}
-                {t("pricing.payVia", {
-                  total: formatUsd(selected.totalUsd),
-                  provider: provider.name,
-                })}
+                {t("pricing.subscribe")}
               </button>
-            )}
-            {error && <p className="mt-2 text-center text-[11px] text-negative">{error}</p>}
-          </div>
-        </section>
+            )
+          }
+        />
       </div>
+      {error && <p className="mt-3 text-center text-[12px] text-negative">{error}</p>}
 
-      <section className="mt-8">
-        <h2 className="text-sm font-bold">{t("pricing.comparison")}</h2>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+      <section className="mt-9">
+        <h2 className="text-[15px] font-semibold">{t("pricing.comparison")}</h2>
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
           <table className="w-full min-w-[520px] text-left">
-            <thead className="bg-surface-3">
-              <tr className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">
-                <th scope="col" className="p-3">{t("pricing.capabilityColumn")}</th>
-                <th scope="col" className="w-32 p-3">{t("common.free")}</th>
-                <th scope="col" className="w-32 p-3">{t("common.pro")}</th>
+            <thead className="bg-accent-blue text-white">
+              <tr className="text-[12px] font-semibold">
+                <th scope="col" className="px-5 py-3.5">
+                  {t("pricing.benefits")}
+                </th>
+                <th scope="col" className="w-32 px-5 py-3.5">
+                  {t("common.free")}
+                </th>
+                <th scope="col" className="w-32 px-5 py-3.5">
+                  {t("common.pro")}
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-border align-top">
-                  <td className="p-3">
-                    <p className="text-[12px] font-medium">{row.name}</p>
+                <tr key={row.id} className="border-t border-border bg-surface">
+                  <td className="px-5 py-3.5 text-[12.5px]">{row.name}</td>
+                  <td className="px-5 py-3.5">
+                    {row.free === true ? (
+                      <Check className="size-4 text-positive" aria-label={t("pricing.included")} />
+                    ) : (
+                      <span className="text-[12.5px] text-muted">{row.free}</span>
+                    )}
                   </td>
-                  <td className="p-3">
-                    <CapabilityValue value={row.freeText} t={t} />
-                  </td>
-                  <td className="p-3">
-                    <CapabilityValue value={row.proText} strong t={t} />
+                  <td className="px-5 py-3.5">
+                    {row.pro === true ? (
+                      <Check className="size-4 text-positive" aria-label={t("pricing.included")} />
+                    ) : (
+                      <span className="text-[12.5px] font-semibold text-foreground">{row.pro}</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -299,16 +298,14 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
         </div>
       </section>
 
-      <section className="card mt-6 flex gap-3 p-5">
+      <section className="mt-6 flex gap-3.5 rounded-2xl border border-border bg-surface p-5">
         <ShieldCheck className="size-5 shrink-0 text-muted-2" />
         <div className="text-[12px] leading-relaxed text-muted">
           <p className="font-semibold text-foreground">{t("pricing.beforeYouPay")}</p>
-          <ul className="mt-2 space-y-1.5">
-            <li>{provider.assurance}</li>
-            <li>{emphasise(t("pricing.noteUpfront"))}</li>
-            <li>{t("pricing.noteExpiry")}</li>
-            <li>{t("pricing.noteDisclaimer")}</li>
-          </ul>
+          <p className="mt-2">
+            {provider.assurance} {t("pricing.noteUpfrontPlain")} {t("pricing.noteExpiry")}{" "}
+            {t("pricing.noteDisclaimer")}
+          </p>
         </div>
       </section>
     </div>

@@ -38,7 +38,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+      <div className="animate-pop w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
         <Link href="/" className="mb-6 flex items-center justify-center" aria-label={BRAND_NAME}>
           <BrandLockup height={34} />
         </Link>

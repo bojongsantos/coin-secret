@@ -153,8 +153,155 @@ body {
 @media (min-width: 1024px) {
   .app-main {
     padding-left: 284px;
+    /* The rail animates its own width; without this the column it makes room
+       for would snap to the new offset while the rail was still moving. */
+    transition: padding-left 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
   }
   html[data-sidebar="collapsed"] .app-main {
     padding-left: 96px;
+  }
+}
+
+/**
+ * Motion.
+ *
+ * Entrances only, and short ones: the page has live numbers on it, and
+ * anything that keeps moving competes with the figures that are actually
+ * changing. Each is a CSS animation on mount, so a component that re-renders
+ * on every price tick does not replay it — React keeps the node, and the
+ * animation belongs to the node.
+ */
+@keyframes cs-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cs-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cs-sheet {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cs-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/**
+ * `backwards`, never `both`.
+ *
+ * `both` holds the last keyframe after the animation ends, which means the
+ * element's visibility depends on the animation having run. If it never does —
+ * a renamed keyframe, a stylesheet that loaded oddly, an engine that skips it —
+ * the content stays at `opacity: 0` and the page is simply blank, with nothing
+ * on screen to say why. `backwards` holds the first frame only through the
+ * delay, and hands the element back to its own styles at the end. The resting
+ * state is then plain visible markup, and the animation is decoration that can
+ * fail without taking the page with it.
+ */
+@utility animate-rise {
+  animation: cs-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+@utility animate-fade {
+  animation: cs-fade 320ms ease-out backwards;
+}
+
+@utility animate-pop {
+  animation: cs-pop 220ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+@utility animate-sheet {
+  animation: cs-sheet 260ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+/**
+ * The two halves of a scroll reveal, driven by `<Reveal>`.
+ *
+ * Neither state is the resting state. An element with no `data-reveal` at all
+ * is a normal, visible element, which is what the server sends and what a
+ * reader without JavaScript keeps. `armed` is written only by the effect that
+ * also arranges to write `in`, so the hidden state cannot outlive the code
+ * that clears it.
+ */
+[data-reveal="armed"]:not([data-stagger]) {
+  opacity: 0;
+}
+
+[data-reveal="in"]:not([data-stagger]) {
+  animation: cs-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+/* A staggered group animates its children, so the group itself can stay the
+   grid or flex container its items are positioned by. */
+[data-reveal="armed"][data-stagger] > * {
+  opacity: 0;
+}
+
+[data-reveal="in"][data-stagger] > * {
+  animation: cs-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+[data-reveal="in"][data-stagger] > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+[data-reveal="in"][data-stagger] > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+[data-reveal="in"][data-stagger] > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+[data-reveal="in"][data-stagger] > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+/* Everything past the fifth arrives together. A list of twenty that waits its
+   turn one by one is a loading screen, not an entrance. */
+[data-reveal="in"][data-stagger] > *:nth-child(n + 6) {
+  animation-delay: 300ms;
+}
+
+/**
+ * Someone who has asked their system to limit motion gets no entrance at all.
+ *
+ * The blanket rule further up collapses every duration to a hair, which is
+ * enough for most transitions. These are stated outright anyway: they are the
+ * animations that start from `opacity: 0`, and an entrance that merely
+ * finishes very quickly still flickers. Removed, not hurried.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-fade,
+  .animate-pop,
+  .animate-sheet,
+  [data-reveal] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

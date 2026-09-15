@@ -81,7 +81,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-4 text-foreground">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6">
+      <div className="animate-pop w-full max-w-md rounded-2xl border border-border bg-surface p-6">
         <h1 className="text-xl font-bold">
           {t(mode === "request" ? "recovery.forgotTitle" : "recovery.resetTitle")}
         </h1>

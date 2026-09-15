@@ -114,14 +114,14 @@ function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }
       </div>
 
       <span
-        className={`w-12 text-right text-[13px] font-bold tabular-nums ${
+        className={`w-[52px] text-right text-[13px] font-bold tabular-nums sm:w-[72px] ${
           hit.direction === "long" ? "text-positive" : "text-negative"
         }`}
       >
         {Math.round(hit.confidence)}%
       </span>
 
-      <div className="flex w-[118px] justify-end">
+      <div className="flex w-[104px] justify-end sm:w-[126px]">
         <StatusPill status={hit.status} t={t} />
       </div>
     </Link>
@@ -144,11 +144,11 @@ function Column({
     <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-4 sm:p-5">
       <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
 
-      <div className="mt-4 grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] gap-3 px-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">
+      <div className="mt-4 hidden grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] gap-3 px-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2 sm:grid">
         <span>{t("zones.pair")}</span>
-        <span className="hidden sm:block">{t("zones.volume24h")}</span>
-        <span className="w-12 text-right">{t("zones.confidence")}</span>
-        <span className="w-[118px] text-right">{t("zones.status")}</span>
+        <span>{t("zones.volume24h")}</span>
+        <span className="w-[72px] text-right">{t("zones.confidence")}</span>
+        <span className="w-[126px] text-right">{t("zones.status")}</span>
       </div>
 
       {/* The board carries a couple of hundred pairs; the column scrolls
@@ -225,7 +225,7 @@ export function SignalsBoard({
       )}
 
       <div className={locked ? "pointer-events-none select-none blur-[6px]" : undefined} aria-hidden={locked}>
-        <div className="mt-5 grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        <div className="mt-5 grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
           <Column title="signals.longSetup" hits={demand} t={t} maxHeight={maxHeight} />
           <Column title="signals.shortSetup" hits={supply} t={t} maxHeight={maxHeight} />
         </div>

@@ -319,6 +319,13 @@ export const MESSAGES = {
     en: "Upgrade from the Account & Billing page.",
   },
 
+  // ----------------------------------------------------------------- scanner
+  "scanner.title": { id: "Market Scanner", en: "Market Scanner" },
+  "scanner.subtitle": {
+    id: "Setup live di seluruh papan, diurutkan berdasarkan confidence.",
+    en: "Live setups across the whole board, ordered by confidence.",
+  },
+
   // -------------------------------------------------------------------- auth
   "auth.signInTitle": { id: "Masuk ke akun", en: "Sign in to your account" },
   "auth.signUpTitle": { id: "Buat akun baru", en: "Create an account" },

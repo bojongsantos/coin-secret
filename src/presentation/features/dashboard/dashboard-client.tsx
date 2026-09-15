@@ -14,6 +14,7 @@ import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useMarketContext } from "@/presentation/hooks/use-market-context";
 import { useSdScan, useTopSetups } from "@/presentation/hooks/use-scanner";
 import { AppShell } from "@/presentation/layout/app-shell";
+import { Reveal } from "@/presentation/ui/reveal";
 
 export function DashboardClient() {
   const { top, loading: topLoading } = useTopSetups(5);
@@ -59,33 +60,44 @@ export function DashboardClient() {
 
   return (
     <AppShell>
+      {/* The blocks arrive in the order they are read, a beat apart. The stagger
+          is per block rather than per card: a hundred rows each fading in on
+          their own turns a board into a slot machine. */}
       <div className="flex flex-col gap-4 sm:gap-5">
-        <MarketOverview
-          context={context}
-          sentiment={sentiment}
-          analysis={analysis}
-          onRefresh={refresh}
-          refreshing={scanLoading}
-        />
+        <Reveal>
+          <MarketOverview
+            context={context}
+            sentiment={sentiment}
+            analysis={analysis}
+            onRefresh={refresh}
+            refreshing={scanLoading}
+          />
+        </Reveal>
 
-        <SignalsBoard
-          demand={result?.demand ?? []}
-          supply={result?.supply ?? []}
-          loading={scanLoading}
-          error={scanError}
-          onRefresh={refresh}
-          failedCount={failedCount}
-          maxHeight={352}
-        />
+        <Reveal step={1}>
+          <SignalsBoard
+            demand={result?.demand ?? []}
+            supply={result?.supply ?? []}
+            loading={scanLoading}
+            error={scanError}
+            onRefresh={refresh}
+            failedCount={failedCount}
+            maxHeight={352}
+          />
+        </Reveal>
 
-        <AdRow />
+        <Reveal step={2}>
+          <AdRow />
+        </Reveal>
 
-        <TopSetupsStrip
-          setups={top}
-          loading={topLoading}
-          activeSymbol={activeSymbol}
-          onSelect={pick}
-        />
+        <Reveal step={3}>
+          <TopSetupsStrip
+            setups={top}
+            loading={topLoading}
+            activeSymbol={activeSymbol}
+            onSelect={pick}
+          />
+        </Reveal>
 
         {error && (
           <div className="rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-[12.5px] text-negative">
@@ -100,14 +112,16 @@ export function DashboardClient() {
         )}
 
         {analysis && (
-          <AnalysisView
-            data={analysis}
-            timeframe={timeframe}
-            onTimeframeChange={chooseTimeframe}
-            range={range}
-            history={history}
-            onLoadMoreHistory={loadMoreHistory}
-          />
+          <Reveal step={4}>
+            <AnalysisView
+              data={analysis}
+              timeframe={timeframe}
+              onTimeframeChange={chooseTimeframe}
+              range={range}
+              history={history}
+              onLoadMoreHistory={loadMoreHistory}
+            />
+          </Reveal>
         )}
       </div>
     </AppShell>

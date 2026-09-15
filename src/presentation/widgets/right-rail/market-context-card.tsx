@@ -79,10 +79,10 @@ ${t("metric.unavailableNote")}` : help}>
 export function MarketContextCard({ data }: { data: MarketContext }) {
   const { t } = useT();
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <section className="@container rounded-2xl border border-border bg-surface p-4 sm:p-5">
       <h3 className="text-[13px] font-semibold">{t("rail.marketContext")}</h3>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
+      <div className="mt-3 grid grid-cols-1 gap-3 @[300px]:grid-cols-2">
         {[data.btc, data.eth].map((coin) => {
           const up = coin.direction === "up";
           const Icon = up ? TrendingUp : TrendingDown;
@@ -91,7 +91,7 @@ export function MarketContextCard({ data }: { data: MarketContext }) {
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <CoinIcon symbol={`${coin.label}USDT`} size={20} />
-                  <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-2">
+                  <span className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-2">
                     {coin.label}/USDT
                   </span>
                 </span>

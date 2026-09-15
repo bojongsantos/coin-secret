@@ -84,13 +84,13 @@ export function MobileNav({
             type="button"
             aria-label={t("nav.closeMenu")}
             onClick={() => onOpenChange(false)}
-            className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+            className="animate-fade absolute inset-0 bg-background/70 backdrop-blur-sm"
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-label={t("nav.moreMenu")}
-            className="absolute inset-x-0 bottom-16 rounded-t-3xl border-t border-border bg-surface p-3 shadow-2xl"
+            className="animate-sheet absolute inset-x-0 bottom-16 rounded-t-3xl border-t border-border bg-surface p-3 shadow-2xl"
           >
             <div className="mb-2 flex items-center justify-between px-1">
               <p className="text-[11px] font-bold uppercase tracking-wide text-muted-2">{t("nav.more")}</p>

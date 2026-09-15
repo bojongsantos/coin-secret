@@ -14,6 +14,7 @@ import {
 import type { SubscriptionPlan } from "@/core/domain/identity";
 import type { ProviderCopy } from "@/core/domain/billing/provider-copy";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
+import { Reveal } from "@/presentation/ui/reveal";
 import { domainMessageKey, type MessageKey } from "@/shared/i18n/messages";
 
 interface PricingModuleProps {
@@ -141,7 +142,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
 
   return (
     <div className="rounded-3xl border border-border bg-surface/40 p-4 sm:p-8">
-      <header className="mx-auto max-w-2xl text-center">
+      <Reveal as="header" stagger className="mx-auto max-w-2xl text-center">
         <h1 className="text-balance text-[28px] font-bold leading-tight tracking-tight sm:text-[34px]">
           {t("pricing.headlineA")}
           <br />
@@ -150,12 +151,12 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
         <p className="mx-auto mt-4 max-w-xl text-[13px] leading-relaxed text-muted">
           {t("pricing.subhead")}
         </p>
-      </header>
+      </Reveal>
 
       <div
         role="group"
         aria-label={t("pricing.periodGroup")}
-        className="mx-auto mt-7 flex w-fit items-center gap-1 rounded-full border border-border bg-surface p-1"
+        className="mx-auto mt-7 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-border bg-surface p-1 sm:w-fit sm:flex-nowrap"
       >
         {BILLING_PERIODS.map((option) => {
           const savings = savingsPercent(option);
@@ -185,7 +186,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
         })}
       </div>
 
-      <div className="mt-7 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+      <Reveal stagger className="mt-7 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
         <PlanCard
           name={t("common.free")}
           blurb={t("pricing.freeBlurb")}
@@ -253,10 +254,10 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
             )
           }
         />
-      </div>
+      </Reveal>
       {error && <p className="mt-3 text-center text-[12px] text-negative">{error}</p>}
 
-      <section className="mt-9">
+      <Reveal as="section" className="mt-9">
         <h2 className="text-[15px] font-semibold">{t("pricing.comparison")}</h2>
         <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
           <table className="w-full min-w-[520px] text-left">
@@ -296,9 +297,12 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
             </tbody>
           </table>
         </div>
-      </section>
+      </Reveal>
 
-      <section className="mt-6 flex gap-3.5 rounded-2xl border border-border bg-surface p-5">
+      <Reveal
+        as="section"
+        className="mt-6 flex gap-3.5 rounded-2xl border border-border bg-surface p-5"
+      >
         <ShieldCheck className="size-5 shrink-0 text-muted-2" />
         <div className="text-[12px] leading-relaxed text-muted">
           <p className="font-semibold text-foreground">{t("pricing.beforeYouPay")}</p>
@@ -307,7 +311,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
             {t("pricing.noteDisclaimer")}
           </p>
         </div>
-      </section>
+      </Reveal>
     </div>
   );
 }

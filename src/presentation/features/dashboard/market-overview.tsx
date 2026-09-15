@@ -61,7 +61,7 @@ export function MarketOverview({
       onRefresh={onRefresh}
       refreshing={refreshing}
     >
-      <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
         <MarketSentimentCard data={sentiment ?? sentimentFallback} />
         <MarketContextCard data={context ?? marketFallback} />
         <ConvictionScoreCard data={convictionFor(analysis)} />

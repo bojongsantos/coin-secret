@@ -13,6 +13,7 @@ import {
 } from "@/core/domain/billing/plans";
 import { BrandLockup } from "@/presentation/ui/brand-logo";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
+import { Reveal } from "@/presentation/ui/reveal";
 import { domainMessageKey, type MessageKey } from "@/shared/i18n/messages";
 
 /**
@@ -87,7 +88,10 @@ function Hero({ t }: { t: Translate }) {
       />
       <Socials className="relative justify-end px-5 pt-3 sm:px-10" />
 
-      <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-5 pb-28 text-center">
+      <Reveal
+        stagger
+        className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-5 pb-28 text-center"
+      >
         <h1 className="text-balance text-[34px] font-bold leading-[1.12] tracking-[-0.025em] sm:text-[52px] lg:text-[62px]">
           {t("landing.heroA")}
           <br />
@@ -102,7 +106,7 @@ function Hero({ t }: { t: Translate }) {
         >
           {t("landing.launchApp")}
         </Link>
-      </div>
+      </Reveal>
     </section>
   );
 }
@@ -111,18 +115,20 @@ function About({ t }: { t: Translate }) {
   return (
     <section id="about" className="scroll-mt-20 py-20 sm:py-24">
       <div className="mx-auto max-w-5xl px-5 sm:px-8">
-        <h2 className="text-center text-[26px] font-bold tracking-tight sm:text-[30px]">
-          {t("landing.nav.about")}
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-center text-[12.5px] leading-relaxed text-white/50">
-          {t("landing.aboutBody")}
-        </p>
+        <Reveal stagger>
+          <h2 className="text-center text-[26px] font-bold tracking-tight sm:text-[30px]">
+            {t("landing.nav.about")}
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-center text-[12.5px] leading-relaxed text-white/50">
+            {t("landing.aboutBody")}
+          </p>
+        </Reveal>
 
-        <div className="mt-10 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+        <Reveal stagger className="mt-10 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
           {FEATURES.map(({ id, icon: Icon, live }) => (
             <div
               key={id}
-              className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6"
+              className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition-colors hover:border-white/20 sm:p-6"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2.5">
@@ -144,7 +150,7 @@ function About({ t }: { t: Translate }) {
               </p>
             </div>
           ))}
-        </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -171,19 +177,21 @@ function Pricing({ t }: { t: Translate }) {
   return (
     <section id="pricing" className="scroll-mt-20 py-20 sm:py-24">
       <div className="mx-auto max-w-4xl px-5 sm:px-8">
-        <h2 className="text-balance text-center text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
-          {t("landing.heroA")}
-          <br />
-          <span className="text-white/45">{t("landing.heroB")}</span>
-        </h2>
-        <p className="mx-auto mt-4 max-w-md text-center text-[12.5px] leading-relaxed text-white/50">
-          {t("landing.subhead")}
-        </p>
+        <Reveal stagger>
+          <h2 className="text-balance text-center text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
+            {t("landing.heroA")}
+            <br />
+            <span className="text-white/45">{t("landing.heroB")}</span>
+          </h2>
+          <p className="mx-auto mt-4 max-w-md text-center text-[12.5px] leading-relaxed text-white/50">
+            {t("landing.subhead")}
+          </p>
+        </Reveal>
 
         <div
           role="group"
           aria-label={t("pricing.periodGroup")}
-          className="mx-auto mt-8 flex w-fit items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1"
+          className="mx-auto mt-8 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 sm:w-fit sm:flex-nowrap"
         >
           {BILLING_PERIODS.map((option) => {
             const savings = savingsPercent(option);
@@ -213,7 +221,7 @@ function Pricing({ t }: { t: Translate }) {
           })}
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+        <Reveal stagger className="mt-8 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
           {(
             [
               {
@@ -256,11 +264,16 @@ function Pricing({ t }: { t: Translate }) {
                 {rows.map((row) => {
                   const value = card.id === "pro" ? row.pro : row.free;
                   return (
-                    <li key={row.id} className="flex items-start gap-2 text-[12px] leading-snug text-white/55">
+                    <li
+                      key={row.id}
+                      className="flex items-start gap-2 text-[12px] leading-snug text-white/55"
+                    >
                       <Check className="mt-0.5 size-3.5 shrink-0 text-white/35" aria-hidden />
                       <span>
                         {row.name}
-                        {value && <span className="ml-1 font-semibold text-white/85">({t(value)})</span>}
+                        {value && (
+                          <span className="ml-1 font-semibold text-white/85">({t(value)})</span>
+                        )}
                       </span>
                     </li>
                   );
@@ -279,7 +292,7 @@ function Pricing({ t }: { t: Translate }) {
               </Link>
             </div>
           ))}
-        </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -306,7 +319,10 @@ export function LandingPage() {
       <footer className="border-t border-white/[0.07] bg-white/[0.02]">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-5 py-8 sm:flex-row sm:justify-between">
           <BrandLockup height={20} tone="dark" />
-          <nav className="flex items-center gap-7 text-[12.5px] text-white/55" aria-label={t("nav.primary")}>
+          <nav
+            className="flex items-center gap-7 text-[12.5px] text-white/55"
+            aria-label={t("nav.primary")}
+          >
             <a href="#about" className="transition-colors hover:text-white">
               {t("landing.nav.about")}
             </a>

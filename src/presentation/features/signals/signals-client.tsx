@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useSdScan } from "@/presentation/hooks/use-scanner";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { SignalsBoard } from "@/presentation/features/signals/signals-board";
+import { Reveal } from "@/presentation/ui/reveal";
 
 export function SignalsClient() {
   const { result, loading, error, failedCount, refresh } = useSdScan();
@@ -15,14 +16,16 @@ export function SignalsClient() {
           <Loader2 className="size-6 animate-spin" />
         </div>
       ) : (
-        <SignalsBoard
-          demand={result?.demand ?? []}
-          supply={result?.supply ?? []}
-          loading={loading}
-          error={error}
-          onRefresh={refresh}
-          failedCount={failedCount}
-        />
+        <Reveal>
+          <SignalsBoard
+            demand={result?.demand ?? []}
+            supply={result?.supply ?? []}
+            loading={loading}
+            error={error}
+            onRefresh={refresh}
+            failedCount={failedCount}
+          />
+        </Reveal>
       )}
     </AppShell>
   );

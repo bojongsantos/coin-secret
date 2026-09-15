@@ -8,6 +8,7 @@ import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useT } from "@/presentation/hooks/use-translate";
 import { AppShell } from "@/presentation/layout/app-shell";
+import { Reveal } from "@/presentation/ui/reveal";
 
 /**
  * One coin, opened on its own.
@@ -59,17 +60,19 @@ export function AnalysisClient({
         )}
 
         {analysis && (
-          <AnalysisView
-            data={analysis}
-            timeframe={timeframe}
-            onTimeframeChange={(next) => {
-              setChosen(true);
-              setTimeframe(next);
-            }}
-            range={range}
-            history={history}
-            onLoadMoreHistory={loadMoreHistory}
-          />
+          <Reveal>
+            <AnalysisView
+              data={analysis}
+              timeframe={timeframe}
+              onTimeframeChange={(next) => {
+                setChosen(true);
+                setTimeframe(next);
+              }}
+              range={range}
+              history={history}
+              onLoadMoreHistory={loadMoreHistory}
+            />
+          </Reveal>
         )}
       </div>
     </AppShell>

@@ -7,6 +7,7 @@ import type { CurrentUserDto } from "@/core/domain/identity";
 import { billingPlan, formatUsd } from "@/core/domain/billing/plans";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { useT } from "@/presentation/hooks/use-translate";
+import { Reveal } from "@/presentation/ui/reveal";
 
 interface PaymentRow {
   id: string;
@@ -76,7 +77,7 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
       <h1 className="text-[22px] font-bold tracking-tight">{t("billing.title")}</h1>
       <p className="mt-1 text-[13px] text-muted">{t("billing.subtitle")}</p>
 
-      <div className="mt-6 flex flex-col gap-4">
+      <Reveal stagger className="mt-6 flex flex-col gap-4">
         {/* The plan banner, which is the one thing a reader opens this page to
             check. Pro carries the gradient; Free carries the way to it. */}
         <section
@@ -176,7 +177,7 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
             </div>
           )}
         </Card>
-      </div>
+      </Reveal>
     </div>
   );
 }

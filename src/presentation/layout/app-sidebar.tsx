@@ -61,7 +61,7 @@ export function AppSidebar() {
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-30 hidden p-3 lg:block"
+      className="fixed inset-y-0 left-0 z-30 hidden p-3 transition-[width] duration-[220ms] ease-[cubic-bezier(0.22,0.61,0.36,1)] lg:block"
       style={{ width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH }}
     >
       <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-gradient-to-b from-surface to-surface-2 shadow-2xl">

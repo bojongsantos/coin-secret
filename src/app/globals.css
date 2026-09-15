@@ -169,13 +169,20 @@ body {
 }
 
 /**
- * Motion.
+ * Motion, in two kinds.
  *
- * Entrances only, and short ones: the page has live numbers on it, and
- * anything that keeps moving competes with the figures that are actually
- * changing. Each is a CSS animation on mount, so a component that re-renders
- * on every price tick does not replay it — React keeps the node, and the
- * animation belongs to the node.
+ * Inside the app, entrances only, and short ones: those pages carry live
+ * numbers, and anything that keeps moving competes with the figures that are
+ * actually changing. Each is a CSS animation on mount, so a component that
+ * re-renders on every price tick does not replay it — React keeps the node,
+ * and the animation belongs to the node.
+ *
+ * The landing page is the exception, and the reason is the same reason stated
+ * backwards: it has no live figures for movement to compete with. Its glow is
+ * allowed to keep breathing. Ambience is held to a different rule from an
+ * entrance — it must never be the thing that makes something visible, so its
+ * keyframes never start at `opacity: 0` and it takes no fill mode at all. The
+ * element's own styles are what it rests in.
  */
 @keyframes cs-rise {
   from {
@@ -219,6 +226,32 @@ body {
   }
 }
 
+/* Two pools of light on different cycles: 9s against 14s never lands on a
+   common beat inside the time anyone spends on the page, so the light reads as
+   drifting rather than as a loop. Both move by transform and opacity only,
+   which the compositor handles without repainting a full-bleed gradient. */
+@keyframes cs-glow {
+  from {
+    opacity: 0.72;
+    transform: translate3d(0, 10px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.03);
+  }
+}
+
+@keyframes cs-drift {
+  from {
+    opacity: 0.35;
+    transform: translate3d(-6%, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0.7;
+    transform: translate3d(6%, 0, 0) scale(1.12);
+  }
+}
+
 /**
  * `backwards`, never `both`.
  *
@@ -245,6 +278,17 @@ body {
 
 @utility animate-sheet {
   animation: cs-sheet 260ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+/* No fill mode on either: an ambient loop never ends, so a fill would only
+   describe a state it never reaches, and leaving it off keeps the element's
+   own styles as the thing it falls back to. */
+@utility animate-glow {
+  animation: cs-glow 9s ease-in-out infinite alternate;
+}
+
+@utility animate-drift {
+  animation: cs-drift 14s ease-in-out infinite alternate;
 }
 
 /**
@@ -309,5 +353,13 @@ body {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+
+  /* Ambience simply stops. It is not forced to full opacity the way an
+     entrance is: the glow's resting brightness is part of the design, and it
+     is already carried by the element's own styles. */
+  .animate-glow,
+  .animate-drift {
+    animation: none !important;
   }
 }

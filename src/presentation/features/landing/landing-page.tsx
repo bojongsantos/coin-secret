@@ -92,10 +92,18 @@ function Socials({ className = "" }: { className?: string }) {
 function Hero({ t }: { t: Translate }) {
   return (
     <section className="relative flex min-h-[calc(100dvh-var(--landing-bar))] flex-col overflow-hidden">
-      {/* The glow the design pools under the headline. */}
+      {/* The glow the design pools under the headline, breathing rather than
+          sitting still. The section clips, so the scaling never reaches the
+          document and cannot put a horizontal scrollbar on the page. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[68%] bg-[radial-gradient(ellipse_62%_100%_at_50%_100%,rgba(41,86,220,0.55),rgba(41,86,220,0.16)_42%,transparent_78%)]"
+        className="animate-glow pointer-events-none absolute inset-x-0 bottom-0 h-[68%] bg-[radial-gradient(ellipse_62%_100%_at_50%_100%,rgba(41,86,220,0.55),rgba(41,86,220,0.16)_42%,transparent_78%)]"
+      />
+      {/* A dimmer violet pool swaying across it on a longer cycle. One light
+          breathing alone reads as a pulse; two out of step read as depth. */}
+      <div
+        aria-hidden="true"
+        className="animate-drift pointer-events-none absolute inset-x-0 bottom-0 h-[52%] opacity-70 bg-[radial-gradient(ellipse_38%_100%_at_50%_100%,rgba(124,92,255,0.34),transparent_70%)]"
       />
       <Socials className="relative justify-end px-5 pt-3 sm:px-10" />
 

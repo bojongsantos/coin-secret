@@ -15,13 +15,30 @@ function withoutKeyframes(stylesheet: string): string {
   return stylesheet.replace(/@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "");
 }
 
-test("an entrance animation never outlives itself", () => {
-  const utilities = [
-    ...css.matchAll(/@utility\s+(animate-[a-z-]+)\s*\{\s*animation:([^;]+);/g),
-  ];
-  assert.ok(utilities.length > 0, "found no entrance utilities to check");
+/** Every `@utility animate-*` as a `[name, animation shorthand]` pair. */
+function utilities(): Array<[string, string]> {
+  return [...css.matchAll(/@utility\s+(animate-[a-z-]+)\s*\{\s*animation:([^;]+);/g)].map(
+    (match) => [match[1], match[2]],
+  );
+}
 
-  for (const [, name, shorthand] of utilities) {
+/** An animation that repeats forever is ambience; anything else is an entrance. */
+function isAmbient(shorthand: string): boolean {
+  return /\binfinite\b/.test(shorthand);
+}
+
+/** The body of one `@keyframes` block. */
+function keyframes(name: string): string {
+  const block = css.match(new RegExp(String.raw`@keyframes\s+${name}\s*\{([\s\S]*?)\n\}`));
+  assert.ok(block, `no @keyframes ${name}`);
+  return block[1];
+}
+
+test("an entrance animation never outlives itself", () => {
+  const entrances = utilities().filter(([, shorthand]) => !isAmbient(shorthand));
+  assert.ok(entrances.length > 0, "found no entrance utilities to check");
+
+  for (const [name, shorthand] of entrances) {
     // `forwards` or `both` would hold the final keyframe indefinitely, which
     // makes an element's visibility depend on its animation having run. These
     // fill only backwards, through the delay, and then hand the element back to
@@ -36,6 +53,35 @@ test("an entrance animation never outlives itself", () => {
       /\bbackwards\b/,
       `${name} has no backwards fill, so a staggered delay would flash before it starts`,
     );
+  }
+});
+
+test("ambience is never the thing that makes something visible", () => {
+  const ambient = utilities().filter(([, shorthand]) => isAmbient(shorthand));
+  assert.ok(ambient.length > 0, "found no ambient utilities to check");
+
+  for (const [name, shorthand] of ambient) {
+    // A loop has no end to fill towards, so a fill mode could only pin it to a
+    // state it never settles in. Without one, what it rests in when the
+    // animation is off is the element's own styles.
+    assert.doesNotMatch(
+      shorthand,
+      /\b(?:both|forwards|backwards)\b/,
+      `${name} takes a fill mode, but an endless animation has nothing to fill towards`,
+    );
+
+    // Decoration that fades up from nothing would leave the page flat wherever
+    // the animation does not run — the same failure the reveals are built to
+    // avoid, moved into the background.
+    const animation = shorthand.match(/\b(cs-[a-z-]+)\b/)?.[1];
+    assert.ok(animation, `${name} names no cs-* keyframes`);
+    const start = keyframes(animation).match(/from\s*\{[^}]*opacity:\s*([\d.]+)/)?.[1];
+    if (start !== undefined) {
+      assert.ok(
+        Number(start) > 0,
+        `${animation} starts fully transparent, so the page is flat until it runs`,
+      );
+    }
   }
 });
 
@@ -80,17 +126,14 @@ test("a reveal the observer never reports on shows itself anyway", () => {
   );
 });
 
-test("asking for less motion removes every entrance, not just the utilities", () => {
+test("asking for less motion removes every animation, not just the entrances", () => {
   const block = css.match(
     /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g,
   );
   assert.ok(block, "no reduced-motion block");
   const guarded = block.join("\n");
 
-  const utilities = [...css.matchAll(/@utility\s+(animate-[a-z-]+)\s*\{/g)].map(
-    (match) => match[1],
-  );
-  for (const name of utilities) {
+  for (const [name] of utilities()) {
     assert.ok(
       guarded.includes(`.${name}`),
       `${name} still animates for a reader who asked it not to`,

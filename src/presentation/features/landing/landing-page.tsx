@@ -78,9 +78,20 @@ function Socials({ className = "" }: { className?: string }) {
   );
 }
 
+/**
+ * The first screen: the bar plus this, and nothing else.
+ *
+ * It used to ask for `86vh`, which on a 960px-tall window left the next
+ * section poking 76px above the fold — read as the hero being cut off rather
+ * than as a section boundary. Measuring against the bar's own token instead of
+ * guessing a percentage is what keeps the two adding up to exactly one screen.
+ *
+ * `dvh` rather than `vh` so a phone's collapsing URL bar takes the hero with
+ * it, instead of leaving its foot below the bottom edge.
+ */
 function Hero({ t }: { t: Translate }) {
   return (
-    <section className="relative flex min-h-[86vh] flex-col overflow-hidden">
+    <section className="relative flex min-h-[calc(100dvh-var(--landing-bar))] flex-col overflow-hidden">
       {/* The glow the design pools under the headline. */}
       <div
         aria-hidden="true"
@@ -304,7 +315,7 @@ export function LandingPage() {
   return (
     <div className="min-h-dvh bg-[#05070d] text-white">
       {/* The design's bar is the wordmark alone, centred. */}
-      <header className="flex h-[58px] items-center justify-center border-b border-white/[0.07]">
+      <header className="flex h-(--landing-bar) items-center justify-center border-b border-white/[0.07]">
         <Link href="/" aria-label={t("landing.home")}>
           <BrandLockup height={24} tone="dark" />
         </Link>

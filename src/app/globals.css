@@ -21,6 +21,12 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* The landing bar's height. The hero below it is sized as the viewport minus
+     this, so the two together fill exactly one screen; keeping the number in
+     one place is what stops them drifting apart and letting the next section
+     show under the fold. */
+  --landing-bar: 58px;
 }
 
 /*

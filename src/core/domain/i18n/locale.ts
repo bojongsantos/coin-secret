@@ -10,13 +10,14 @@ export type Locale = "id" | "en";
 export const LOCALES: readonly Locale[] = ["id", "en"];
 
 /**
- * Indonesian is the default.
+ * English is the default.
  *
- * The product was written in it and its readers are here; English is the
- * addition. Defaulting to the browser's language instead would change the app
- * under everyone who already uses it, to no one's request.
+ * The product is sold to a market that reads English, and the redesign is
+ * drawn in it; Indonesian is the one a reader chooses. Reading the browser's
+ * language instead would make the first paint unpredictable, and the language
+ * is settled before the first paint on purpose.
  */
-export const DEFAULT_LOCALE: Locale = "id";
+export const DEFAULT_LOCALE: Locale = "en";
 
 export function isLocale(value: unknown): value is Locale {
   return value === "id" || value === "en";

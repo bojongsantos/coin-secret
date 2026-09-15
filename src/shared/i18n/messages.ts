@@ -24,6 +24,8 @@ export const MESSAGES = {
   "common.premium": { id: "Premium", en: "Premium" },
   "common.pro": { id: "Pro", en: "Pro" },
   "common.upgrade": { id: "Upgrade Premium", en: "Upgrade to Premium" },
+  "common.unlockPro": { id: "Buka Pro", en: "Unlock Pro" },
+  "common.refresh": { id: "Muat ulang", en: "Refresh" },
   "common.notAvailable": { id: "Tidak tersedia", en: "Not available" },
 
   // --------------------------------------------------------------------- nav
@@ -39,6 +41,10 @@ export const MESSAGES = {
   "nav.openSidebar": { id: "Buka sidebar", en: "Open sidebar" },
   "nav.closeSidebar": { id: "Tutup sidebar", en: "Close sidebar" },
   "nav.dashboardHome": { id: "Dashboard {brand}", en: "{brand} dashboard" },
+  "nav.alphaReport": { id: "Alpha Report", en: "Alpha Report" },
+  "nav.tokenUnlock": { id: "Token Unlock", en: "Token Unlock" },
+  "nav.news": { id: "Berita", en: "News" },
+  "nav.comingSoon": { id: "Segera", en: "Coming soon" },
 
   // ------------------------------------------------------------------ search
   "search.placeholder": {
@@ -94,6 +100,25 @@ export const MESSAGES = {
     id: "Cari coin mana pun di papan",
     en: "Search any coin on the board",
   },
+
+  // ----------------------------------------------------------------- sidebar
+  "sidebar.proTitle": { id: "Paket Pro", en: "Pro plan" },
+  "sidebar.proBody": {
+    id: "Paket Pro aktif. Seluruh fitur dan scanner terbuka.",
+    en: "Pro is active. Every feature and the full scanner are open.",
+  },
+  "sidebar.freeTitle": { id: "Paket Free", en: "Free plan" },
+  "sidebar.freeBody": {
+    id: "Tiga setup teratas per sisi. Buka Pro untuk seluruh papan.",
+    en: "The top three setups on each side. Unlock Pro for the whole board.",
+  },
+  "sidebar.guestBody": {
+    id: "Masuk untuk menyimpan preferensi dan berlangganan Pro.",
+    en: "Sign in to keep your preferences and to subscribe to Pro.",
+  },
+
+  // ---------------------------------------------------------------- language
+  "language.title": { id: "Bahasa", en: "Language" },
 
   // --------------------------------------------------------------- dashboard
   "dashboard.topSetups": { id: "Top 5 setup hari ini", en: "Today's top 5 setups" },
@@ -267,10 +292,12 @@ export const MESSAGES = {
   "capability.full": { id: "Akses penuh", en: "Full access" },
 
   // ----------------------------------------------------------------- signals
-  "signals.locked": { id: "Signals terkunci", en: "Signals are locked" },
+  "signals.longSetup": { id: "Setup Long", en: "Long Setup" },
+  "signals.shortSetup": { id: "Setup Short", en: "Short Setup" },
+  "signals.locked": { id: "Signal Terkunci", en: "Signal Locked" },
   "signals.lockedBody": {
-    id: "Signals lengkap tersedia pada paket Premium.",
-    en: "The full signals board comes with Premium.",
+    id: "Signals lengkap tersedia pada paket Pro.",
+    en: "Full signals are available in the Pro package.",
   },
   "signals.lockedHint": {
     id: "Upgrade melalui halaman Akun & Billing.",

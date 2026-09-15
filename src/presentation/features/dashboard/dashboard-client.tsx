@@ -64,7 +64,7 @@ export function DashboardClient() {
   };
 
   return (
-    <AppShell analysis={analysis}>
+    <AppShell>
       <div className="flex flex-col gap-4 p-3 sm:p-6">
         {/* Supply & Demand Zones — new top section */}
         <SupplyDemandSection onSelect={selectFromSection} />

@@ -145,19 +145,19 @@ test("the analysis is written in the reader's language and says the same thing",
   }
 });
 
-test("an unstated language is Indonesian, the language the product had", () => {
-  assert.equal(DEFAULT_LOCALE, "id");
+test("an unstated language is English, the one the product leads with", () => {
+  assert.equal(DEFAULT_LOCALE, "en");
   const candles = series(120);
-  const stated = buildReasoning(candles, { sdName: "No Zone Setup", confidence: 0, locale: "id" });
+  const stated = buildReasoning(candles, { sdName: "No Zone Setup", confidence: 0, locale: "en" });
   const unstated = buildReasoning(candles, { sdName: "No Zone Setup", confidence: 0 });
-  assert.deepEqual(unstated, stated, "no locale reads exactly as it did before the toggle existed");
+  assert.deepEqual(unstated, stated, "an unstated locale is the default one, not a third behaviour");
 });
 
 test("a stored language is honoured and anything else falls back", () => {
   assert.equal(normalizeLocale("en"), "en");
   assert.equal(normalizeLocale("id"), "id");
   // localStorage is writable from the console, so junk must not reach the DOM.
-  for (const junk of [null, undefined, "", "EN", "jv", "en-US", 1, {}]) {
+  for (const junk of [null, undefined, "", "ID", "jv", "en-US", 1, {}]) {
     assert.equal(normalizeLocale(junk), DEFAULT_LOCALE, String(junk));
   }
   assert.equal(normalizeFromPreferences("en"), "en", "re-exported for the UI layer");

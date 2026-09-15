@@ -6,5 +6,5 @@ import { AppShell } from "@/presentation/layout/app-shell";
 export default async function AccountPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/account");
-  return <AppShell hideConviction hideMarketContext hideSentiment><AccountModule user={user} /></AppShell>;
+  return <AppShell><AccountModule user={user} /></AppShell>;
 }

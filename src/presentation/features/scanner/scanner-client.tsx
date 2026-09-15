@@ -8,7 +8,7 @@ export function ScannerClient() {
   const { opportunities, total, loading, error, refresh } = useScanner();
 
   return (
-    <AppShell opportunities={opportunities}>
+    <AppShell>
       <div className="flex flex-col gap-6 p-3 sm:p-6">
         <div>
           <h1 className="text-lg font-bold tracking-tight">Market Scanner</h1>

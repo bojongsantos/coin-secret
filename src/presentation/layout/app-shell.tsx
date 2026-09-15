@@ -1,53 +1,30 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Sidebar } from "@/presentation/layout/sidebar";
-import { TopNav } from "@/presentation/layout/top-nav";
+import { useState, type ReactNode } from "react";
+import { AppSidebar } from "@/presentation/layout/app-sidebar";
+import { AppTopBar } from "@/presentation/layout/app-topbar";
 import { MobileNav } from "@/presentation/layout/mobile-nav";
-import { RightRail } from "@/presentation/widgets/right-rail/right-rail";
-import { useMarketContext } from "@/presentation/hooks/use-market-context";
-import type { AnalysisResult, ScannerOpportunity } from "@/core/domain/models";
 
-export function AppShell({
-  children,
-  analysis,
-  opportunities,
-  hideConviction,
-  hideMarketContext,
-  hideSentiment,
-}: {
-  children: ReactNode;
-  analysis?: AnalysisResult | null;
-  opportunities?: ScannerOpportunity[] | null;
-  hideConviction?: boolean;
-  hideMarketContext?: boolean;
-  hideSentiment?: boolean;
-}) {
-  const showMarketData = !hideMarketContext || !hideSentiment;
-  const { context, sentiment } = useMarketContext(showMarketData);
+/**
+ * The frame every signed-in page sits in.
+ *
+ * The document is the scroller now. It used to be a nested
+ * `<main class="overflow-y-auto">` inside a `h-dvh` box, and inside a nested
+ * scroller every smooth scroll in the app was a silent no-op — measured, twice.
+ * A fixed rail and a sticky bar give the same layout back without taking the
+ * page's own scrolling away from it.
+ */
+export function AppShell({ children }: { children: ReactNode }) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    // h-dvh, not h-screen: on mobile browsers 100vh is taller than the area
-    // actually visible, so the bottom of the shell — including the nav bar —
-    // fell below the fold and the page appeared to overshoot when scrolled.
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopNav />
-        <div className="flex min-h-0 flex-1">
-          <main className="min-w-0 flex-1 overflow-y-auto pb-16 lg:pb-0">{children}</main>
-          <RightRail
-            market={context}
-            sentiment={sentiment}
-            analysis={analysis}
-            opportunities={opportunities}
-            hideConviction={hideConviction}
-            hideMarketContext={hideMarketContext}
-            hideSentiment={hideSentiment}
-          />
-        </div>
+    <div className="min-h-dvh bg-background text-foreground">
+      <AppSidebar />
+      <div className="app-main min-h-dvh">
+        <AppTopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
+        <main className="px-3 pb-24 sm:px-4 lg:pb-6">{children}</main>
       </div>
-      <MobileNav />
+      <MobileNav open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
     </div>
   );
 }

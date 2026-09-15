@@ -1,0 +1,226 @@
+"use client";
+
+import Link from "next/link";
+import { CandlestickChart, Loader2, Lock, RefreshCw } from "lucide-react";
+import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
+import { usePlan } from "@/presentation/features/access/plan-provider";
+import { useT, type Translate } from "@/presentation/hooks/use-translate";
+import { CoinIcon } from "@/presentation/ui/coin-icon";
+import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
+import { formatCompact } from "@/shared/lib/format";
+
+/**
+ * The tone each status is shown in. Terminal outcomes are not neutral news:
+ * a stop taken reads red, a target reached reads green.
+ */
+const STATUS_TONE: Record<string, string> = {
+  "Limit Order": "border-warning/30 bg-warning/10 text-warning",
+  Filled: "border-accent-blue/30 bg-accent-blue/10 text-accent-blue",
+  Running: "border-positive/30 bg-positive/10 text-positive",
+  "Target 1 reached": "border-accent/30 bg-accent/10 text-accent-2",
+  "Target 2 reached": "border-positive/30 bg-positive/10 text-positive",
+  "Invalidated (SL hit)": "border-negative/30 bg-negative/10 text-negative",
+  Missed: "border-border bg-surface-3 text-muted-2",
+};
+
+function StatusPill({ status, t }: { status: string; t: Translate }) {
+  const key = statusMessageKey(status);
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10.5px] font-semibold ${
+        STATUS_TONE[status] ?? "border-border bg-surface-3 text-muted"
+      }`}
+    >
+      {key ? t(key) : status}
+    </span>
+  );
+}
+
+/** Volume as a bar relative to the largest row in this column, plus the figure. */
+function VolumeBar({ volume, max }: { volume: number; max: number }) {
+  const percent = Math.max(4, Math.min(100, (volume / Math.max(max, 1)) * 100));
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="h-1.5 w-full max-w-[150px] overflow-hidden rounded-full bg-surface-3">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-accent-blue/70 to-accent-blue"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <span className="w-14 shrink-0 text-right text-[11.5px] font-medium tabular-nums text-muted">
+        {formatCompact(volume)}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One setup.
+ *
+ * A link, not a row with a click handler: opening in a new tab is the point,
+ * and only a real anchor gives the reader the middle-click and the context menu
+ * they would expect from one.
+ */
+function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }) {
+  const up = hit.change24h >= 0;
+  return (
+    <Link
+      href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-3/70"
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        <CoinIcon symbol={hit.symbol} size={30} />
+        <div className="min-w-0">
+          <p className="truncate text-[13.5px] font-bold leading-tight">
+            {hit.base}
+            <span className="text-[11px] font-medium text-muted-2">/USDT</span>
+          </p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-[10.5px] leading-tight tabular-nums">
+            <span className={up ? "text-positive" : "text-negative"}>
+              {up ? "+" : ""}
+              {hit.change24h.toFixed(2)}%
+            </span>
+            {/* Which chart the plan was measured on. A plan means nothing
+                without its own interval beside it. */}
+            <span className="rounded bg-surface-3 px-1.5 py-px font-bold text-muted">
+              {hit.timeframe}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <div className="hidden min-w-0 sm:block">
+        <VolumeBar volume={hit.volume24h} max={max} />
+      </div>
+
+      <span
+        className={`w-12 text-right text-[13px] font-bold tabular-nums ${
+          hit.direction === "long" ? "text-positive" : "text-negative"
+        }`}
+      >
+        {Math.round(hit.confidence)}%
+      </span>
+
+      <div className="flex w-[118px] justify-end">
+        <StatusPill status={hit.status} t={t} />
+      </div>
+    </Link>
+  );
+}
+
+function Column({
+  title,
+  hits,
+  t,
+}: {
+  title: MessageKey;
+  hits: SdScanHit[];
+  t: Translate;
+}) {
+  const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
+  return (
+    <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-4 sm:p-5">
+      <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
+
+      <div className="mt-4 grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] gap-3 px-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">
+        <span>{t("zones.pair")}</span>
+        <span className="hidden sm:block">{t("zones.volume24h")}</span>
+        <span className="w-12 text-right">{t("zones.confidence")}</span>
+        <span className="w-[118px] text-right">{t("zones.status")}</span>
+      </div>
+
+      {/* The board carries a couple of hundred pairs; the column scrolls
+          rather than the page growing to the length of the longest side. */}
+      <div className="scrollbar-thin -mx-1 max-h-[600px] min-h-[220px] overflow-y-auto px-1">
+        {hits.length === 0 ? (
+          <p className="px-3 py-10 text-center text-[12px] text-muted-2">{t("zones.empty")}</p>
+        ) : (
+          <div className="space-y-0.5">
+            {hits.map((hit) => (
+              <SetupRow key={`${hit.symbol}-${hit.timeframe}`} hit={hit} max={max} t={t} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The full signals board.
+ *
+ * `locked` blurs the whole thing behind one notice rather than trimming the
+ * rows: on this page the board *is* the product, so a truncated list would
+ * read as an empty market rather than as a limit.
+ */
+export function SignalsBoard({
+  demand,
+  supply,
+  loading,
+  error,
+  onRefresh,
+}: {
+  demand: SdScanHit[];
+  supply: SdScanHit[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const { t } = useT();
+  const { canAccess } = usePlan();
+  const locked = !canAccess("signals");
+
+  return (
+    <div className="relative rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight">
+          <CandlestickChart className="size-5 text-accent-blue" />
+          {t("nav.signals")}
+        </h2>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading || locked}
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          {t("common.refresh")}
+        </button>
+      </div>
+
+      {error && !locked && (
+        <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12px] text-warning">
+          {error}
+        </p>
+      )}
+
+      <div className={locked ? "pointer-events-none select-none blur-[6px]" : undefined} aria-hidden={locked}>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+          <Column title="signals.longSetup" hits={demand} t={t} />
+          <Column title="signals.shortSetup" hits={supply} t={t} />
+        </div>
+      </div>
+
+      {locked && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-3xl border border-border bg-surface/95 p-8 text-center shadow-2xl backdrop-blur-sm">
+            <span className="mx-auto flex size-14 items-center justify-center rounded-full border border-border bg-surface-3">
+              <Lock className="size-6 text-foreground" />
+            </span>
+            <h3 className="mt-5 text-[26px] font-bold tracking-tight">{t("signals.locked")}</h3>
+            <p className="mt-2 text-[12.5px] text-muted">{t("signals.lockedBody")}</p>
+            <Link
+              href="/pricing"
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-accent-blue to-accent px-6 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+            >
+              <Lock className="size-4" />
+              {t("common.unlockPro")}
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

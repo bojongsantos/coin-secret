@@ -21,7 +21,7 @@ export default async function PricingPage() {
     : null;
 
   return (
-    <AppShell hideConviction hideMarketContext hideSentiment>
+    <AppShell>
       <PricingModule
         authenticated={user !== null}
         plan={user?.plan ?? null}

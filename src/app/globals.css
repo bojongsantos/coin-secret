@@ -141,3 +141,20 @@ body {
 @utility scrollbar-thin {
   scrollbar-width: thin;
 }
+
+/**
+ * The main column's offset for the fixed left rail.
+ *
+ * Driven by the attribute the preference script stamps before the first paint,
+ * not by React state: read from state, the server would render one width and
+ * the browser correct it a frame later, and the whole page would visibly jump
+ * sideways for anyone who had collapsed the rail.
+ */
+@media (min-width: 1024px) {
+  .app-main {
+    padding-left: 284px;
+  }
+  html[data-sidebar="collapsed"] .app-main {
+    padding-left: 96px;
+  }
+}

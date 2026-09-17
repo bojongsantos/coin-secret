@@ -7,7 +7,7 @@ Coin Secret adalah aplikasi analisis teknikal kripto berbasis aturan. Sistem men
 - Next.js 16 App Router dan React 19.
 - PostgreSQL 17 dan Prisma ORM 7.
 - Better Auth untuk email/password, session database, verifikasi, dan reset password.
-- Midtrans Snap atau NOWPayments untuk pembayaran Premium 30 hari, dipilih lewat `PAYMENT_PROVIDER`.
+- Midtrans Snap atau NOWPayments untuk pembayaran Premium bulanan, enam bulan, dan tahunan.
 - Brevo untuk email transaksional production.
 
 ## Struktur
@@ -61,7 +61,7 @@ Password hanya berasal dari `SEED_USER_PASSWORD` dan `SEED_ADMIN_PASSWORD`. Jang
 
 ## Chart
 
-Interval candle (`15m`, `1H`, `4H`, `1D`) dan rentang histori (`1M`, `3M`, `1Y`, `ALL`) berdiri sendiri. Setiap kombinasi tersedia, sehingga `ALL` dapat dipakai pada interval mana pun.
+Interval candle tersedia pada `15m`, `1H`, `4H`, dan `1D`. Aplikasi memilih rentang histori yang cukup panjang untuk mesin analisis: `3M` untuk `15m`/`1H`, `1Y` untuk `4H`, dan `ALL` untuk `1D`.
 
 Rentang dipecah menjadi halaman yang dimuat paralel dari waktu listing, bukan dengan menelusuri mundur satu per satu. Halaman terbaru dimuat lebih dulu agar chart langsung dapat dipakai, sisanya menyusul di latar belakang dengan indikator progres.
 
@@ -72,4 +72,4 @@ npm run check
 npm audit
 ```
 
-Status setup chart tetap disimpan lokal per browser. Identitas, session, paket, pembayaran, feature gate, audit log, dan arsip bukti hasil setup disimpan di PostgreSQL.
+Setup yang sudah diterbitkan, identitas, session, paket, pembayaran, feature gate, audit log, dan arsip bukti hasil disimpan di PostgreSQL. Preferensi tema, bahasa, dan sidebar tetap lokal per browser.

@@ -24,6 +24,9 @@ export class MidtransGateway implements BillingGateway {
   ) {}
 
   async createCheckout(input: CheckoutRequest): Promise<CheckoutResult> {
+    if (input.currency !== "IDR") {
+      throw new HttpError(500, "Midtrans hanya dapat menagih dalam IDR.", "PAYMENT_CURRENCY_ERROR");
+    }
     const base = this.production ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com";
     const response = await fetch(`${base}/snap/v1/transactions`, {
       method: "POST",
@@ -36,10 +39,10 @@ export class MidtransGateway implements BillingGateway {
         transaction_details: { order_id: input.orderId, gross_amount: input.amount },
         item_details: [
           {
-            id: "coinsecret-premium-30d",
+            id: "coinsecret-premium",
             price: input.amount,
             quantity: 1,
-            name: "Coin Secret Premium 30 hari",
+            name: input.description,
           },
         ],
         customer_details: { first_name: input.customer.name, email: input.customer.email },

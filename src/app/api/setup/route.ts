@@ -1,5 +1,6 @@
 import { normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
+import { apiError } from "@/shared/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,9 +37,7 @@ export async function GET(request: Request) {
       { setup: published },
       { headers: { "Cache-Control": "private, max-age=15" } },
     );
-  } catch {
-    // The chart falls back to detecting for itself, which is worse but is
-    // still a chart.
-    return Response.json({ setup: null });
+  } catch (error) {
+    return apiError(error);
   }
 }

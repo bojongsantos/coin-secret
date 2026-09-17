@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Crown } from "lucide-react";
 import type { CurrentUserDto } from "@/core/domain/identity";
-import { billingPlan, formatUsd } from "@/core/domain/billing/plans";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { useT } from "@/presentation/hooks/use-translate";
 import { Reveal } from "@/presentation/ui/reveal";
@@ -92,14 +91,6 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
             <h2 className="text-[14px] font-bold">{t("billing.proTitle")}</h2>
           </div>
           <p className="mt-2 text-[13px] text-muted">{t("billing.proPitch")}</p>
-          <p className="mt-5 flex items-baseline gap-1.5">
-            <span className="text-[30px] font-bold leading-none tracking-tight">
-              {formatUsd(billingPlan("annual").perMonthUsd)}
-            </span>
-            <span className="text-[12px] font-medium text-muted-2">
-              {t("billing.perMonthAnnual")}
-            </span>
-          </p>
           {pro ? (
             <p className="mt-4 text-[13px] font-semibold text-positive">{t("billing.proActive")}</p>
           ) : (

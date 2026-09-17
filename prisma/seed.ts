@@ -5,7 +5,16 @@ import { PrismaClient, type Plan, type UserRole } from "../src/generated/prisma/
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL wajib untuk seed.");
+if (process.env.NODE_ENV === "production") {
+  throw new Error("Seed demo tidak boleh dijalankan pada production.");
+}
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+
+function required(name: "SEED_USER_PASSWORD" | "SEED_ADMIN_PASSWORD"): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} wajib untuk seed.`);
+  return value;
+}
 
 interface SeedUser { email: string; name: string; password: string; role: UserRole; plan: Plan }
 
@@ -29,10 +38,10 @@ async function upsertUser(input: SeedUser) {
 }
 
 async function main() {
-  const sharedPassword = process.env.SEED_USER_PASSWORD ?? "CoinSecret123!";
+  const sharedPassword = required("SEED_USER_PASSWORD");
   await upsertUser({ email: "free@coinsecret.local", name: "Free User", password: sharedPassword, role: "USER", plan: "FREE" });
   await upsertUser({ email: "premium@coinsecret.local", name: "Premium User", password: sharedPassword, role: "USER", plan: "PREMIUM" });
-  await upsertUser({ email: "admin@coinsecret.local", name: "Coin Secret Admin", password: process.env.SEED_ADMIN_PASSWORD ?? sharedPassword, role: "ADMIN", plan: "PREMIUM" });
+  await upsertUser({ email: "admin@coinsecret.local", name: "Coin Secret Admin", password: required("SEED_ADMIN_PASSWORD"), role: "ADMIN", plan: "PREMIUM" });
   await prisma.featureGate.createMany({
     data: [
       { feature: "scannerExtended", free: false, premium: true },

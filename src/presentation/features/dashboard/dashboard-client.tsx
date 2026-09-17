@@ -6,7 +6,6 @@ import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import type { Timeframe } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
-import { AdRow } from "@/presentation/features/dashboard/ad-slot";
 import { MarketOverview } from "@/presentation/features/dashboard/market-overview";
 import { TopSetupsStrip } from "@/presentation/features/dashboard/top-setups-strip";
 import { SignalsBoard } from "@/presentation/features/signals/signals-board";
@@ -78,6 +77,8 @@ export function DashboardClient() {
           <SignalsBoard
             demand={result?.demand ?? []}
             supply={result?.supply ?? []}
+            demandTotal={result?.demandTotal ?? 0}
+            supplyTotal={result?.supplyTotal ?? 0}
             loading={scanLoading}
             error={scanError}
             onRefresh={refresh}
@@ -87,10 +88,6 @@ export function DashboardClient() {
         </Reveal>
 
         <Reveal step={2}>
-          <AdRow />
-        </Reveal>
-
-        <Reveal step={3}>
           <TopSetupsStrip
             setups={top}
             loading={topLoading}
@@ -112,7 +109,7 @@ export function DashboardClient() {
         )}
 
         {analysis && (
-          <Reveal step={4}>
+          <Reveal step={3}>
             <AnalysisView
               data={analysis}
               timeframe={timeframe}

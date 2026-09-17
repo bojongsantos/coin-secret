@@ -33,6 +33,9 @@ export async function handlePaymentNotification(
 
     const payment = await prisma.payment.findUnique({ where: { orderId: event.orderId } });
     if (!payment) throw new HttpError(404, "Order pembayaran tidak ditemukan.", "ORDER_NOT_FOUND");
+    if (event.paidCurrency && event.paidCurrency.toUpperCase() !== payment.currency.toUpperCase()) {
+      throw new HttpError(400, "Mata uang pembayaran tidak sesuai.", "CURRENCY_MISMATCH");
+    }
     if (!amountsMatch(event.paidAmount, payment.amount)) {
       throw new HttpError(400, "Nominal pembayaran tidak sesuai.", "AMOUNT_MISMATCH");
     }

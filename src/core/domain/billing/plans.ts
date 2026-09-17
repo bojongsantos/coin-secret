@@ -27,6 +27,12 @@ export interface BillingPlan {
   days: number;
 }
 
+export interface BillingQuote {
+  currency: "USD" | "IDR";
+  total: number;
+  perMonth: number;
+}
+
 const PLANS: Record<BillingPeriod, BillingPlan> = {
   monthly: { id: "monthly", label: "Bulanan", months: 1, totalUsd: 12, perMonthUsd: 12, days: 30 },
   sixMonth: { id: "sixMonth", label: "6 Bulan", months: 6, totalUsd: 60, perMonthUsd: 10, days: 180 },
@@ -35,6 +41,30 @@ const PLANS: Record<BillingPeriod, BillingPlan> = {
 
 export function billingPlan(period: BillingPeriod): BillingPlan {
   return PLANS[period];
+}
+
+/** The amount the selected provider can actually charge. */
+export function billingQuote(
+  period: BillingPeriod,
+  provider: string,
+  midtransMonthlyIdr?: number,
+): BillingQuote | null {
+  const plan = PLANS[period];
+  if (provider === "nowpayments") {
+    return { currency: "USD", total: plan.totalUsd, perMonth: plan.perMonthUsd };
+  }
+  if (provider !== "midtrans") return null;
+  if (!Number.isSafeInteger(midtransMonthlyIdr) || (midtransMonthlyIdr ?? 0) <= 0) return null;
+  const total = (midtransMonthlyIdr as number) * (plan.totalUsd / MONTHLY_RATE_USD);
+  return { currency: "IDR", total, perMonth: total / plan.months };
+}
+
+export function formatMoney(amount: number, currency: BillingQuote["currency"], locale = "en"): string {
+  return new Intl.NumberFormat(locale === "id" ? "id-ID" : "en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 export function isBillingPeriod(value: unknown): value is BillingPeriod {

@@ -5,12 +5,13 @@ import { useState } from "react";
 import { Check, CandlestickChart, Lock, Mail, Newspaper, Telescope } from "lucide-react";
 import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
 import {
-  billingPlan,
+  type BillingQuote,
   BILLING_PERIODS,
-  formatUsd,
+  formatMoney,
   savingsPercent,
   type BillingPeriod,
 } from "@/core/domain/billing/plans";
+import type { Locale } from "@/core/domain/i18n/locale";
 import { BrandLockup } from "@/presentation/ui/brand-logo";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { Reveal } from "@/presentation/ui/reveal";
@@ -175,9 +176,17 @@ function About({ t }: { t: Translate }) {
   );
 }
 
-function Pricing({ t }: { t: Translate }) {
+function Pricing({
+  t,
+  locale,
+  quotes,
+}: {
+  t: Translate;
+  locale: Locale;
+  quotes: Record<BillingPeriod, BillingQuote | null>;
+}) {
   const [period, setPeriod] = useState<BillingPeriod>("annual");
-  const plan = billingPlan(period);
+  const quote = quotes[period];
 
   const rows = PLAN_CAPABILITIES.map((capability) => {
     const key = domainMessageKey("capability", capability.id);
@@ -246,7 +255,7 @@ function Pricing({ t }: { t: Translate }) {
               {
                 id: "free",
                 name: t("common.free"),
-                price: "$0",
+                price: formatMoney(0, quote?.currency ?? "USD", locale),
                 blurb: t("pricing.freeBlurb"),
                 action: t("pricing.startFree"),
                 href: "/register",
@@ -255,9 +264,11 @@ function Pricing({ t }: { t: Translate }) {
               {
                 id: "pro",
                 name: t("common.pro"),
-                price: formatUsd(plan.perMonthUsd),
+                price: quote ? formatMoney(quote.perMonth, quote.currency, locale) : "—",
                 blurb: t("pricing.proBlurb"),
-                action: t("landing.getPro", { price: formatUsd(plan.perMonthUsd) }),
+                action: quote
+                  ? t("landing.getPro", { price: formatMoney(quote.perMonth, quote.currency, locale) })
+                  : t("pricing.unavailable"),
                 href: "/pricing",
                 featured: true,
               },
@@ -317,8 +328,8 @@ function Pricing({ t }: { t: Translate }) {
   );
 }
 
-export function LandingPage() {
-  const { t } = useT();
+export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQuote | null> }) {
+  const { t, locale } = useT();
 
   return (
     <div className="min-h-dvh bg-[#05070d] text-white">
@@ -332,7 +343,7 @@ export function LandingPage() {
       <main>
         <Hero t={t} />
         <About t={t} />
-        <Pricing t={t} />
+        <Pricing t={t} locale={locale} quotes={quotes} />
       </main>
 
       <footer className="border-t border-white/[0.07] bg-white/[0.02]">

@@ -20,6 +20,8 @@ export function SignalsClient() {
           <SignalsBoard
             demand={result?.demand ?? []}
             supply={result?.supply ?? []}
+            demandTotal={result?.demandTotal ?? 0}
+            supplyTotal={result?.supplyTotal ?? 0}
             loading={loading}
             error={error}
             onRefresh={refresh}

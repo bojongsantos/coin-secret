@@ -1,4 +1,4 @@
-import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
+import type { ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import { emaSeries, rsiSeries } from "@/core/domain/analysis/analysis-engine";
 import {
@@ -50,7 +50,7 @@ export async function runScanner(
 ): Promise<ScanResult> {
   const errors: string[] = [];
   const stored = options.activeSetups
-    ? await options.activeSetups.loadActive(symbols).catch(() => [] as ActiveSetup[])
+    ? await options.activeSetups.loadActive(symbols)
     : [];
   const active = new Map(stored.map((entry) => [entry.symbol, entry]));
   let tickers;

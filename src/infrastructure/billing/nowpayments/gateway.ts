@@ -49,7 +49,7 @@ export class NowPaymentsGateway implements BillingGateway {
         price_amount: input.amount,
         price_currency: input.currency.toLowerCase(),
         order_id: input.orderId,
-        order_description: "Coin Secret Premium 30 hari",
+        order_description: input.description,
         ipn_callback_url: `${this.config.publicUrl}/api/billing/webhook/nowpayments`,
         success_url: `${this.config.publicUrl}/account?payment=success`,
         cancel_url: `${this.config.publicUrl}/pricing?payment=canceled`,

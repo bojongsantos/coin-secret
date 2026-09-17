@@ -6,8 +6,9 @@ import { Check, Loader2, ShieldCheck } from "lucide-react";
 import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
 import {
   billingPlan,
+  type BillingQuote,
   BILLING_PERIODS,
-  formatUsd,
+  formatMoney,
   savingsPercent,
   type BillingPeriod,
 } from "@/core/domain/billing/plans";
@@ -22,6 +23,7 @@ interface PricingModuleProps {
   plan: SubscriptionPlan | null;
   periodEnd: string | null;
   provider: ProviderCopy;
+  quotes: Record<BillingPeriod, BillingQuote | null>;
 }
 
 /** A capability's qualifier, in the reader's language, or `true` for a plain yes. */
@@ -90,13 +92,14 @@ function PlanCard({
   );
 }
 
-export function PricingModule({ authenticated, plan, periodEnd, provider }: PricingModuleProps) {
+export function PricingModule({ authenticated, plan, periodEnd, provider, quotes }: PricingModuleProps) {
   const { t, locale } = useT();
   const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selected = billingPlan(period);
+  const quote = quotes[period];
   const isPro = plan === "PREMIUM";
   const dateFormatter = new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
     day: "numeric",
@@ -190,7 +193,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
         <PlanCard
           name={t("common.free")}
           blurb={t("pricing.freeBlurb")}
-          price="$0"
+          price={formatMoney(0, quote?.currency ?? "USD", locale)}
           rows={rows.map((row) => ({ id: row.id, name: row.name, value: row.free }))}
           column="free"
           action={
@@ -213,12 +216,14 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
           featured
           name={t("common.pro")}
           blurb={t("pricing.proBlurb")}
-          price={formatUsd(selected.perMonthUsd)}
+          price={quote ? formatMoney(quote.perMonth, quote.currency, locale) : "—"}
           note={
-            selected.months === 1
-              ? t("pricing.billedMonthly", { total: formatUsd(selected.totalUsd) })
-              : t("pricing.billedOnce", {
-                  total: formatUsd(selected.totalUsd),
+            !quote
+              ? t("pricing.unavailable")
+              : selected.months === 1
+                ? t("pricing.billedMonthly", { total: formatMoney(quote.total, quote.currency, locale) })
+                : t("pricing.billedOnce", {
+                  total: formatMoney(quote.total, quote.currency, locale),
                   months: selected.months,
                 })
           }
@@ -245,7 +250,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider }: Pric
               <button
                 type="button"
                 onClick={() => void checkout()}
-                disabled={loading}
+                disabled={loading || !quote}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 {loading && <Loader2 className="size-4 animate-spin" />}

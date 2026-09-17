@@ -18,7 +18,16 @@ const TITLE = "Coin Secret — Crypto Technical Analysis";
 const DESCRIPTION =
   "Rule-based crypto chart analysis, supply-demand detection, and market scanning.";
 
+function publicOrigin(): URL {
+  try {
+    return new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000");
+  } catch {
+    return new URL("http://localhost:3000");
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: publicOrigin(),
   title: TITLE,
   description: DESCRIPTION,
   // Without a card image a shared link renders as a bare grey box, which is

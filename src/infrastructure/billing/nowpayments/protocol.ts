@@ -99,6 +99,7 @@ export function toPaymentEvent(ipn: NowPaymentsIpn): PaymentEvent {
     orderId: ipn.order_id,
     providerTransactionId: ipn.payment_id === undefined ? undefined : String(ipn.payment_id),
     paidAmount: String(ipn.price_amount),
+    paidCurrency: ipn.price_currency,
     outcome: outcomeFor(ipn.payment_status),
     providerStatus: ipn.payment_status,
     raw: ipn,

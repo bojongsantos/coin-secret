@@ -45,6 +45,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Scanner unavailable";
     const badRequest = message.startsWith("symbols");
-    return Response.json({ error: message }, { status: badRequest ? 400 : 503 });
+    if (!badRequest) console.error(error);
+    return Response.json(
+      { error: badRequest ? message : "Scanner unavailable" },
+      { status: badRequest ? 400 : 503 },
+    );
   }
 }

@@ -41,7 +41,9 @@ Berkas dipecah dua seperti adapter pembayaran: `infrastructure/email/brevo.ts` m
 
 ## Billing
 
-Checkout menentukan harga dari `PREMIUM_PRICE_IDR` pada server. Browser tidak dapat menentukan nominal atau mengaktifkan paket.
+Checkout menentukan harga pada server. Midtrans menagih IDR dari `PREMIUM_PRICE_IDR`; NOWPayments menagih katalog USD di `core/domain/billing/plans.ts`. Pilihan periode hanya menentukan paket yang dibeli, bukan nominal bebas dari browser.
+
+Invoice pending hanya dipakai ulang bila provider, periode, nominal, dan mata uangnya sama. Mengganti periode selalu membuat checkout yang sesuai dengan pilihan baru.
 
 `PAYMENT_PROVIDER` memilih penyedia yang menagih. Nilai yang tidak dikenali menolak melakukan penagihan alih-alih jatuh ke penyedia yang tidak diminta operator.
 
@@ -53,7 +55,7 @@ Webhook production:
 https://DOMAIN/api/billing/webhook/midtrans
 ```
 
-Handler memverifikasi `SHA512(order_id + status_code + gross_amount + server_key)`, nominal, status, dan fraud status. Event settlement diproses idempotent. Pembayaran sukses menambah 30 hari pada periode aktif.
+Handler memverifikasi `SHA512(order_id + status_code + gross_amount + server_key)`, nominal, mata uang, status, dan fraud status. Event settlement diproses idempotent. Pembayaran sukses menambah 30, 180, atau 365 hari sesuai periode pada order.
 
 Konfigurasikan Notification URL tersebut pada Midtrans MAP. Gunakan Sandbox key sampai QA pembayaran selesai.
 
@@ -79,7 +81,7 @@ Pemetaan status yang perlu diperhatikan:
 
 Event melaporkan `price_amount`, bukan `actually_paid`. Pesanan disimpan dalam mata uang toko sedangkan `actually_paid` adalah kuantitas kripto, sehingga membandingkannya dengan total pesanan akan menolak setiap pembayaran yang sah. Kekurangan bayar dibawa oleh status, bukan oleh nominal.
 
-NOWPayments menerima `idr` sebagai `price_currency`; hal ini diverifikasi pada 20 Agustus 2026 melalui checkout produksi, yang menampilkan kuotasi `0.00008136 BTC ~ IDR 99000`. Karena itu tidak diperlukan konversi mata uang, dan `amountsMatch` dapat membandingkan `price_amount` langsung terhadap `payment.amount` yang tersimpan dalam rupiah.
+NOWPayments menerima katalog USD sebagai `price_currency`. Callback dibandingkan dengan nominal dan mata uang yang tersimpan pada order; kuantitas kripto pada `actually_paid` tidak dipakai sebagai nominal toko.
 
 ### Menambah penyedia pembayaran
 
@@ -242,6 +244,8 @@ Ambil environment production ke lokasi di luar direktori proyek saat menjalankan
 Laporan menyebutkan nama variabel, tidak pernah nilainya, sehingga aman dicatat pada log. Setiap kemampuan menyatakan dampaknya bagi pengguna, bukan sekadar nama kunci yang hilang, karena kunci yang kosong tidak memunculkan galat apa pun sampai ada pengguna yang menabraknya.
 
 Kemampuan yang dipantau: database, autentikasi, email transaksional, sweep terjadwal, dan pembayaran. Laporan pembayaran mengikuti `PAYMENT_PROVIDER`, sehingga panel menuntut kunci penyedia yang benar-benar dipakai. Penyedia yang tidak dikenali dilaporkan terhalang pada `PAYMENT_PROVIDER` itu sendiri, sebab tanpa daftar kunci untuk diperiksa sebuah salah ketik akan tampak siap sepenuhnya sementara setiap checkout membalas 503.
+
+Untuk Midtrans, kesiapan pembayaran juga menuntut `PREMIUM_PRICE_IDR`, karena katalog dolar tidak boleh dikirim sebagai nominal rupiah.
 
 ## Operasional
 

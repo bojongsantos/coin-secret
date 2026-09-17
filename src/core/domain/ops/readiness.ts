@@ -29,7 +29,7 @@ interface Capability {
  * not currently using.
  */
 const PAYMENT_PROVIDER_KEYS: Record<string, string[]> = {
-  midtrans: ["MIDTRANS_SERVER_KEY"],
+  midtrans: ["MIDTRANS_SERVER_KEY", "PREMIUM_PRICE_IDR"],
   nowpayments: ["NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET"],
 };
 

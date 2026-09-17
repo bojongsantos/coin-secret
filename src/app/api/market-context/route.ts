@@ -9,8 +9,9 @@ export async function GET() {
       headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
     });
   } catch (error) {
+    console.error(error);
     return Response.json(
-      { error: error instanceof Error ? error.message : "Market context unavailable" },
+      { error: "Market context unavailable" },
       { status: 503 },
     );
   }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   billingPlan,
+  billingQuote,
   BILLING_PERIODS,
   isBillingPeriod,
   MONTHLY_RATE_USD,
@@ -53,4 +54,24 @@ test("only the three known periods are accepted", () => {
   for (const junk of ["weekly", "", "MONTHLY", null, 12]) {
     assert.equal(isBillingPeriod(junk), false, `${String(junk)} must be rejected`);
   }
+});
+
+test("each provider charges and displays the same currency and amount", () => {
+  assert.deepEqual(billingQuote("monthly", "nowpayments"), {
+    currency: "USD",
+    total: 12,
+    perMonth: 12,
+  });
+  assert.deepEqual(billingQuote("sixMonth", "midtrans", 99_000), {
+    currency: "IDR",
+    total: 495_000,
+    perMonth: 82_500,
+  });
+  assert.deepEqual(billingQuote("annual", "midtrans", 99_000), {
+    currency: "IDR",
+    total: 792_000,
+    perMonth: 66_000,
+  });
+  assert.equal(billingQuote("monthly", "midtrans", Number.NaN), null);
+  assert.equal(billingQuote("monthly", "unknown-provider"), null);
 });

@@ -120,6 +120,7 @@ test("the wire schema rejects payloads that cannot be trusted", () => {
   const valid = {
     order_id: "ORDER-1",
     gross_amount: "99000.00",
+    currency: "IDR",
     status_code: "200",
     transaction_status: "settlement",
     signature_key: GOLDEN_SIGNATURE,
@@ -142,6 +143,7 @@ test("a verified notification becomes a provider-neutral event", () => {
     order_id: "ORDER-1",
     transaction_id: "trx-9",
     gross_amount: "99000.00",
+    currency: "IDR",
     status_code: "200",
     transaction_status: "settlement",
     fraud_status: "accept",
@@ -153,6 +155,7 @@ test("a verified notification becomes a provider-neutral event", () => {
   assert.equal(event.orderId, "ORDER-1");
   assert.equal(event.providerTransactionId, "trx-9");
   assert.equal(event.paidAmount, "99000.00");
+  assert.equal(event.paidCurrency, "IDR");
   assert.equal(event.outcome, "paid");
   // The provider's own wording is kept for audit, separate from the outcome.
   assert.equal(event.providerStatus, "settlement");

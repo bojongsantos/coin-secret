@@ -125,13 +125,6 @@ export const MESSAGES = {
   "dashboard.topSetups": { id: "Top Setup Hari Ini", en: "Today's Top Setups" },
   "dashboard.marketOverview": { id: "Ringkasan Pasar", en: "Market Overview" },
 
-  // --------------------------------------------------------------------- ads
-  "ads.label": { id: "Iklan", en: "Ad" },
-  "ads.placeholderTitle": { id: "Slot iklan {index}", en: "Ad slot {index}" },
-  "ads.placeholderBody": {
-    id: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ruang ini menunggu materi iklan; teksnya sengaja bukan berita agar tidak terbaca sebagai informasi pasar.",
-    en: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. This space is waiting for its creative; the filler is deliberately not a headline so it cannot read as market information.",
-  },
   "dashboard.scanning": { id: "Memindai…", en: "Scanning…" },
   "dashboard.noSetups": {
     id: "Belum ada setup yang lolos ambang hari ini.",
@@ -236,6 +229,10 @@ export const MESSAGES = {
     en: "Stop scrolling charts for hours. CoinSecret scans the market for you and delivers trading plans ready to execute.",
   },
   "pricing.periodGroup": { id: "Periode langganan", en: "Billing period" },
+  "pricing.unavailable": {
+    id: "Harga belum dikonfigurasi. Hubungi administrator.",
+    en: "Pricing is not configured yet. Contact the administrator.",
+  },
   "pricing.period.monthly": { id: "Bulanan", en: "Monthly" },
   "pricing.period.sixMonth": { id: "6 Bulan", en: "6 Months" },
   "pricing.period.annual": { id: "Tahunan", en: "Annual" },

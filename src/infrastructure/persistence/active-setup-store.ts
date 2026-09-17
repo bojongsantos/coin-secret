@@ -122,8 +122,8 @@ export const activeSetupStore: ActiveSetupPort = {
       // has already had its life. `create` settles which — the signature is
       // unique, so a row that exists rejects it, and that row is a finished
       // one we must leave alone.
-      await prisma.trackedSetup
-        .create({
+      try {
+        await prisma.trackedSetup.create({
           data: {
             signature,
             symbol: setup.symbol,
@@ -144,11 +144,19 @@ export const activeSetupStore: ActiveSetupPort = {
             // later observation can recover that.
             firstStatus: setup.status,
           },
-        })
-        .catch(() => undefined);
+        });
+      } catch (error) {
+        // Concurrent scans may both observe a missing signature. One wins the
+        // create; the other may ignore only that unique-key race.
+        if (!isPrismaErrorCode(error, "P2002")) throw error;
+      }
     }
   },
 };
+
+function isPrismaErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
 
 const TERMINAL = ["Target 2 reached", "Invalidated (SL hit)", "Missed"];
 

@@ -1,7 +1,6 @@
 import type {
   ActiveSetup,
   ActiveSetupPort,
-  RetiredZone,
 } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import {
@@ -148,7 +147,7 @@ export async function runSdScan(
   const changed: ActiveSetup[] = [];
 
   const stored = options.activeSetups
-    ? await options.activeSetups.loadActive(symbols).catch(() => [] as ActiveSetup[])
+    ? await options.activeSetups.loadActive(symbols)
     : [];
   const active = new Map(stored.map((entry) => [entry.symbol, entry]));
   // Zones these symbols have already finished. The detector keeps offering
@@ -156,7 +155,7 @@ export async function runSdScan(
   // bar is a setup's identity, so publishing one again is not a new setup but
   // the old one reopened.
   const retiredZones = options.activeSetups
-    ? await options.activeSetups.loadRetiredZones(symbols).catch(() => [] as RetiredZone[])
+    ? await options.activeSetups.loadRetiredZones(symbols)
     : [];
   const retired = new Set(
     retiredZones.map((zone) => zoneKey(zone.symbol, zone.timeframe, zone.direction, zone.zoneBaseTime)),
@@ -309,9 +308,7 @@ export async function runSdScan(
   );
 
   if (options.activeSetups && changed.length > 0) {
-    await options.activeSetups.persist(changed).catch(() => {
-      // The scan is still valid without the write; the next run retries it.
-    });
+    await options.activeSetups.persist(changed);
   }
 
   const byVolume = (a: SdScanHit, b: SdScanHit) => b.volume24h - a.volume24h;

@@ -6,7 +6,6 @@ import {
   Check,
   Hourglass,
   Loader2,
-  Lock,
   MinusCircle,
   Play,
   RefreshCw,
@@ -15,9 +14,9 @@ import {
   XCircle,
 } from "lucide-react";
 import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
-import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
+import { LockedOverlay } from "@/presentation/ui/locked-overlay";
 import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 import { formatCompact } from "@/shared/lib/format";
 
@@ -131,18 +130,24 @@ function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }
 function Column({
   title,
   hits,
+  totalCount,
   t,
   maxHeight,
 }: {
   title: MessageKey;
   hits: SdScanHit[];
+  totalCount: number;
   t: Translate;
   maxHeight: number;
 }) {
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
+  const hiddenCount = Math.max(0, totalCount - hits.length);
   return (
     <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-4 sm:p-5">
-      <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
+        <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
+      </div>
 
       <div className="mt-4 hidden grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] gap-3 px-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2 sm:grid">
         <span>{t("zones.pair")}</span>
@@ -166,6 +171,13 @@ function Column({
             ))}
           </div>
         )}
+        {hiddenCount > 0 && (
+          <LockedOverlay feature="signals" className="mt-1 border-t border-border">
+            <div className="flex h-24 items-center justify-center text-xs text-muted-2">
+              {t("zones.moreSetups", { count: hiddenCount })}
+            </div>
+          </LockedOverlay>
+        )}
       </div>
     </section>
   );
@@ -174,13 +186,14 @@ function Column({
 /**
  * The full signals board.
  *
- * `locked` blurs the whole thing behind one notice rather than trimming the
- * rows: on this page the board *is* the product, so a truncated list would
- * read as an empty market rather than as a limit.
+ * Free readers receive three rows per side from the API. The totals let the UI
+ * state plainly how many more are available without sending those rows.
  */
 export function SignalsBoard({
   demand,
   supply,
+  demandTotal = demand.length,
+  supplyTotal = supply.length,
   loading,
   error,
   onRefresh,
@@ -189,6 +202,8 @@ export function SignalsBoard({
 }: {
   demand: SdScanHit[];
   supply: SdScanHit[];
+  demandTotal?: number;
+  supplyTotal?: number;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
@@ -197,9 +212,6 @@ export function SignalsBoard({
   maxHeight?: number;
 }) {
   const { t } = useT();
-  const { canAccess } = usePlan();
-  const locked = !canAccess("signals");
-
   return (
     <div className="relative rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -210,7 +222,7 @@ export function SignalsBoard({
         <button
           type="button"
           onClick={onRefresh}
-          disabled={loading || locked}
+          disabled={loading}
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
@@ -218,37 +230,16 @@ export function SignalsBoard({
         </button>
       </div>
 
-      {(error || failedCount > 0) && !locked && (
+      {(error || failedCount > 0) && (
         <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12px] text-warning">
           {error ?? t("scan.partialFailure", { count: failedCount })}
         </p>
       )}
 
-      <div className={locked ? "pointer-events-none select-none blur-[6px]" : undefined} aria-hidden={locked}>
-        <div className="mt-5 grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
-          <Column title="signals.longSetup" hits={demand} t={t} maxHeight={maxHeight} />
-          <Column title="signals.shortSetup" hits={supply} t={t} maxHeight={maxHeight} />
-        </div>
+      <div className="mt-5 grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
+        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} t={t} maxHeight={maxHeight} />
+        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} t={t} maxHeight={maxHeight} />
       </div>
-
-      {locked && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center p-6">
-          <div className="w-full max-w-md rounded-3xl border border-border bg-surface/95 p-8 text-center shadow-2xl backdrop-blur-sm">
-            <span className="mx-auto flex size-14 items-center justify-center rounded-full border border-border bg-surface-3">
-              <Lock className="size-6 text-foreground" />
-            </span>
-            <h3 className="mt-5 text-[26px] font-bold tracking-tight">{t("signals.locked")}</h3>
-            <p className="mt-2 text-[12.5px] text-muted">{t("signals.lockedBody")}</p>
-            <Link
-              href="/pricing"
-              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-accent-blue to-accent px-6 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-            >
-              <Lock className="size-4" />
-              {t("common.unlockPro")}
-            </Link>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -9,10 +9,14 @@ export async function GET() {
       prisma.user.count(),
       prisma.user.count({ where: { plan: "PREMIUM" } }),
       prisma.subscription.count({ where: { status: "ACTIVE" } }),
-      prisma.payment.aggregate({ where: { status: "SETTLED" }, _sum: { amount: true } }),
+      prisma.payment.groupBy({ by: ["currency"], where: { status: "SETTLED" }, _sum: { amount: true } }),
       prisma.payment.count({ where: { status: "PENDING" } }),
     ]);
-    return Response.json({ users, premiumUsers, activeSubscriptions, revenueIdr: settledRevenue._sum.amount ?? 0, pendingPayments });
+    const revenue = settledRevenue.map((row) => ({
+      currency: row.currency,
+      amount: row._sum.amount ?? 0,
+    }));
+    return Response.json({ users, premiumUsers, activeSubscriptions, revenue, pendingPayments });
   } catch (error) {
     return apiError(error);
   }

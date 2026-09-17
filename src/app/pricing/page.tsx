@@ -5,6 +5,7 @@ import { providerCopy } from "@/core/domain/billing/provider-copy";
 import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factory";
 import { PricingModule } from "@/presentation/features/pricing/pricing-module";
 import { AppShell } from "@/presentation/layout/app-shell";
+import { billingQuote } from "@/core/domain/billing/plans";
 
 export const metadata: Metadata = {
   title: "Pricing · Coin Secret",
@@ -20,13 +21,22 @@ export default async function PricingPage() {
       })
     : null;
 
+  const paymentProvider = selectedPaymentProvider();
+  const midtransMonthlyIdr = Number(process.env.PREMIUM_PRICE_IDR);
+  const quotes = {
+    monthly: billingQuote("monthly", paymentProvider, midtransMonthlyIdr),
+    sixMonth: billingQuote("sixMonth", paymentProvider, midtransMonthlyIdr),
+    annual: billingQuote("annual", paymentProvider, midtransMonthlyIdr),
+  };
+
   return (
     <AppShell>
       <PricingModule
         authenticated={user !== null}
         plan={user?.plan ?? null}
         periodEnd={subscription?.currentPeriodEnd?.toISOString() ?? null}
-        provider={providerCopy(selectedPaymentProvider())}
+        provider={providerCopy(paymentProvider)}
+        quotes={quotes}
       />
     </AppShell>
   );

@@ -21,6 +21,8 @@ export interface CheckoutRequest {
   amount: number;
   /** ISO currency code the amount is quoted in, for example "IDR". */
   currency: string;
+  /** Product wording shown on the provider-hosted checkout. */
+  description: string;
   customer: { name: string; email: string };
 }
 
@@ -46,6 +48,8 @@ export interface PaymentEvent {
   providerTransactionId?: string;
   /** Amount the provider reports as received, in the order's currency. */
   paidAmount: string;
+  /** Currency the provider reports, when its callback supplies one. */
+  paidCurrency?: string;
   outcome: PaymentOutcomeKind;
   /** The provider's raw status string, kept for audit and debugging. */
   providerStatus: string;

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { LandingPage } from "@/presentation/features/landing/landing-page";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
+import { billingQuote } from "@/core/domain/billing/plans";
+import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factory";
 
 export const dynamic = "force-dynamic";
 
@@ -15,5 +17,12 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const user = await getCurrentUser().catch(() => null);
   if (user) redirect("/dashboard");
-  return <LandingPage />;
+  const paymentProvider = selectedPaymentProvider();
+  const midtransMonthlyIdr = Number(process.env.PREMIUM_PRICE_IDR);
+  const quotes = {
+    monthly: billingQuote("monthly", paymentProvider, midtransMonthlyIdr),
+    sixMonth: billingQuote("sixMonth", paymentProvider, midtransMonthlyIdr),
+    annual: billingQuote("annual", paymentProvider, midtransMonthlyIdr),
+  };
+  return <LandingPage quotes={quotes} />;
 }

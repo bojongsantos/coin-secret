@@ -113,6 +113,7 @@ test("the event reports the order currency, never the crypto amount", () => {
   // 0.0123 ETH can never be reconciled against a 99000 IDR order; the fiat
   // price is the only figure the amount check can use.
   assert.equal(event.paidAmount, "99000");
+  assert.equal(event.paidCurrency, "idr");
   assert.equal(event.orderId, "CS-1-abcd1234");
   assert.equal(event.providerTransactionId, "5745459419");
   assert.equal(event.outcome, "paid");

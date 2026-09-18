@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, CandlestickChart, Lock, Mail, Newspaper, Telescope } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  CandlestickChart,
+  Lock,
+  Mail,
+  Newspaper,
+  Telescope,
+} from "lucide-react";
 import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
 import {
   type BillingQuote,
@@ -16,6 +24,7 @@ import { BrandLockup } from "@/presentation/ui/brand-logo";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { Reveal } from "@/presentation/ui/reveal";
 import { domainMessageKey, type MessageKey } from "@/shared/i18n/messages";
+import styles from "./landing-page.module.css";
 
 /**
  * The public front door.
@@ -93,18 +102,30 @@ function Socials({ className = "" }: { className?: string }) {
 function Hero({ t }: { t: Translate }) {
   return (
     <section className="relative flex min-h-[calc(100dvh-var(--landing-bar))] flex-col overflow-hidden">
-      {/* The glow the design pools under the headline, breathing rather than
-          sitting still. The section clips, so the scaling never reaches the
-          document and cannot put a horizontal scrollbar on the page. */}
+      <video
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 size-full object-cover"
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="metadata"
+      >
+        <source
+          src="/media/landing-hero-bg.mp4"
+          type="video/mp4"
+          media="(prefers-reduced-motion: no-preference)"
+        />
+      </video>
+      {/* Keep the headline readable through every frame of the supplied
+          background while preserving its blue-violet depth. */}
       <div
         aria-hidden="true"
-        className="animate-glow pointer-events-none absolute inset-x-0 bottom-0 h-[68%] bg-[radial-gradient(ellipse_62%_100%_at_50%_100%,rgba(41,86,220,0.55),rgba(41,86,220,0.16)_42%,transparent_78%)]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(5,7,13,0.48)_0%,rgba(5,7,13,0.2)_42%,rgba(5,7,13,0.72)_100%)]"
       />
-      {/* A dimmer violet pool swaying across it on a longer cycle. One light
-          breathing alone reads as a pulse; two out of step read as depth. */}
       <div
         aria-hidden="true"
-        className="animate-drift pointer-events-none absolute inset-x-0 bottom-0 h-[52%] opacity-70 bg-[radial-gradient(ellipse_38%_100%_at_50%_100%,rgba(124,92,255,0.34),transparent_70%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_72%_65%_at_50%_44%,transparent_22%,rgba(5,7,13,0.2)_62%,rgba(5,7,13,0.68)_100%)]"
       />
       <Socials className="relative justify-end px-5 pt-3 sm:px-10" />
 
@@ -122,9 +143,12 @@ function Hero({ t }: { t: Translate }) {
         </p>
         <Link
           href="/dashboard"
-          className="mt-9 inline-flex h-11 items-center rounded-full bg-gradient-to-r from-accent-blue to-accent px-7 text-[14px] font-bold text-white shadow-[0_0_40px_-8px_rgba(79,124,255,0.8)] transition-transform hover:-translate-y-px"
+          className={`${styles.launchButton} mt-9 inline-flex h-12 items-center rounded-full text-[14px] font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0`}
         >
-          {t("landing.launchApp")}
+          <span className={styles.launchButtonInner}>
+            <span>{t("landing.launchApp")}</span>
+            <ArrowUpRight className={styles.launchButtonIcon} aria-hidden />
+          </span>
         </Link>
       </Reveal>
     </section>

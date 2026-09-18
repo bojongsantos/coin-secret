@@ -1,0 +1,122 @@
+.launchButton {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-width: 10.5rem;
+  padding: 1px;
+  background: rgb(255 255 255 / 14%);
+  box-shadow:
+    0 12px 38px -14px rgb(79 124 255 / 92%),
+    0 0 0 1px rgb(255 255 255 / 8%);
+  animation: button-aura 3.2s ease-in-out infinite;
+}
+
+.launchButton::before {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 220%;
+  aspect-ratio: 1;
+  content: "";
+  background: conic-gradient(
+    from 20deg,
+    transparent 0deg 255deg,
+    rgb(115 171 255 / 18%) 278deg,
+    rgb(220 234 255 / 92%) 316deg,
+    #fff 329deg,
+    rgb(141 113 255 / 64%) 343deg,
+    transparent 360deg
+  );
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: border-beam 2.8s linear infinite;
+}
+
+.launchButtonInner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  overflow: hidden;
+  border-radius: inherit;
+  padding: 0 1.45rem;
+  background: linear-gradient(110deg, #386ff4 0%, #5d6cf8 48%, #7958ee 100%);
+}
+
+.launchButtonInner::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    108deg,
+    transparent 23%,
+    rgb(255 255 255 / 8%) 38%,
+    rgb(255 255 255 / 28%) 48%,
+    transparent 63%
+  );
+  transform: translateX(-135%);
+  animation: button-sheen 3.7s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.launchButtonInner > * {
+  position: relative;
+  z-index: 1;
+}
+
+.launchButtonIcon {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.launchButton:hover .launchButtonIcon {
+  transform: translate(2px, -2px);
+}
+
+@keyframes border-beam {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes button-sheen {
+  0%,
+  42% {
+    transform: translateX(-135%);
+  }
+
+  72%,
+  100% {
+    transform: translateX(135%);
+  }
+}
+
+@keyframes button-aura {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 38px -14px rgb(79 124 255 / 74%),
+      0 0 0 1px rgb(255 255 255 / 8%);
+  }
+
+  50% {
+    box-shadow:
+      0 15px 46px -12px rgb(112 91 255 / 95%),
+      0 0 0 1px rgb(255 255 255 / 13%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launchButton,
+  .launchButton::before,
+  .launchButtonInner::after {
+    animation: none;
+  }
+
+  .launchButton::before {
+    background: linear-gradient(90deg, rgb(135 181 255 / 82%), rgb(172 142 255 / 78%));
+  }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Check,
   CandlestickChart,
@@ -87,97 +87,6 @@ function Socials({ className = "" }: { className?: string }) {
   );
 }
 
-const HERO_LOOP_FADE_MS = 650;
-
-function HeroBackground() {
-  const videos = useRef<Array<HTMLVideoElement | null>>([]);
-  const activeVideo = useRef(0);
-  const [visibleVideo, setVisibleVideo] = useState(0);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    let frame = 0;
-    let transitioning = false;
-    const timers = new Set<number>();
-
-    const tick = () => {
-      const currentIndex = activeVideo.current;
-      const current = videos.current[currentIndex];
-      const nextIndex = currentIndex === 0 ? 1 : 0;
-      const next = videos.current[nextIndex];
-
-      if (
-        !transitioning &&
-        current &&
-        next &&
-        Number.isFinite(current.duration) &&
-        current.duration - current.currentTime <= HERO_LOOP_FADE_MS / 1000
-      ) {
-        transitioning = true;
-        next.currentTime = 0;
-        void next.play().then(
-          () => {
-            setVisibleVideo(nextIndex);
-            const timer = window.setTimeout(() => {
-              timers.delete(timer);
-              current.pause();
-              current.currentTime = 0;
-              activeVideo.current = nextIndex;
-              transitioning = false;
-            }, HERO_LOOP_FADE_MS);
-            timers.add(timer);
-          },
-          () => {
-            transitioning = false;
-          },
-        );
-      }
-
-      frame = window.requestAnimationFrame(tick);
-    };
-
-    void videos.current[0]?.play();
-    frame = window.requestAnimationFrame(tick);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      timers.forEach(window.clearTimeout);
-    };
-  }, []);
-
-  return (
-    <div
-      aria-hidden="true"
-      className={`${styles.heroBackground} pointer-events-none absolute inset-0`}
-    >
-      {[0, 1].map((index) => (
-        <video
-          key={index}
-          ref={(element) => {
-            videos.current[index] = element;
-          }}
-          className={`${styles.heroVideo} ${
-            visibleVideo === index ? styles.heroVideoVisible : ""
-          } absolute inset-0 size-full object-cover`}
-          autoPlay={index === 0}
-          loop
-          muted
-          playsInline
-          poster="/media/landing-hero-bg-poster.jpg"
-          preload="auto"
-        >
-          <source
-            src="/media/landing-hero-bg.mp4"
-            type="video/mp4"
-            media="(prefers-reduced-motion: no-preference)"
-          />
-        </video>
-      ))}
-    </div>
-  );
-}
-
 /**
  * The first screen: the bar plus this, and nothing else.
  *
@@ -192,7 +101,26 @@ function HeroBackground() {
 function Hero({ t }: { t: Translate }) {
   return (
     <section className="relative flex min-h-[calc(100dvh-var(--landing-bar))] flex-col overflow-hidden">
-      <HeroBackground />
+      <div
+        aria-hidden="true"
+        className={`${styles.heroBackground} pointer-events-none absolute inset-0`}
+      />
+      <video
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 size-full object-cover"
+        autoPlay
+        loop
+        muted
+        playsInline
+        poster="/media/landing-hero-bg-poster.jpg"
+        preload="auto"
+      >
+        <source
+          src="/media/landing-hero-bg.mp4"
+          type="video/mp4"
+          media="(prefers-reduced-motion: no-preference)"
+        />
+      </video>
       {/* Keep the headline readable through every frame of the supplied
           background while preserving its blue-violet depth. */}
       <div

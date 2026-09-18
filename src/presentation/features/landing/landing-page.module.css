@@ -10,15 +10,6 @@
   background: #000 url("/media/landing-hero-bg-poster.jpg") center / cover no-repeat;
 }
 
-.heroVideo {
-  opacity: 0;
-  transition: opacity 650ms ease-in-out;
-}
-
-.heroVideoVisible {
-  opacity: 1;
-}
-
 .heroGlow {
   position: absolute;
   pointer-events: none;
@@ -173,10 +164,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .heroVideo {
-    display: none;
-  }
-
   .heroGlow,
   .about::before,
   .pricing::before,

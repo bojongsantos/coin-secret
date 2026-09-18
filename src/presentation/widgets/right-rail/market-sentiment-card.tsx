@@ -16,7 +16,7 @@ export function MarketSentimentCard({ data }: { data: SentimentData }) {
   const { t } = useT();
   if (data.available === false) {
     return (
-      <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+      <section className="cs-card p-4">
         <h3 className="text-[13px] font-semibold">{t("rail.marketSentiment")}</h3>
         <p className="mt-4 rounded-lg border border-border bg-surface-2 px-3 py-5 text-center text-[11px] text-muted-2">
           {t("rail.sentimentUnavailable")}
@@ -26,7 +26,7 @@ export function MarketSentimentCard({ data }: { data: SentimentData }) {
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <section className="cs-card p-4">
       <h3 className="text-[13px] font-semibold">{t("rail.marketSentiment")}</h3>
 
       <div className="mt-2 flex justify-center">

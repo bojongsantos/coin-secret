@@ -624,9 +624,9 @@ export function ChartPanel({
       : null;
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div className="cs-card flex min-w-0 flex-col overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <CoinIcon symbol={symbol} size={28} />
           <span className="text-[15px] font-bold">{symbol}</span>
           <span className="text-[15px] font-semibold tabular-nums">

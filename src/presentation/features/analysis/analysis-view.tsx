@@ -98,7 +98,7 @@ export function AnalysisView({
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_368px]">
+      <div className="cs-analysis-grid">
         <ChartPanel
           data={data.chartData}
           timeframe={timeframe}

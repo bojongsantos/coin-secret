@@ -38,8 +38,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 /** The width the main column is offset by, expanded and collapsed. */
-export const SIDEBAR_WIDTH = 284;
-export const SIDEBAR_WIDTH_COLLAPSED = 96;
+export const SIDEBAR_WIDTH = 253;
+export const SIDEBAR_WIDTH_COLLAPSED = 72;
 
 /**
  * The app's left rail.
@@ -61,11 +61,11 @@ export function AppSidebar() {
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-30 hidden p-3 transition-[width] duration-[220ms] ease-[cubic-bezier(0.22,0.61,0.36,1)] lg:block"
+      className="cs-sidebar fixed z-30 hidden transition-[width] duration-[220ms] ease-[cubic-bezier(0.22,0.61,0.36,1)] lg:block"
       style={{ width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH }}
     >
-      <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-gradient-to-b from-surface to-surface-2 shadow-2xl">
-        <div className={`flex h-24 shrink-0 items-center ${collapsed ? "justify-center px-2" : "px-6"}`}>
+      <div className="cs-panel cs-sidebar-panel flex h-full flex-col overflow-hidden">
+        <div className={`flex h-28 shrink-0 items-start pt-6 ${collapsed ? "justify-center px-2" : "px-5"}`}>
           <Link href="/dashboard" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
             {collapsed ? <BrandMark size={26} /> : <BrandLockup height={26} />}
           </Link>
@@ -87,13 +87,13 @@ export function AppSidebar() {
                   }`}
                 />
                 <item.icon
-                  className={`size-[18px] shrink-0 ${active ? "text-foreground" : "text-muted-2 group-hover:text-muted"}`}
+                  className={`size-[18px] shrink-0 ${active ? "text-accent-blue" : "text-muted group-hover:text-foreground"}`}
                 />
                 {!collapsed && (
                   <>
                     <span className="flex-1 truncate text-left">{label}</span>
                     {item.soon && (
-                      <span className="shrink-0 rounded-full bg-accent-blue/20 px-1.5 py-0.5 text-[9px] font-bold leading-[14px] text-accent-blue">
+                      <span className="shrink-0 rounded-full border border-accent-blue/30 bg-accent-blue/15 px-1 py-0.5 text-[7px] font-medium leading-[10px] text-accent-blue">
                         {t("nav.comingSoon")}
                       </span>
                     )}
@@ -101,7 +101,7 @@ export function AppSidebar() {
                 )}
               </>
             );
-            const className = `group relative flex w-full items-center rounded-xl text-[13.5px] transition-colors ${
+            const className = `group relative flex w-full items-center rounded-lg text-[13px] transition-colors ${
               collapsed ? "justify-center px-0 py-3" : "gap-2.5 py-3 pl-3.5 pr-2.5"
             } ${
               active

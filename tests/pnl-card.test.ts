@@ -46,8 +46,8 @@ test("a profitable short reads as a gain, not a loss", () => {
 });
 
 test("a loss is red and a win is green", () => {
-  assert.match(composePnlCard(card()), /fill="#22c55e"/);
-  assert.match(composePnlCard(card({ exitPrice: 59_000 })), /fill="#f43f5e"/);
+  assert.match(composePnlCard(card()), /fill="#1bc35e"/);
+  assert.match(composePnlCard(card({ exitPrice: 59_000 })), /fill="#ff3338"/);
 });
 
 test("the outcome is named, not implied by the colour alone", () => {

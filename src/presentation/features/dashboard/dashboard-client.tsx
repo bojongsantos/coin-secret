@@ -87,6 +87,7 @@ export function DashboardClient() {
           />
         </Reveal>
 
+        <section className="cs-panel flex flex-col gap-6 p-4 sm:p-5">
         <Reveal step={2}>
           <TopSetupsStrip
             setups={top}
@@ -120,6 +121,7 @@ export function DashboardClient() {
             />
           </Reveal>
         )}
+        </section>
       </div>
     </AppShell>
   );

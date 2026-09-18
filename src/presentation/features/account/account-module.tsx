@@ -29,7 +29,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-border bg-surface p-5 sm:p-6">
+    <section className="cs-card p-5">
       <h2 className="text-[14px] font-bold">{title}</h2>
       {children}
     </section>
@@ -72,19 +72,14 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
   }
 
   return (
-    <div className="rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
+    <div className="cs-panel p-4 sm:p-5">
       <h1 className="text-[22px] font-bold tracking-tight">{t("billing.title")}</h1>
       <p className="mt-1 text-[13px] text-muted">{t("billing.subtitle")}</p>
 
-      <Reveal stagger className="mt-6 flex flex-col gap-4">
-        {/* The plan banner, which is the one thing a reader opens this page to
-            check. Pro carries the gradient; Free carries the way to it. */}
+      <Reveal stagger className="mt-6 flex flex-col gap-5">
+        {/* The same visual banner keeps each account's actual plan and action. */}
         <section
-          className={`rounded-2xl border p-6 ${
-            pro
-              ? "border-accent-blue/40 bg-gradient-to-r from-accent-blue/25 via-accent-blue/10 to-surface"
-              : "border-border bg-surface"
-          }`}
+          className="cs-card cs-account-banner min-h-44 p-5"
         >
           <div className="flex items-center gap-2">
             <Crown className={`size-4 ${pro ? "text-accent-blue" : "text-warning"}`} />

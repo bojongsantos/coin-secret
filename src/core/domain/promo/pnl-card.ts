@@ -15,11 +15,11 @@ import type { Candle } from "@/core/domain/models";
 
 const COLOR = {
   ink: "#f4f7ff",
-  muted: "#8a93a8",
-  faint: "#5b6478",
-  positive: "#22c55e",
-  negative: "#f43f5e",
-  bar: "#111a2e",
+  muted: "#f4f7ff",
+  faint: "#808080",
+  positive: "#1bc35e",
+  negative: "#ff3338",
+  bar: "#0e1428",
 } as const;
 
 const FONT = "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -111,19 +111,19 @@ function text(
  */
 function backdrop(): string {
   const columns = [
-    { x: 760, y: 512, w: 100, h: 288 },
-    { x: 860, y: 372, w: 100, h: 428 },
-    { x: 960, y: 232, w: 100, h: 568 },
-    { x: 1060, y: 512, w: 100, h: 288 },
-    { x: 1160, y: 372, w: 100, h: 428 },
-    { x: 1260, y: 232, w: 96, h: 568 },
+    { x: 760, y: 516, w: 100, h: 142 },
+    { x: 859, y: 658, w: 100, h: 142 },
+    { x: 958, y: 374, w: 100, h: 142 },
+    { x: 1058, y: 232, w: 100, h: 142 },
+    { x: 1157, y: 516, w: 100, h: 142 },
+    { x: 1257, y: 232, w: 99, h: 142 },
   ];
   return columns
     .map(
-      (column, index) =>
+      (column) =>
         `<rect x="${column.x}" y="${column.y}" width="${column.w}" height="${column.h}" fill="${
           COLOR.bar
-        }" opacity="${index % 2 === 0 ? 0.55 : 0.32}"/>`,
+        }"/><rect x="${column.x}" y="${column.y + column.h}" width="${column.w}" height="${PNL_HEIGHT - column.y - column.h}" fill="${COLOR.bar}" opacity="0.35"/>`,
     )
     .join("");
 }
@@ -137,7 +137,7 @@ function backdrop(): string {
 function coinMark(href: string | undefined, base: string): string {
   const cx = 135;
   const cy = 354;
-  const r = 40;
+  const r = 44;
   if (!href) {
     return (
       `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${COLOR.bar}"/>` +
@@ -174,10 +174,8 @@ export function composePnlCard(input: PnlInput): string {
   const base = input.symbol.replace(/USDT$/i, "");
 
   const logo = input.logoHref
-    ? `<image href="${escapeXml(input.logoHref)}" x="88" y="86" width="${Math.round(
-        (44 * 844) / 105,
-      )}" height="44"/>`
-    : text("CoinSecret", 88, 122, { size: 40, weight: 700 });
+    ? `<image href="${escapeXml(input.logoHref)}" x="90" y="87" width="420" height="54"/>`
+    : text("CoinSecret", 90, 139, { size: 64, weight: 700 });
 
   const outcomeLabel = input.outcome === "target" ? "Target 2 Reached" : "Stop Loss/Invalid";
 
@@ -189,14 +187,14 @@ export function composePnlCard(input: PnlInput): string {
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${PNL_WIDTH}" height="${PNL_HEIGHT}" viewBox="0 0 ${PNL_WIDTH} ${PNL_HEIGHT}">` +
-    `<defs><linearGradient id="pnl-bg" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0%" stop-color="#0d1526"/><stop offset="55%" stop-color="#070b14"/>` +
-    `<stop offset="100%" stop-color="#05070d"/></linearGradient></defs>` +
+    `<defs><linearGradient id="pnl-bg" x1="0" y1="0" x2="1" y2="0">` +
+    `<stop offset="0%" stop-color="#0e152a"/><stop offset="60%" stop-color="#000000"/>` +
+    `<stop offset="100%" stop-color="#000000"/></linearGradient></defs>` +
     `<rect width="${PNL_WIDTH}" height="${PNL_HEIGHT}" fill="url(#pnl-bg)"/>` +
     backdrop() +
     logo +
     text(formatCardDate(input.exitTime), PNL_WIDTH - 88, 122, {
-      size: 21,
+      size: 24,
       weight: 500,
       fill: COLOR.ink,
       anchor: "end",
@@ -204,23 +202,23 @@ export function composePnlCard(input: PnlInput): string {
     }) +
     // The pair, and what became of it.
     coinMark(input.coinIconHref, base) +
-    text(`${base}/USDT`, 211, 344, { size: 30, weight: 600, spacing: 1 }) +
-    text(outcomeLabel, 211, 384, { size: 20, weight: 400, fill: COLOR.muted }) +
+    text(`${base}/USDT`, 211, 345, { size: 34, weight: 700, spacing: 2 }) +
+    text(outcomeLabel, 211, 388, { size: 23, weight: 400, fill: COLOR.muted, spacing: 2 }) +
     // The claim.
-    text(`${won ? "+" : ""}${move}%`, 88, 545, { size: 104, weight: 700, fill: tone }) +
+    text(`${won ? "+" : ""}${move}%`, 90, 550, { size: 128, weight: 700, fill: tone }) +
     // What qualifies it.
     metrics
       .map(([label, value], index) => {
         const x = 90 + index * 174;
         return (
-          text(label, x, 636, { size: 18, weight: 400, fill: COLOR.muted }) +
-          text(value, x, 682, { size: 28, weight: 600, spacing: 0.5 })
+          text(label, x, 638, { size: 18, weight: 400, fill: COLOR.muted, spacing: 1.5 }) +
+          text(value, x, 689, { size: 34, weight: 700, spacing: 1.5 })
         );
       })
       .join("") +
     // Where to go and check.
-    text(input.domain ?? "coinsecret.vercel.app", PNL_WIDTH - 88, 696, {
-      size: 19,
+    text(input.domain ?? "coinsecret.vercel.app", PNL_WIDTH - 90, 700, {
+      size: 23,
       weight: 400,
       fill: COLOR.faint,
       anchor: "end",

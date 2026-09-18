@@ -60,7 +60,7 @@ export function AnalysisClient({
         )}
 
         {analysis && (
-          <Reveal>
+          <Reveal className="cs-panel p-4 sm:p-5">
             <AnalysisView
               data={analysis}
               timeframe={timeframe}

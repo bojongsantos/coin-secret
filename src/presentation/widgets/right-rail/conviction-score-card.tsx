@@ -35,12 +35,12 @@ export function ConvictionScoreCard({ data }: { data: ConvictionScore }) {
   const waiting = data.score === 0 && data.grade === "F";
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <section className="cs-card p-4">
       <h3 className="text-[13px] font-semibold">{t("rail.confidenceScore")}</h3>
 
       {/* Ring beside its parts, not above them: the four contributions are a
           reading of the number, and side by side they are read as one thing. */}
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
         <div className="shrink-0">
           {waiting ? (
             <span className="block w-32 py-10 text-center text-[13px] font-semibold text-muted-2">

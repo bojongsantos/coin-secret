@@ -6,6 +6,7 @@ import {
   Check,
   Hourglass,
   Loader2,
+  Lock,
   MinusCircle,
   Play,
   RefreshCw,
@@ -16,7 +17,6 @@ import {
 import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
-import { LockedOverlay } from "@/presentation/ui/locked-overlay";
 import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 import { formatCompact } from "@/shared/lib/format";
 
@@ -46,7 +46,7 @@ function StatusPill({ status, t }: { status: string; t: Translate }) {
   const mark = STATUS_MARK[status];
   const Icon = mark?.icon ?? Check;
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-3 px-2.5 py-1 text-[10.5px] font-semibold text-foreground">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface px-2 py-1.5 text-[9px] font-medium text-foreground">
       <Icon className={`size-3 shrink-0 ${mark?.tone ?? "text-muted-2"}`} />
       {key ? t(key) : status}
     </span>
@@ -64,7 +64,7 @@ function VolumeBar({ volume, max }: { volume: number; max: number }) {
           style={{ width: `${percent}%` }}
         />
       </div>
-      <span className="w-14 shrink-0 text-right text-[11.5px] font-medium tabular-nums text-muted">
+      <span className="w-10 shrink-0 text-right text-[9px] font-medium tabular-nums text-muted">
         {formatCompact(volume)}
       </span>
     </div>
@@ -85,16 +85,16 @@ function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }
       href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-3/70"
+      className="cs-signal-row grid items-center gap-2 rounded-lg py-2.5 transition-colors hover:bg-surface-3/70"
     >
       <div className="flex min-w-0 items-center gap-2.5">
-        <CoinIcon symbol={hit.symbol} size={30} />
+        <CoinIcon symbol={hit.symbol} size={26} />
         <div className="min-w-0">
-          <p className="truncate text-[13.5px] font-bold leading-tight">
+          <p className="truncate text-[13px] font-bold leading-tight">
             {hit.base}
-            <span className="text-[11px] font-medium text-muted-2">/USDT</span>
+            <span className="text-[9px] font-medium text-muted-2">/USDT</span>
           </p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-[10.5px] leading-tight tabular-nums">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[9px] leading-tight tabular-nums">
             <span className={up ? "text-positive" : "text-negative"}>
               {up ? "+" : ""}
               {hit.change24h.toFixed(2)}%
@@ -113,14 +113,14 @@ function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }
       </div>
 
       <span
-        className={`w-[52px] text-right text-[13px] font-bold tabular-nums sm:w-[72px] ${
+        className={`text-center text-[12px] font-bold tabular-nums ${
           hit.direction === "long" ? "text-positive" : "text-negative"
         }`}
       >
         {Math.round(hit.confidence)}%
       </span>
 
-      <div className="flex w-[104px] justify-end sm:w-[126px]">
+      <div className="flex justify-center">
         <StatusPill status={hit.status} t={t} />
       </div>
     </Link>
@@ -143,17 +143,17 @@ function Column({
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   const hiddenCount = Math.max(0, totalCount - hits.length);
   return (
-    <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
         <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
       </div>
 
-      <div className="mt-4 hidden grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto_auto] gap-3 px-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2 sm:grid">
+      <div className="cs-signal-labels mt-5 hidden gap-2 pb-2 text-[8px] font-medium uppercase text-muted sm:grid">
         <span>{t("zones.pair")}</span>
         <span>{t("zones.volume24h")}</span>
-        <span className="w-[72px] text-right">{t("zones.confidence")}</span>
-        <span className="w-[126px] text-right">{t("zones.status")}</span>
+        <span className="text-center">{t("zones.confidence")}</span>
+        <span className="text-center">{t("zones.status")}</span>
       </div>
 
       {/* The board carries a couple of hundred pairs; the column scrolls
@@ -172,11 +172,13 @@ function Column({
           </div>
         )}
         {hiddenCount > 0 && (
-          <LockedOverlay feature="signals" className="mt-1 border-t border-border">
-            <div className="flex h-24 items-center justify-center text-xs text-muted-2">
-              {t("zones.moreSetups", { count: hiddenCount })}
-            </div>
-          </LockedOverlay>
+          <Link
+            href="/pricing"
+            className="cs-primary mt-3 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold text-white"
+            title={t("zones.moreSetups", { count: hiddenCount })}
+          >
+            <Lock className="size-3.5" aria-hidden /> {t("common.unlockPro")}
+          </Link>
         )}
       </div>
     </section>
@@ -213,7 +215,7 @@ export function SignalsBoard({
 }) {
   const { t } = useT();
   return (
-    <div className="relative rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
+    <div className="cs-panel relative p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
           <CandlestickChart className="size-5 text-accent-blue" />
@@ -223,7 +225,7 @@ export function SignalsBoard({
           type="button"
           onClick={onRefresh}
           disabled={loading}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="cs-primary inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white disabled:opacity-50"
         >
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
           {t("common.refresh")}
@@ -236,7 +238,7 @@ export function SignalsBoard({
         </p>
       )}
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
+      <div className="mt-7 grid gap-3.5 xl:grid-cols-2 [&>*]:min-w-0">
         <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} t={t} maxHeight={maxHeight} />
         <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} t={t} maxHeight={maxHeight} />
       </div>

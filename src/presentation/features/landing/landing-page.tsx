@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  ArrowUpRight,
   Check,
   CandlestickChart,
   Lock,
@@ -127,16 +126,16 @@ function Hero({ t }: { t: Translate }) {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_72%_65%_at_50%_44%,transparent_22%,rgba(5,7,13,0.2)_62%,rgba(5,7,13,0.68)_100%)]"
       />
-      <Socials className="relative justify-end px-5 pt-3 sm:px-10" />
+      <div aria-hidden="true" className={styles.heroGlow} />
 
       <Reveal
         stagger
-        className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-5 pb-28 text-center"
+        className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-5 pb-28 pt-16 text-center"
       >
-        <h1 className="text-balance text-[34px] font-bold leading-[1.12] tracking-[-0.025em] sm:text-[52px] lg:text-[62px]">
+        <h1 className="cs-heading-gradient text-balance text-[34px] font-bold leading-[1.18] tracking-[-0.025em] sm:text-[52px] lg:text-[68px]">
           {t("landing.heroA")}
           <br />
-          <span className="text-white/45">{t("landing.heroB")}</span>
+          <span>{t("landing.heroB")}</span>
         </h1>
         <p className="mt-6 max-w-xl text-pretty text-[12.5px] leading-relaxed text-white/50 sm:text-[13.5px]">
           {t("landing.subhead")}
@@ -147,7 +146,6 @@ function Hero({ t }: { t: Translate }) {
         >
           <span className={styles.launchButtonInner}>
             <span>{t("landing.launchApp")}</span>
-            <ArrowUpRight className={styles.launchButtonIcon} aria-hidden />
           </span>
         </Link>
       </Reveal>
@@ -157,8 +155,8 @@ function Hero({ t }: { t: Translate }) {
 
 function About({ t }: { t: Translate }) {
   return (
-    <section id="about" className="scroll-mt-20 py-20 sm:py-24">
-      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+    <section id="about" className={`${styles.about} scroll-mt-20 py-20 sm:py-32`}>
+      <div className="relative mx-auto max-w-[1104px] px-5 sm:px-8">
         <Reveal stagger>
           <h2 className="text-center text-[26px] font-bold tracking-tight sm:text-[30px]">
             {t("landing.nav.about")}
@@ -172,7 +170,7 @@ function About({ t }: { t: Translate }) {
           {FEATURES.map(({ id, icon: Icon, live }) => (
             <div
               key={id}
-              className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition-colors hover:border-white/20 sm:p-6"
+              className={`${styles.featureCard} cs-card min-h-[220px] p-6 sm:p-7`}
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2.5">
@@ -183,7 +181,7 @@ function About({ t }: { t: Translate }) {
                 </span>
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                    live ? "bg-accent-blue text-white" : "bg-white/10 text-white/55"
+                    live ? "border border-accent-blue/40 bg-accent-blue/15 text-accent-blue" : "border border-white/15 bg-white/10 text-white/55"
                   }`}
                 >
                   {t(live ? "landing.live" : "nav.comingSoon")}
@@ -227,13 +225,13 @@ function Pricing({
   });
 
   return (
-    <section id="pricing" className="scroll-mt-20 py-20 sm:py-24">
-      <div className="mx-auto max-w-4xl px-5 sm:px-8">
+    <section id="pricing" className={`${styles.pricing} scroll-mt-20 py-20 sm:py-32`}>
+      <div className="relative mx-auto max-w-[1060px] px-5 sm:px-8">
         <Reveal stagger>
-          <h2 className="text-balance text-center text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
+          <h2 className="cs-heading-gradient text-balance text-center text-[26px] font-bold leading-tight tracking-tight sm:text-[34px]">
             {t("landing.heroA")}
             <br />
-            <span className="text-white/45">{t("landing.heroB")}</span>
+            <span>{t("landing.heroB")}</span>
           </h2>
           <p className="mx-auto mt-4 max-w-md text-center text-[12.5px] leading-relaxed text-white/50">
             {t("landing.subhead")}
@@ -243,7 +241,7 @@ function Pricing({
         <div
           role="group"
           aria-label={t("pricing.periodGroup")}
-          className="mx-auto mt-8 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 sm:w-fit sm:flex-nowrap"
+          className="mx-auto mt-12 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 sm:w-fit sm:flex-nowrap"
         >
           {BILLING_PERIODS.map((option) => {
             const savings = savingsPercent(option);
@@ -273,7 +271,7 @@ function Pricing({
           })}
         </div>
 
-        <Reveal stagger className="mt-8 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+        <Reveal stagger className="mt-10 grid gap-5 md:grid-cols-2 [&>*]:min-w-0">
           {(
             [
               {
@@ -300,20 +298,18 @@ function Pricing({
           ).map((card) => (
             <div
               key={card.id}
-              className={`flex flex-col rounded-2xl border p-6 ${
-                card.featured
-                  ? "border-accent-blue/40 bg-gradient-to-br from-accent-blue/25 via-accent-blue/5 to-transparent"
-                  : "border-white/10 bg-white/[0.035]"
+              className={`cs-card cs-plan-card flex flex-col p-5 ${
+                card.featured ? "cs-plan-pro" : ""
               }`}
             >
               <p className="text-[12.5px] font-semibold text-white/60">{card.name}</p>
               <p className="mt-2 flex items-baseline gap-1">
-                <span className="text-[40px] font-bold leading-none tracking-tight">{card.price}</span>
+                <span className="text-[48px] font-bold leading-none tracking-tight">{card.price}</span>
                 <span className="text-[13px] font-medium text-white/50">{t("pricing.perMonth")}</span>
               </p>
               <p className="mt-3 text-[12px] leading-relaxed text-white/50">{card.blurb}</p>
 
-              <p className="mt-6 text-[12px] font-semibold">{t("pricing.included")}</p>
+              <p className="mt-10 text-[12px] font-semibold">{t("pricing.included")}</p>
               <ul className="mt-3 flex-1 space-y-2">
                 {rows.map((row) => {
                   const value = card.id === "pro" ? row.pro : row.free;
@@ -356,7 +352,7 @@ export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQ
   const { t, locale } = useT();
 
   return (
-    <div className="min-h-dvh bg-[#05070d] text-white">
+    <div className={`${styles.landing} min-h-dvh bg-black text-white`}>
       {/* The design's bar is the wordmark alone, centred. */}
       <header className="flex h-(--landing-bar) items-center justify-center border-b border-white/[0.07]">
         <Link href="/" aria-label={t("landing.home")}>
@@ -370,7 +366,7 @@ export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQ
         <Pricing t={t} locale={locale} quotes={quotes} />
       </main>
 
-      <footer className="border-t border-white/[0.07] bg-white/[0.02]">
+      <footer className="border-t border-white/[0.07] bg-gradient-to-br from-[#181818] to-black">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-5 py-8 sm:flex-row sm:justify-between">
           <BrandLockup height={20} tone="dark" />
           <nav

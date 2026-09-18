@@ -1,0 +1,182 @@
+/* Shared visual surfaces; feature data and entitlement rules stay with their owners. */
+:root {
+  --cs-panel-fill: linear-gradient(145deg, #060606 55%, #0a0a0a);
+  --cs-card-fill: linear-gradient(135deg, #181818, #080808);
+  --cs-edge: #38383e;
+  --cs-glow: rgb(53 85 177 / 23%);
+}
+
+:root[data-theme="light"] {
+  --cs-panel-fill: linear-gradient(145deg, #fff, #f5f6fa);
+  --cs-card-fill: linear-gradient(135deg, #fff, #f0f2f8);
+  --cs-edge: #d3d6e0;
+  --cs-glow: rgb(77 117 255 / 10%);
+}
+
+.cs-app {
+  isolation: isolate;
+  position: relative;
+}
+
+.cs-app::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  background: radial-gradient(ellipse 55% 70% at 0% 50%, var(--cs-glow), transparent 78%);
+  animation: cs-ambient 16s ease-in-out infinite alternate;
+}
+
+.cs-panel {
+  border: 1px solid var(--cs-edge);
+  border-radius: 22px;
+  background: var(--cs-panel-fill);
+  box-shadow: inset 0 0 25px rgb(255 255 255 / 1%);
+}
+
+.cs-card {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--cs-card-fill);
+  transition: border-color 250ms ease, box-shadow 250ms ease;
+}
+
+.cs-card:hover {
+  border-color: color-mix(in srgb, var(--color-border-strong) 75%, transparent);
+}
+
+.cs-sidebar-panel {
+  background: linear-gradient(165deg, var(--color-background) 18%, color-mix(in srgb, var(--color-background) 78%, #24345e) 76%, var(--color-surface-2));
+}
+
+.cs-sidebar {
+  top: 36px;
+  bottom: 36px;
+  left: 36px;
+}
+
+.cs-app .app-main {
+  padding-top: 12px;
+}
+
+.cs-topbar {
+  padding: 0 12px 16px;
+}
+
+.cs-topbar > div {
+  padding: 12px;
+  background: var(--cs-panel-fill);
+  border: 1px solid var(--cs-edge);
+  border-radius: 20px;
+}
+
+.cs-topbar input,
+.cs-topbar a[href="/pricing"],
+.cs-topbar button {
+  border-radius: 8px;
+}
+
+.cs-primary {
+  background: linear-gradient(105deg, #38569f, #4d75ff);
+  transition: filter 220ms ease, translate 220ms ease;
+}
+
+.cs-primary:hover {
+  filter: brightness(1.12);
+  translate: 0 -1px;
+}
+
+.cs-primary:active {
+  translate: 0 0;
+}
+
+.cs-plan-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 424px;
+  border-radius: 22px;
+}
+
+.cs-plan-pro {
+  border-color: color-mix(in srgb, #4d75ff 25%, var(--color-border));
+}
+
+.cs-plan-pro::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse 115% 92% at 65% 120%, #294baf 12%, rgb(32 61 148 / 80%) 38%, transparent 80%);
+  animation: cs-ambient 12s ease-in-out infinite alternate;
+}
+
+.cs-account-banner {
+  background: linear-gradient(105deg, var(--color-background) 22%, color-mix(in srgb, #39548f 65%, var(--color-background)));
+}
+
+.cs-heading-gradient {
+  background: linear-gradient(100deg, #f5f5f5 16%, #878787 90%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+:root[data-theme="light"] .cs-app .cs-heading-gradient {
+  background-image: linear-gradient(100deg, #181820, #686879);
+}
+
+.cs-analysis-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.cs-signal-row,
+.cs-signal-labels {
+  grid-template-columns: minmax(0, 1fr) 60px 112px;
+}
+
+.cs-lock-preview {
+  height: min(720px, 78dvh);
+  overflow: hidden;
+  filter: blur(8px);
+  opacity: 0.45;
+}
+
+.cs-lock-preview-row {
+  height: 44px;
+  margin: 10px 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #476bc0 0 6%, transparent 6% 10%, #444 10% 25%, transparent 25% 32%, #3d60c0 32% 63%, transparent 63% 72%, #297148 72% 78%, transparent 78% 84%, #333 84%);
+}
+
+@keyframes cs-ambient {
+  from { opacity: 0.7; transform: translate3d(0, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, -12px, 0); }
+}
+
+@media (min-width: 640px) {
+  .cs-signal-row,
+  .cs-signal-labels {
+    grid-template-columns: minmax(95px, 1fr) minmax(68px, 1.3fr) 60px 112px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .cs-app .app-main { padding-top: 36px; padding-right: 36px; padding-bottom: 36px; }
+  .cs-app .app-main > main { padding: 0; }
+  .cs-topbar { padding: 0 0 20px; }
+}
+
+@media (min-width: 1280px) {
+  .cs-analysis-grid { grid-template-columns: minmax(0, 2.15fr) minmax(280px, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-app::before,
+  .cs-plan-pro::before { animation: none; }
+  .cs-primary:hover { translate: none; }
+}

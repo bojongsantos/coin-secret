@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Sparkles } from "lucide-react";
+import { CandlestickChart, Loader2 } from "lucide-react";
 import type { TopSetup } from "@/core/application/scanner/supply-demand-scan-service";
 import type { Timeframe } from "@/core/domain/models";
 import { useT } from "@/presentation/hooks/use-translate";
@@ -28,9 +28,9 @@ export function TopSetupsStrip({
   const { t } = useT();
 
   return (
-    <section className="rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
+    <section>
       <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
-        <Sparkles className="size-5 text-accent-blue" />
+        <CandlestickChart className="size-5 text-accent-blue" />
         {t("dashboard.topSetups")}
       </h2>
 
@@ -51,13 +51,13 @@ export function TopSetupsStrip({
                 key={`${hit.symbol}-${hit.timeframe}`}
                 type="button"
                 onClick={() => onSelect(hit.symbol, hit.timeframe)}
-                className={`flex w-[212px] shrink-0 items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-colors ${
+                className={`flex w-[168px] shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left transition-colors ${
                   active
                     ? "border-accent-blue/60 bg-accent-blue/10"
                     : "border-border bg-surface hover:border-border-strong hover:bg-surface-2"
                 }`}
               >
-                <CoinIcon symbol={hit.symbol} size={36} />
+                <CoinIcon symbol={hit.symbol} size={30} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-[13.5px] font-bold leading-tight">{hit.base}</span>

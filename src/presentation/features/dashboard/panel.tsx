@@ -43,7 +43,7 @@ export function Panel({
 }) {
   const { t } = useT();
   return (
-    <section className="rounded-3xl border border-border bg-surface/40 p-4 sm:p-6">
+    <section className="cs-panel p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
           {icon}
@@ -54,14 +54,14 @@ export function Panel({
             type="button"
             onClick={onRefresh}
             disabled={refreshing}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent-blue to-accent px-4 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="cs-primary inline-flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white disabled:opacity-50"
           >
             {refreshing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             {t("common.refresh")}
           </button>
         )}
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="mt-7">{children}</div>
     </section>
   );
 }
@@ -69,6 +69,6 @@ export function Panel({
 /** A card inside a panel. */
 export function PanelCard({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-border bg-surface p-4 sm:p-5 ${className}`}>{children}</div>
+    <div className={`cs-card p-4 sm:p-5 ${className}`}>{children}</div>
   );
 }

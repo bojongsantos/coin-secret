@@ -18,7 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="min-h-dvh bg-background text-foreground">
+    <div className="cs-app min-h-dvh bg-background text-foreground">
       <AppSidebar />
       <div className="app-main min-h-dvh">
         <AppTopBar onOpenMobileNav={() => setMobileNavOpen(true)} />

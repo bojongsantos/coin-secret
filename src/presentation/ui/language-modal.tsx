@@ -55,7 +55,7 @@ export function LanguageModal({ open, onClose }: { open: boolean; onClose: () =>
     >
       <div
         ref={panelRef}
-        className="animate-pop w-full max-w-lg rounded-3xl border border-border bg-surface p-6 shadow-2xl sm:p-7"
+        className="cs-card animate-pop w-full max-w-[555px] p-6 shadow-2xl sm:p-9"
       >
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-[20px] font-bold tracking-tight">{t("language.title")}</h2>
@@ -85,8 +85,8 @@ export function LanguageModal({ open, onClose }: { open: boolean; onClose: () =>
                 }}
                 className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors ${
                   active
-                    ? "border-border-strong bg-surface-3"
-                    : "border-transparent bg-surface-2 hover:bg-surface-3/70"
+                    ? "border-transparent bg-surface-3"
+                    : "border-transparent bg-transparent hover:bg-surface-3/70"
                 }`}
               >
                 <span className="min-w-0">

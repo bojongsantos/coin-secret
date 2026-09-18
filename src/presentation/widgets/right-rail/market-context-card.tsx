@@ -79,10 +79,10 @@ ${t("metric.unavailableNote")}` : help}>
 export function MarketContextCard({ data }: { data: MarketContext }) {
   const { t } = useT();
   return (
-    <section className="@container rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <section className="cs-card @container p-4">
       <h3 className="text-[13px] font-semibold">{t("rail.marketContext")}</h3>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 @[300px]:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 @[240px]:grid-cols-2">
         {[data.btc, data.eth].map((coin) => {
           const up = coin.direction === "up";
           const Icon = up ? TrendingUp : TrendingDown;

@@ -55,21 +55,19 @@ function PlanCard({
   const { t } = useT();
   return (
     <section
-      className={`flex flex-col rounded-2xl border p-6 ${
-        featured
-          ? "border-accent-blue/40 bg-gradient-to-br from-accent-blue/12 via-surface to-surface"
-          : "border-border bg-surface"
+      className={`cs-card cs-plan-card flex flex-col p-5 ${
+        featured ? "cs-plan-pro" : ""
       }`}
     >
       <p className="text-[13px] font-semibold text-muted">{name}</p>
       <p className="mt-3 flex items-baseline gap-1">
-        <span className="text-[40px] font-bold leading-none tracking-tight">{price}</span>
+        <span className="text-[48px] font-bold leading-none tracking-tight">{price}</span>
         <span className="text-[14px] font-medium text-muted-2">{t("pricing.perMonth")}</span>
       </p>
       <p className="mt-3 text-[12.5px] leading-relaxed text-muted">{blurb}</p>
       {note && <p className="mt-1.5 text-[11.5px] text-muted-2">{note}</p>}
 
-      <p className="mt-6 text-[12.5px] font-semibold">{t("pricing.included")}</p>
+      <p className="mt-10 text-[12.5px] font-semibold">{t("pricing.included")}</p>
       <ul className="mt-3 flex-1 space-y-2.5">
         {rows.map((row) => (
           <li key={row.id} className="flex items-start gap-2.5 text-[12.5px] leading-snug text-muted">
@@ -144,12 +142,12 @@ export function PricingModule({ authenticated, plan, periodEnd, provider, quotes
   }
 
   return (
-    <div className="rounded-3xl border border-border bg-surface/40 p-4 sm:p-8">
+    <div className="cs-panel p-5 sm:p-8 xl:p-12">
       <Reveal as="header" stagger className="mx-auto max-w-2xl text-center">
-        <h1 className="text-balance text-[28px] font-bold leading-tight tracking-tight sm:text-[34px]">
+        <h1 className="cs-heading-gradient text-balance text-[28px] font-bold leading-tight tracking-tight sm:text-[34px]">
           {t("pricing.headlineA")}
           <br />
-          <span className="text-muted">{t("pricing.headlineB")}</span>
+          <span>{t("pricing.headlineB")}</span>
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-[13px] leading-relaxed text-muted">
           {t("pricing.subhead")}
@@ -159,7 +157,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider, quotes
       <div
         role="group"
         aria-label={t("pricing.periodGroup")}
-        className="mx-auto mt-7 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-border bg-surface p-1 sm:w-fit sm:flex-nowrap"
+        className="mx-auto mt-12 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-border bg-surface p-1 sm:w-fit sm:flex-nowrap"
       >
         {BILLING_PERIODS.map((option) => {
           const savings = savingsPercent(option);
@@ -189,7 +187,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider, quotes
         })}
       </div>
 
-      <Reveal stagger className="mt-7 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+      <Reveal stagger className="mt-10 grid gap-5 md:grid-cols-2 [&>*]:min-w-0">
         <PlanCard
           name={t("common.free")}
           blurb={t("pricing.freeBlurb")}
@@ -262,11 +260,11 @@ export function PricingModule({ authenticated, plan, periodEnd, provider, quotes
       </Reveal>
       {error && <p className="mt-3 text-center text-[12px] text-negative">{error}</p>}
 
-      <Reveal as="section" className="mt-9">
+      <Reveal as="section" className="mt-12">
         <h2 className="text-[15px] font-semibold">{t("pricing.comparison")}</h2>
         <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
           <table className="w-full min-w-[520px] text-left">
-            <thead className="bg-accent-blue text-white">
+            <thead className="bg-gradient-to-r from-[#38569f] to-accent-blue text-white">
               <tr className="text-[12px] font-semibold">
                 <th scope="col" className="px-5 py-3.5">
                   {t("pricing.benefits")}
@@ -306,7 +304,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider, quotes
 
       <Reveal
         as="section"
-        className="mt-6 flex gap-3.5 rounded-2xl border border-border bg-surface p-5"
+        className="cs-card mt-6 flex gap-3.5 p-5"
       >
         <ShieldCheck className="size-5 shrink-0 text-muted-2" />
         <div className="text-[12px] leading-relaxed text-muted">

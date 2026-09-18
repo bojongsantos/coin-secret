@@ -19,7 +19,7 @@ function renderPoint(text: string) {
 
 function SectionCard({ section }: { section: ReasoningSection }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5">
+    <div className="cs-card h-full p-4">
       <p className="text-[13.5px] font-bold">{section.title}</p>
       <ul className="mt-4 space-y-2.5">
         {section.points.map((point, i) => (
@@ -51,13 +51,13 @@ export function ReasoningCard({ sections }: { sections: ReasoningSection[] }) {
     <section>
       <h2 className="text-[20px] font-bold tracking-tight sm:text-[22px]">{t("plan.reasoning")}</h2>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
-        <div className="space-y-4">
+      <div className="mt-5 grid gap-3 xl:grid-cols-[1fr_1fr_1.75fr] [&>*]:min-w-0">
+        <div className="grid gap-3">
           {left.map((section) => (
             <SectionCard key={section.id} section={section} />
           ))}
         </div>
-        <div className="space-y-4">
+        <div className="grid gap-3">
           {right.map((section) => (
             <SectionCard key={section.id} section={section} />
           ))}

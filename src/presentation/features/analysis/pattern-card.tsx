@@ -37,7 +37,7 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
   const riskKey = domainMessageKey("risk", pattern.riskLevel);
 
   return (
-    <section className="flex flex-col rounded-2xl border border-border bg-surface p-5">
+    <section className="cs-card flex min-w-0 flex-col p-4">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[14px] font-semibold">{t("plan.tradingPlan")}</h3>
         <span
@@ -56,7 +56,7 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2.5">
-        <span className="text-[26px] font-bold leading-none tracking-tight">
+        <span className="text-[22px] font-bold leading-none tracking-tight">
           {nameKey ? t(nameKey) : pattern.name}
         </span>
         {pattern.trend !== "neutral" && (

@@ -105,7 +105,7 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
 
   return (
     <>
-      <header className="sticky top-0 z-20 bg-background/80 px-3 py-3 backdrop-blur-md sm:px-4">
+      <header className="cs-topbar sticky top-0 z-20 bg-background/80 backdrop-blur-md">
         <div className="flex items-center gap-2.5 sm:gap-3">
           <button
             type="button"
@@ -200,9 +200,9 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
           ) : (
             <Link
               href="/pricing"
-              className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-surface pl-11 pr-3 text-[13px] text-muted-2 transition-colors hover:border-border-strong hover:text-muted"
+              className="relative flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-surface pl-11 pr-3 text-[13px] text-muted-2 transition-colors hover:border-border-strong hover:text-muted"
             >
-              <Search className="pointer-events-none absolute left-[calc(0.75rem+1rem)] size-4 text-muted-2 sm:left-[calc(1rem+1rem)]" />
+              <Search className="pointer-events-none absolute left-4 size-4 text-muted-2" />
               <span className="truncate">{t("search.locked")}</span>
               <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-blue/40 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-bold text-accent-blue">
                 <Lock className="size-3" />

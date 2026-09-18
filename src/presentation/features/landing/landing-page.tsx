@@ -108,7 +108,8 @@ function Hero({ t }: { t: Translate }) {
         loop
         muted
         playsInline
-        preload="metadata"
+        poster="/media/landing-hero-bg-poster.jpg"
+        preload="auto"
       >
         <source
           src="/media/landing-hero-bg.mp4"

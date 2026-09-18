@@ -56,3 +56,8 @@ test("the first screen is measured in dynamic viewport units", () => {
     "static vh leaves the hero's foot under a phone's URL bar",
   );
 });
+
+test("the hero paints its background before the video is ready", () => {
+  assert.match(hero, /poster="\/media\/landing-hero-bg-poster\.jpg"/);
+  assert.match(hero, /preload="auto"/);
+});

@@ -84,19 +84,9 @@ function VolumeBar({ volume, max }: { volume: number; max: number }) {
  * The standalone board links to a separate analysis tab. On the dashboard the
  * same row becomes a button that selects the chart already present below it.
  */
-function SetupRow({
-  hit,
-  max,
-  t,
-  onSelect,
-}: {
-  hit: SdScanHit;
-  max: number;
-  t: Translate;
-  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
-}) {
+function SetupRowContent({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }) {
   const up = hit.change24h >= 0;
-  const content = (
+  return (
     <>
       <div className="flex min-w-0 items-center gap-2.5">
         <CoinIcon symbol={hit.symbol} size={26} />
@@ -110,8 +100,6 @@ function SetupRow({
               {up ? "+" : ""}
               {hit.change24h.toFixed(2)}%
             </span>
-            {/* Which chart the plan was measured on. A plan means nothing
-                without its own interval beside it. */}
             <span className="rounded bg-surface-3 px-1.5 py-px font-bold text-muted">
               {hit.timeframe}
             </span>
@@ -136,20 +124,34 @@ function SetupRow({
       </div>
     </>
   );
-  const className = "cs-signal-row grid w-full items-center gap-2 rounded-lg py-2.5 text-left transition-colors hover:bg-surface-3/70";
+}
 
+const ROW_CLASS =
+  "cs-signal-row grid w-full items-center gap-2 rounded-lg py-2.5 text-left transition-colors hover:bg-surface-3/70";
+
+function SetupRow({
+  hit,
+  max,
+  t,
+  onSelect,
+}: {
+  hit: SdScanHit;
+  max: number;
+  t: Translate;
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
+}) {
   return onSelect ? (
-    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe)} className={className}>
-      {content}
+    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe)} className={ROW_CLASS}>
+      <SetupRowContent hit={hit} max={max} t={t} />
     </button>
   ) : (
     <Link
       href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}`}
       target="_blank"
       rel="noopener noreferrer"
-      className={className}
+      className={ROW_CLASS}
     >
-      {content}
+      <SetupRowContent hit={hit} max={max} t={t} />
     </Link>
   );
 }
@@ -171,11 +173,15 @@ function Column({
 }) {
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   const hiddenCount = Math.max(0, totalCount - hits.length);
+  const showBlurredPreview = hiddenCount > 0 && Boolean(onSelect) && hits.length > 0;
+  const previewHits = showBlurredPreview ? [hits[0], hits[1] ?? hits[0]] : [];
   return (
     <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
-        <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
+        {!showBlurredPreview && (
+          <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
+        )}
       </div>
 
       <div className="cs-signal-labels mt-5 hidden gap-2 pb-2 text-[8px] font-medium uppercase text-muted sm:grid">
@@ -188,8 +194,8 @@ function Column({
       {/* The board carries a couple of hundred pairs; the column scrolls
           rather than the page growing to the length of the longest side. */}
       <div
-        className="scrollbar-thin -mx-1 min-h-[220px] overflow-y-auto px-1"
-        style={{ maxHeight }}
+        className={`-mx-1 min-h-[220px] px-1 ${showBlurredPreview ? "overflow-hidden" : "scrollbar-thin overflow-y-auto"}`}
+        style={showBlurredPreview ? undefined : { maxHeight }}
       >
         {hits.length === 0 ? (
           <p className="px-3 py-10 text-center text-[12px] text-muted-2">{t("zones.empty")}</p>
@@ -200,16 +206,31 @@ function Column({
             ))}
           </div>
         )}
-        {hiddenCount > 0 && (
-          <Link
-            href="/pricing"
-            className="cs-primary mt-3 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold text-white"
-            title={t("zones.moreSetups", { count: hiddenCount })}
+        {showBlurredPreview && (
+          <div
+            aria-hidden="true"
+            className="relative h-[108px] select-none overflow-hidden [mask-image:linear-gradient(to_bottom,black_0%,black_32%,transparent_96%)]"
           >
-            <Lock className="size-3.5" aria-hidden /> {t("common.unlockPro")}
-          </Link>
+            <div className="space-y-0.5 opacity-55 blur-[3px]">
+              {previewHits.map((hit, index) => (
+                <div key={`${hit.symbol}-${hit.timeframe}-preview-${index}`} className={ROW_CLASS}>
+                  <SetupRowContent hit={hit} max={max} t={t} />
+                </div>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-surface-2/90" />
+          </div>
         )}
       </div>
+      {hiddenCount > 0 && (
+        <Link
+          href="/pricing"
+          className="cs-primary mt-4 flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold text-white"
+          title={t("zones.moreSetups", { count: hiddenCount })}
+        >
+          <Lock className="size-3.5" aria-hidden /> {t("common.unlockPro")}
+        </Link>
+      )}
     </section>
   );
 }

@@ -84,6 +84,7 @@ export function DashboardClient() {
             onRefresh={refresh}
             failedCount={failedCount}
             maxHeight={352}
+            onSelect={pick}
           />
         </Reveal>
 

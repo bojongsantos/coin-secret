@@ -1,16 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  CandlestickChart,
-  CreditCard,
-  LayoutGrid,
   Lock,
-  Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
-  Telescope,
 } from "lucide-react";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useSidebarState } from "@/presentation/hooks/use-ui-preference";
@@ -23,18 +19,18 @@ interface NavItem {
   id: string;
   label: MessageKey;
   href: string;
-  icon: typeof LayoutGrid;
+  icon?: string;
   /** Named in the design, but there is nothing behind it yet. */
   soon?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "dashboard", label: "nav.dashboard", href: "/dashboard", icon: LayoutGrid },
-  { id: "signals", label: "nav.signals", href: "/signals", icon: CandlestickChart },
-  { id: "alpha", label: "nav.alphaReport", href: "#", icon: Telescope, soon: true },
-  { id: "unlock", label: "nav.tokenUnlock", href: "#", icon: Lock, soon: true },
-  { id: "news", label: "nav.news", href: "#", icon: Newspaper, soon: true },
-  { id: "pricing", label: "nav.pricing", href: "/pricing", icon: CreditCard },
+  { id: "dashboard", label: "nav.dashboard", href: "/dashboard", icon: "dashboard" },
+  { id: "signals", label: "nav.signals", href: "/signals", icon: "signals" },
+  { id: "alpha", label: "nav.alphaReport", href: "#", icon: "alpha-report", soon: true },
+  { id: "unlock", label: "nav.tokenUnlock", href: "#", soon: true },
+  { id: "news", label: "nav.news", href: "#", icon: "news", soon: true },
+  { id: "pricing", label: "nav.pricing", href: "/pricing", icon: "pricing" },
 ];
 
 /** The width the main column is offset by, expanded and collapsed. */
@@ -86,9 +82,18 @@ export function AppSidebar() {
                     active ? "bg-accent-blue" : "bg-transparent"
                   }`}
                 />
-                <item.icon
-                  className={`size-[18px] shrink-0 ${active ? "text-accent-blue" : "text-muted group-hover:text-foreground"}`}
-                />
+                {item.icon ? (
+                  <Image
+                    src={`/icons/sidebar/${item.icon}-${active ? "blue" : "grey"}.png`}
+                    alt=""
+                    width={20}
+                    height={20}
+                    unoptimized
+                    className="size-5 shrink-0 object-contain"
+                  />
+                ) : (
+                  <Lock className="size-[18px] shrink-0 text-muted" aria-hidden />
+                )}
                 {!collapsed && (
                   <>
                     <span className="flex-1 truncate text-left">{label}</span>

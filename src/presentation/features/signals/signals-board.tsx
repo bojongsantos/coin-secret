@@ -1,18 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   CandlestickChart,
   Check,
-  Hourglass,
   Loader2,
   Lock,
-  MinusCircle,
-  Play,
   RefreshCw,
-  Sparkle,
-  Trophy,
-  XCircle,
 } from "lucide-react";
 import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
@@ -31,23 +26,35 @@ import { formatCompact } from "@/shared/lib/format";
  * saturated pills competed with the confidence figure beside it, which is the
  * number the row exists to show.
  */
-const STATUS_MARK: Record<string, { icon: typeof Check; tone: string }> = {
-  "Limit Order": { icon: Hourglass, tone: "text-warning" },
-  Filled: { icon: Check, tone: "text-accent-blue" },
-  Running: { icon: Play, tone: "text-positive" },
-  "Target 1 reached": { icon: Sparkle, tone: "text-accent-2" },
-  "Target 2 reached": { icon: Trophy, tone: "text-positive" },
-  "Invalidated (SL hit)": { icon: XCircle, tone: "text-negative" },
-  Missed: { icon: MinusCircle, tone: "text-muted-2" },
+const STATUS_MARK: Record<string, string> = {
+  "Limit Order": "limit-order",
+  Filled: "filled",
+  Running: "running",
+  "Target 1 reached": "target-1-reached",
+  "Target 2 reached": "target-1-reached",
+  "Invalidated (SL hit)": "bearish",
+  Missed: "bearish",
+  Bullish: "bullish",
+  Bearish: "bearish",
 };
 
 function StatusPill({ status, t }: { status: string; t: Translate }) {
   const key = statusMessageKey(status);
   const mark = STATUS_MARK[status];
-  const Icon = mark?.icon ?? Check;
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface px-2 py-1.5 text-[9px] font-medium text-foreground">
-      <Icon className={`size-3 shrink-0 ${mark?.tone ?? "text-muted-2"}`} />
+      {mark ? (
+        <Image
+          src={`/icons/status/${mark}.png`}
+          alt=""
+          width={17}
+          height={16}
+          unoptimized
+          className="h-4 w-[17px] shrink-0 object-contain"
+        />
+      ) : (
+        <Check className="size-3 shrink-0 text-muted-2" aria-hidden />
+      )}
       {key ? t(key) : status}
     </span>
   );
@@ -74,19 +81,23 @@ function VolumeBar({ volume, max }: { volume: number; max: number }) {
 /**
  * One setup.
  *
- * A link, not a row with a click handler: opening in a new tab is the point,
- * and only a real anchor gives the reader the middle-click and the context menu
- * they would expect from one.
+ * The standalone board links to a separate analysis tab. On the dashboard the
+ * same row becomes a button that selects the chart already present below it.
  */
-function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }) {
+function SetupRow({
+  hit,
+  max,
+  t,
+  onSelect,
+}: {
+  hit: SdScanHit;
+  max: number;
+  t: Translate;
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
+}) {
   const up = hit.change24h >= 0;
-  return (
-    <Link
-      href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="cs-signal-row grid items-center gap-2 rounded-lg py-2.5 transition-colors hover:bg-surface-3/70"
-    >
+  const content = (
+    <>
       <div className="flex min-w-0 items-center gap-2.5">
         <CoinIcon symbol={hit.symbol} size={26} />
         <div className="min-w-0">
@@ -123,6 +134,22 @@ function SetupRow({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }
       <div className="flex justify-center">
         <StatusPill status={hit.status} t={t} />
       </div>
+    </>
+  );
+  const className = "cs-signal-row grid w-full items-center gap-2 rounded-lg py-2.5 text-left transition-colors hover:bg-surface-3/70";
+
+  return onSelect ? (
+    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe)} className={className}>
+      {content}
+    </button>
+  ) : (
+    <Link
+      href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={className}
+    >
+      {content}
     </Link>
   );
 }
@@ -133,12 +160,14 @@ function Column({
   totalCount,
   t,
   maxHeight,
+  onSelect,
 }: {
   title: MessageKey;
   hits: SdScanHit[];
   totalCount: number;
   t: Translate;
   maxHeight: number;
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
 }) {
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   const hiddenCount = Math.max(0, totalCount - hits.length);
@@ -167,7 +196,7 @@ function Column({
         ) : (
           <div className="space-y-0.5">
             {hits.map((hit) => (
-              <SetupRow key={`${hit.symbol}-${hit.timeframe}`} hit={hit} max={max} t={t} />
+              <SetupRow key={`${hit.symbol}-${hit.timeframe}`} hit={hit} max={max} t={t} onSelect={onSelect} />
             ))}
           </div>
         )}
@@ -201,6 +230,7 @@ export function SignalsBoard({
   onRefresh,
   failedCount = 0,
   maxHeight = 600,
+  onSelect,
 }: {
   demand: SdScanHit[];
   supply: SdScanHit[];
@@ -212,6 +242,8 @@ export function SignalsBoard({
   failedCount?: number;
   /** How tall each column may grow before it scrolls on its own. */
   maxHeight?: number;
+  /** Dashboard rows select the chart in place; the standalone page omits this and opens analysis separately. */
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
 }) {
   const { t } = useT();
   return (
@@ -239,8 +271,8 @@ export function SignalsBoard({
       )}
 
       <div className="mt-7 grid gap-3.5 xl:grid-cols-2 [&>*]:min-w-0">
-        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} t={t} maxHeight={maxHeight} />
-        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} t={t} maxHeight={maxHeight} />
+        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} t={t} maxHeight={maxHeight} onSelect={onSelect} />
+        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} t={t} maxHeight={maxHeight} onSelect={onSelect} />
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import {
   Lock,
   Mail,
   Newspaper,
+  Send,
   Telescope,
 } from "lucide-react";
 import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
@@ -57,6 +58,7 @@ function InstagramMark({ className }: { className?: string }) {
 const SOCIALS = [
   { id: "x", href: "https://x.com", Icon: XMark, label: "X" },
   { id: "instagram", href: "https://instagram.com", Icon: InstagramMark, label: "Instagram" },
+  { id: "telegram", href: "https://t.me/CoinSecretHQ", Icon: Send, label: "Telegram" },
   { id: "email", href: "mailto:hello@coinsecret.app", Icon: Mail, label: "Email" },
 ] as const;
 
@@ -107,7 +109,7 @@ function Hero({ t }: { t: Translate }) {
       />
       <video
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 size-full object-cover"
+        className={`${styles.heroVideo} pointer-events-none absolute inset-0 size-full object-cover`}
         autoPlay
         loop
         muted

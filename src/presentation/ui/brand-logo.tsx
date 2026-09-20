@@ -21,18 +21,19 @@ export const BRAND_NAME = "Coin Secret";
  * dark, with the mark in the deeper blue the designer drew for white.
  */
 const LOCKUP_SRC = {
-  dark: "/logo/logo-text.png",
-  light: "/logo/logo-text-light.png",
+  dark: "/logo/latest/lockup-dark.png",
+  light: "/logo/latest/lockup-light.png",
 } as const;
 
 const MARK_SRC = {
-  dark: "/logo/mark.png",
-  light: "/logo/mark-light.png",
+  dark: "/logo/latest/mark-dark.png",
+  light: "/logo/latest/mark-light.png",
 } as const;
 
-/** Measured from the artwork's own ink, not guessed from the canvas. */
-const LOCKUP_RATIO = 844 / 105;
-const MARK_RATIO = 171 / 105;
+/** Ink boxes measured from the supplied 276px canvases. */
+const LOCKUP_INK = { x: 33, y: 123, width: 212, height: 30 } as const;
+const MARK_INK = { x: 79, y: 96, width: 115, height: 83 } as const;
+const ARTBOARD = 276;
 
 export function BrandLockup({
   height = 30,
@@ -49,16 +50,28 @@ export function BrandLockup({
   tone?: Theme;
 }) {
   const { theme } = useTheme();
+  const scale = height / LOCKUP_INK.height;
   return (
-    <Image
-      src={LOCKUP_SRC[tone ?? theme]}
-      alt={BRAND_NAME}
-      width={Math.round(height * LOCKUP_RATIO)}
-      height={height}
-      priority
-      unoptimized
-      className={className}
-    />
+    <span
+      className={`relative inline-block shrink-0 overflow-hidden align-middle ${className}`}
+      style={{ width: LOCKUP_INK.width * scale, height }}
+    >
+      <Image
+        src={LOCKUP_SRC[tone ?? theme]}
+        alt={BRAND_NAME}
+        width={ARTBOARD}
+        height={ARTBOARD}
+        priority
+        unoptimized
+        className="absolute max-w-none"
+        style={{
+          width: ARTBOARD * scale,
+          height: ARTBOARD * scale,
+          left: -LOCKUP_INK.x * scale,
+          top: -LOCKUP_INK.y * scale,
+        }}
+      />
+    </span>
   );
 }
 
@@ -80,15 +93,27 @@ export function BrandMark({
   tone?: Theme;
 }) {
   const { theme } = useTheme();
+  const scale = size / MARK_INK.height;
   return (
-    <Image
-      src={MARK_SRC[tone ?? theme]}
-      alt={BRAND_NAME}
-      width={Math.round(size * MARK_RATIO)}
-      height={size}
-      priority
-      unoptimized
-      className={className}
-    />
+    <span
+      className={`relative inline-block shrink-0 overflow-hidden align-middle ${className}`}
+      style={{ width: MARK_INK.width * scale, height: size }}
+    >
+      <Image
+        src={MARK_SRC[tone ?? theme]}
+        alt={BRAND_NAME}
+        width={ARTBOARD}
+        height={ARTBOARD}
+        priority
+        unoptimized
+        className="absolute max-w-none"
+        style={{
+          width: ARTBOARD * scale,
+          height: ARTBOARD * scale,
+          left: -MARK_INK.x * scale,
+          top: -MARK_INK.y * scale,
+        }}
+      />
+    </span>
   );
 }

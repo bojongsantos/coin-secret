@@ -10,12 +10,17 @@
   background: #000 url("/media/landing-hero-bg-poster.jpg") center / cover no-repeat;
 }
 
+.heroVideo {
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
 .heroGlow {
   position: absolute;
   pointer-events: none;
   inset: 30% -10% -10%;
   background: radial-gradient(ellipse 48% 86% at 50% 100%, rgb(47 76 155 / 68%), transparent 78%);
-  animation: landing-light 12s ease-in-out infinite alternate;
 }
 
 .about,

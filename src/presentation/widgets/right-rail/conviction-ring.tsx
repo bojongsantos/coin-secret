@@ -2,18 +2,10 @@
 
 import { useEffect, useId, useState } from "react";
 
-const SIZE = 132;
-const R = 56;
-const STROKE = 11;
+const SIZE = 164;
+const R = 68;
+const STROKE = 14;
 const C = 2 * Math.PI * R;
-
-export const gradeColor: Record<string, string> = {
-  A: "#34d399",
-  B: "#60a5fa",
-  C: "#a78bfa",
-  D: "#fbbf24",
-  F: "#f87171",
-};
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
@@ -21,7 +13,6 @@ function easeOutCubic(t: number): number {
 
 interface ConvictionRingProps {
   score: number;
-  grade: string;
 }
 
 export function ConvictionRing({ score }: ConvictionRingProps) {
@@ -78,16 +69,20 @@ export function ConvictionRing({ score }: ConvictionRingProps) {
           strokeDasharray={C}
           strokeDashoffset={dashOffset}
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-          style={{ opacity: progress > 0.001 ? 1 : 0, transition: "opacity 200ms" }}
+          style={{
+            opacity: progress > 0.001 ? 1 : 0,
+            transition: "opacity 200ms",
+            filter: "drop-shadow(0 5px 8px rgb(77 117 255 / 35%))",
+          }}
         />
       </svg>
 
       {/* Center text — no container, transparent */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <span className="text-[34px] font-bold leading-none text-foreground">
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[38px] font-bold leading-none text-foreground">
           {Math.round(animated)}
         </span>
-        <span className="ml-1 text-[14px] font-medium text-muted-2">/100</span>
+        <span className="mt-1 text-[12px] font-medium leading-none text-muted-2">/100</span>
       </div>
     </div>
   );

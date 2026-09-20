@@ -123,6 +123,7 @@ class ZoneLabelPrimitive implements IPanePrimitive<Time> {
 
 interface ChartPanelProps {
   data: ChartData;
+  dashboard?: boolean;
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
   range: HistoryRange;
@@ -184,6 +185,7 @@ const CHART_THEME = {
 
 export function ChartPanel({
   data,
+  dashboard = false,
   timeframe,
   onTimeframeChange,
   range,
@@ -625,30 +627,32 @@ export function ChartPanel({
 
   return (
     <div className="cs-card flex min-w-0 flex-col overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+      <div className={`flex flex-wrap items-center justify-between gap-3 px-4 ${dashboard ? "py-4" : "py-3.5"}`}>
         <div className="flex flex-wrap items-center gap-2.5">
-          <CoinIcon symbol={symbol} size={28} />
-          <span className="text-[15px] font-bold">{symbol}</span>
-          <span className="text-[15px] font-semibold tabular-nums">
+          <CoinIcon symbol={symbol} size={dashboard ? 34 : 28} />
+          <span className={`${dashboard ? "text-[17px]" : "text-[15px]"} font-bold`}>{symbol}</span>
+          <span className={`${dashboard ? "text-[17px]" : "text-[15px]"} font-semibold tabular-nums`}>
             ${formatPrice(price || (data.candles.at(-1)?.close ?? 0), precision)}
           </span>
-          <span className={`text-xs font-semibold ${change24h >= 0 ? "text-positive" : "text-negative"}`}>
+          <span className={`${dashboard ? "text-[13px]" : "text-xs"} font-semibold ${change24h >= 0 ? "text-positive" : "text-negative"}`}>
             {change24h >= 0 ? "+" : ""}
             {change24h.toFixed(2)}%
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full border border-positive/30 bg-positive/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-positive">
-            <span className="relative flex size-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-positive opacity-60" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-positive" />
+          {!dashboard && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-positive/30 bg-positive/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-positive">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-positive opacity-60" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-positive" />
+              </span>
+              Live
             </span>
-            Live
-          </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {/* The design keeps the export beside the interval switch rather
               than in a header row of its own, which is what lets the panel
               carry the pair's identity on its own line. */}
-          {onDownload && (
+          {onDownload && !dashboard && (
             <button
               type="button"
               onClick={onDownload}
@@ -671,9 +675,9 @@ export function ChartPanel({
                 type="button"
                 onClick={() => onTimeframeChange(tf)}
                 aria-pressed={timeframe === tf}
-                className={`rounded-md px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-[11.5px] font-semibold transition-[background-color,color,transform,box-shadow] duration-200 active:scale-95 ${
                   timeframe === tf
-                    ? "bg-accent-blue text-white"
+                    ? "bg-accent-blue text-white shadow-[0_4px_14px_rgb(77_117_255_/_28%)]"
                     : "text-muted-2 hover:text-foreground"
                 }`}
               >

@@ -114,6 +114,7 @@ export function DashboardClient() {
           <Reveal step={3}>
             <AnalysisView
               data={analysis}
+              dashboard
               timeframe={timeframe}
               onTimeframeChange={chooseTimeframe}
               range={range}

@@ -38,19 +38,19 @@ const STATUS_MARK: Record<string, string> = {
   Bearish: "bearish",
 };
 
-function StatusPill({ status, t }: { status: string; t: Translate }) {
+function StatusPill({ status, t, prominent = false }: { status: string; t: Translate; prominent?: boolean }) {
   const key = statusMessageKey(status);
   const mark = STATUS_MARK[status];
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface px-2 py-1.5 text-[9px] font-medium text-foreground">
+    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface font-medium text-foreground ${prominent ? "px-2.5 py-1.5 text-[10px]" : "px-2 py-1.5 text-[9px]"}`}>
       {mark ? (
         <Image
           src={`/icons/status/${mark}.png`}
           alt=""
-          width={17}
-          height={16}
+          width={prominent ? 20 : 17}
+          height={prominent ? 19 : 16}
           unoptimized
-          className="h-4 w-[17px] shrink-0 object-contain"
+          className={`${prominent ? "h-[19px] w-5" : "h-4 w-[17px]"} shrink-0 object-contain`}
         />
       ) : (
         <Check className="size-3 shrink-0 text-muted-2" aria-hidden />
@@ -61,17 +61,17 @@ function StatusPill({ status, t }: { status: string; t: Translate }) {
 }
 
 /** Volume as a bar relative to the largest row in this column, plus the figure. */
-function VolumeBar({ volume, max }: { volume: number; max: number }) {
+function VolumeBar({ volume, max, prominent = false }: { volume: number; max: number; prominent?: boolean }) {
   const percent = Math.max(4, Math.min(100, (volume / Math.max(max, 1)) * 100));
   return (
     <div className="flex items-center gap-2.5">
-      <div className="h-1.5 w-full max-w-[150px] overflow-hidden rounded-full bg-surface-3">
+      <div className={`w-full overflow-hidden rounded-full bg-surface-3 ${prominent ? "h-2 max-w-[180px]" : "h-1.5 max-w-[150px]"}`}>
         <div
           className="h-full rounded-full bg-gradient-to-r from-accent-blue/70 to-accent-blue"
           style={{ width: `${percent}%` }}
         />
       </div>
-      <span className="w-10 shrink-0 text-right text-[9px] font-medium tabular-nums text-muted">
+      <span className={`${prominent ? "w-12 text-[10px]" : "w-10 text-[9px]"} shrink-0 text-right font-medium tabular-nums text-muted`}>
         {formatCompact(volume)}
       </span>
     </div>
@@ -84,18 +84,18 @@ function VolumeBar({ volume, max }: { volume: number; max: number }) {
  * The standalone board links to a separate analysis tab. On the dashboard the
  * same row becomes a button that selects the chart already present below it.
  */
-function SetupRowContent({ hit, max, t }: { hit: SdScanHit; max: number; t: Translate }) {
+function SetupRowContent({ hit, max, t, prominent = false }: { hit: SdScanHit; max: number; t: Translate; prominent?: boolean }) {
   const up = hit.change24h >= 0;
   return (
     <>
       <div className="flex min-w-0 items-center gap-2.5">
-        <CoinIcon symbol={hit.symbol} size={26} />
+        <CoinIcon symbol={hit.symbol} size={prominent ? 32 : 26} />
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-bold leading-tight">
+          <p className={`truncate font-bold leading-tight ${prominent ? "text-[15px]" : "text-[13px]"}`}>
             {hit.base}
-            <span className="text-[9px] font-medium text-muted-2">/USDT</span>
+            <span className={`${prominent ? "text-[10px]" : "text-[9px]"} font-medium text-muted-2`}>/USDT</span>
           </p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-[9px] leading-tight tabular-nums">
+          <p className={`mt-1 flex items-center gap-1.5 leading-tight tabular-nums ${prominent ? "text-[10px]" : "text-[9px]"}`}>
             <span className={up ? "text-positive" : "text-negative"}>
               {up ? "+" : ""}
               {hit.change24h.toFixed(2)}%
@@ -108,11 +108,11 @@ function SetupRowContent({ hit, max, t }: { hit: SdScanHit; max: number; t: Tran
       </div>
 
       <div className="hidden min-w-0 sm:block">
-        <VolumeBar volume={hit.volume24h} max={max} />
+        <VolumeBar volume={hit.volume24h} max={max} prominent={prominent} />
       </div>
 
       <span
-        className={`text-center text-[12px] font-bold tabular-nums ${
+        className={`text-center font-bold tabular-nums ${prominent ? "text-[14px]" : "text-[12px]"} ${
           hit.direction === "long" ? "text-positive" : "text-negative"
         }`}
       >
@@ -120,7 +120,7 @@ function SetupRowContent({ hit, max, t }: { hit: SdScanHit; max: number; t: Tran
       </span>
 
       <div className="flex justify-center">
-        <StatusPill status={hit.status} t={t} />
+        <StatusPill status={hit.status} t={t} prominent={prominent} />
       </div>
     </>
   );
@@ -140,9 +140,10 @@ function SetupRow({
   t: Translate;
   onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
 }) {
+  const prominent = Boolean(onSelect);
   return onSelect ? (
-    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe)} className={ROW_CLASS}>
-      <SetupRowContent hit={hit} max={max} t={t} />
+    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe)} className={`${ROW_CLASS} py-3 transition-[background-color,transform] duration-200 hover:-translate-y-px`}>
+      <SetupRowContent hit={hit} max={max} t={t} prominent={prominent} />
     </button>
   ) : (
     <Link
@@ -173,18 +174,19 @@ function Column({
 }) {
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   const hiddenCount = Math.max(0, totalCount - hits.length);
-  const showBlurredPreview = hiddenCount > 0 && Boolean(onSelect) && hits.length > 0;
+  const dashboard = Boolean(onSelect);
+  const showBlurredPreview = hiddenCount > 0 && dashboard && hits.length > 0;
   const previewHits = showBlurredPreview ? [hits[0], hits[1] ?? hits[0]] : [];
   return (
     <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-bold tracking-tight">{t(title)}</h3>
+        <h3 className={`${dashboard ? "text-[17px]" : "text-[15px]"} font-bold tracking-tight`}>{t(title)}</h3>
         {!showBlurredPreview && (
           <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
         )}
       </div>
 
-      <div className="cs-signal-labels mt-5 hidden gap-2 pb-2 text-[8px] font-medium uppercase text-muted sm:grid">
+      <div className={`cs-signal-labels mt-5 hidden gap-2 pb-2 font-medium uppercase text-muted sm:grid ${dashboard ? "text-[9px]" : "text-[8px]"}`}>
         <span>{t("zones.pair")}</span>
         <span>{t("zones.volume24h")}</span>
         <span className="text-center">{t("zones.confidence")}</span>
@@ -214,7 +216,7 @@ function Column({
             <div className="space-y-0.5 opacity-55 blur-[3px]">
               {previewHits.map((hit, index) => (
                 <div key={`${hit.symbol}-${hit.timeframe}-preview-${index}`} className={ROW_CLASS}>
-                  <SetupRowContent hit={hit} max={max} t={t} />
+                  <SetupRowContent hit={hit} max={max} t={t} prominent />
                 </div>
               ))}
             </div>
@@ -225,7 +227,7 @@ function Column({
       {hiddenCount > 0 && (
         <Link
           href="/pricing"
-          className="cs-primary mt-4 flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold text-white"
+          className="cs-primary mt-4 flex items-center justify-center gap-2 rounded-full px-4 py-3 text-[13px] font-semibold text-white"
           title={t("zones.moreSetups", { count: hiddenCount })}
         >
           <Lock className="size-3.5" aria-hidden /> {t("common.unlockPro")}
@@ -270,8 +272,8 @@ export function SignalsBoard({
   return (
     <div className="cs-panel relative p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
-          <CandlestickChart className="size-5 text-accent-blue" />
+        <h2 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight sm:text-[24px]">
+          <CandlestickChart className="size-6 text-accent-blue" />
           {t("nav.signals")}
         </h2>
         <button

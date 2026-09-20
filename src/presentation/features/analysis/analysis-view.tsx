@@ -15,6 +15,7 @@ import type { MessageKey } from "@/shared/i18n/messages";
 
 interface AnalysisViewProps {
   data: AnalysisResult;
+  dashboard?: boolean;
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
   range: HistoryRange;
@@ -40,6 +41,7 @@ const SHARE_LABEL: Record<ShareState, MessageKey> = {
  */
 export function AnalysisView({
   data,
+  dashboard = false,
   timeframe,
   onTimeframeChange,
   range,
@@ -101,6 +103,7 @@ export function AnalysisView({
       <div className="cs-analysis-grid">
         <ChartPanel
           data={data.chartData}
+          dashboard={dashboard}
           timeframe={timeframe}
           onTimeframeChange={onTimeframeChange}
           symbol={data.pair.symbol}
@@ -125,7 +128,7 @@ export function AnalysisView({
         />
       </div>
 
-      <ReasoningCard sections={data.reasoning} />
+      <ReasoningCard sections={data.reasoning} prominent={dashboard} />
     </div>
   );
 }

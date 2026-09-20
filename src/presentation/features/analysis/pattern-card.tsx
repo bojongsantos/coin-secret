@@ -37,7 +37,7 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
   const riskKey = domainMessageKey("risk", pattern.riskLevel);
 
   return (
-    <section className="cs-card flex min-w-0 flex-col p-4">
+    <section className="cs-card flex min-w-0 flex-col p-4 transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/15">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[14px] font-semibold">{t("plan.tradingPlan")}</h3>
         <span

@@ -17,14 +17,14 @@ function renderPoint(text: string) {
   );
 }
 
-function SectionCard({ section }: { section: ReasoningSection }) {
+function SectionCard({ section, prominent = false }: { section: ReasoningSection; prominent?: boolean }) {
   return (
-    <div className="cs-card h-full p-4">
-      <p className="text-[13.5px] font-bold">{section.title}</p>
-      <ul className="mt-4 space-y-2.5">
+    <div className={`cs-card h-full transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/15 ${prominent ? "p-5" : "p-4"}`}>
+      <p className={`${prominent ? "text-[15px]" : "text-[13.5px]"} font-bold`}>{section.title}</p>
+      <ul className={`${prominent ? "mt-5 space-y-3" : "mt-4 space-y-2.5"}`}>
         {section.points.map((point, i) => (
-          <li key={i} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-muted">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-positive" />
+          <li key={i} className={`flex items-start gap-2.5 leading-relaxed text-muted ${prominent ? "text-[13.5px]" : "text-[12.5px]"}`}>
+            <CheckCircle2 className={`${prominent ? "size-[18px]" : "size-4"} mt-0.5 shrink-0 text-positive`} />
             <span className="min-w-0">{renderPoint(point)}</span>
           </li>
         ))}
@@ -40,29 +40,32 @@ function SectionCard({ section }: { section: ReasoningSection }) {
  * three, so it takes a column of its own and the short blocks stack in the
  * other two. Stacked in one column it pushed everything else a screen down.
  */
-export function ReasoningCard({ sections }: { sections: ReasoningSection[] }) {
+export function ReasoningCard({ sections, prominent = false }: { sections: ReasoningSection[]; prominent?: boolean }) {
   const { t } = useT();
   const risk = sections.find((section) => section.id === "risk");
   const rest = sections.filter((section) => section.id !== "risk");
-  const left = rest.filter((_, index) => index % 2 === 0);
-  const right = rest.filter((_, index) => index % 2 === 1);
+  const leftIds = new Set(["summary", "momentum"]);
+  const rightIds = new Set(["structure", "levels"]);
+  const left = rest.filter((section) => leftIds.has(section.id));
+  const right = rest.filter((section) => rightIds.has(section.id));
+  left.push(...rest.filter((section) => !leftIds.has(section.id) && !rightIds.has(section.id)));
 
   return (
     <section>
-      <h2 className="text-[20px] font-bold tracking-tight sm:text-[22px]">{t("plan.reasoning")}</h2>
+      <h2 className={`${prominent ? "text-[22px] sm:text-[24px]" : "text-[20px] sm:text-[22px]"} font-bold tracking-tight`}>{t("plan.reasoning")}</h2>
 
       <div className="mt-5 grid gap-3 xl:grid-cols-[1fr_1fr_1.75fr] [&>*]:min-w-0">
         <div className="grid gap-3">
           {left.map((section) => (
-            <SectionCard key={section.id} section={section} />
+            <SectionCard key={section.id} section={section} prominent={prominent} />
           ))}
         </div>
         <div className="grid gap-3">
           {right.map((section) => (
-            <SectionCard key={section.id} section={section} />
+            <SectionCard key={section.id} section={section} prominent={prominent} />
           ))}
         </div>
-        <div>{risk && <SectionCard section={risk} />}</div>
+        <div>{risk && <SectionCard section={risk} prominent={prominent} />}</div>
       </div>
     </section>
   );

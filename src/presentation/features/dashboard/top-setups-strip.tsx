@@ -29,8 +29,8 @@ export function TopSetupsStrip({
 
   return (
     <section>
-      <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight sm:text-[22px]">
-        <CandlestickChart className="size-5 text-accent-blue" />
+      <h2 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight sm:text-[24px]">
+        <CandlestickChart className="size-6 text-accent-blue" />
         {t("dashboard.topSetups")}
       </h2>
 
@@ -41,7 +41,7 @@ export function TopSetupsStrip({
       ) : setups.length === 0 ? (
         <p className="mt-5 py-6 text-center text-[12px] text-muted-2">{t("dashboard.noSetups")}</p>
       ) : (
-        <div className="scrollbar-thin -mx-1 mt-5 flex gap-3 overflow-x-auto px-1 pb-2">
+        <div className="scrollbar-thin -mx-1 mt-6 flex gap-3 overflow-x-auto px-1 pb-2">
           {setups.map((entry) => {
             const hit = entry.hit;
             const up = hit.direction === "long";
@@ -51,16 +51,16 @@ export function TopSetupsStrip({
                 key={`${hit.symbol}-${hit.timeframe}`}
                 type="button"
                 onClick={() => onSelect(hit.symbol, hit.timeframe)}
-                className={`flex w-[168px] shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left transition-colors ${
+                className={`group flex w-[190px] shrink-0 items-center gap-2.5 rounded-xl border px-3 py-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 focus-visible:-translate-y-0.5 ${
                   active
-                    ? "border-accent-blue/60 bg-accent-blue/10"
+                    ? "border-accent-blue/70 bg-accent-blue/10 shadow-[0_8px_24px_rgb(77_117_255_/_12%)]"
                     : "border-border bg-surface hover:border-border-strong hover:bg-surface-2"
                 }`}
               >
-                <CoinIcon symbol={hit.symbol} size={30} />
+                <CoinIcon symbol={hit.symbol} size={36} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
-                    <span className="truncate text-[13.5px] font-bold leading-tight">{hit.base}</span>
+                    <span className="truncate text-[15px] font-bold leading-tight">{hit.base}</span>
                     <span
                       className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase leading-[14px] ${
                         up
@@ -71,11 +71,11 @@ export function TopSetupsStrip({
                       {t(up ? "direction.long" : "direction.short")}
                     </span>
                   </span>
-                  <span className="mt-1 block truncate text-[10.5px] tabular-nums text-muted-2">
+                  <span className="mt-1.5 block truncate text-[11px] tabular-nums text-muted-2">
                     ${formatPrice(hit.entry, priceDecimals(hit.entry))}
                   </span>
                 </span>
-                <span className="shrink-0 text-[13px] font-bold tabular-nums text-positive">
+                <span className="shrink-0 text-[15px] font-bold tabular-nums text-positive transition-transform duration-200 group-hover:scale-105">
                   {Math.round(hit.confidence)}%
                 </span>
               </button>

@@ -59,24 +59,24 @@ export function TopSetupsStrip({
               >
                 <CoinIcon symbol={hit.symbol} size={36} />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-[15px] font-bold leading-tight">{hit.base}</span>
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase leading-[14px] ${
-                        up
-                          ? "bg-positive/15 text-positive"
-                          : "bg-negative/15 text-negative"
-                      }`}
-                    >
-                      {t(up ? "direction.long" : "direction.short")}
-                    </span>
-                  </span>
+                  <span className="block truncate text-[15px] font-bold leading-tight">{hit.base}</span>
                   <span className="mt-1.5 block truncate text-[11px] tabular-nums text-muted-2">
                     ${formatPrice(hit.entry, priceDecimals(hit.entry))}
                   </span>
                 </span>
-                <span className="shrink-0 text-[15px] font-bold tabular-nums text-positive transition-transform duration-200 group-hover:scale-105">
-                  {Math.round(hit.confidence)}%
+                <span className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span
+                    className={`rounded px-1.5 py-px text-[9px] font-bold uppercase leading-[14px] ${
+                      up
+                        ? "bg-positive/15 text-positive"
+                        : "bg-negative/15 text-negative"
+                    }`}
+                  >
+                    {t(up ? "direction.long" : "direction.short")}
+                  </span>
+                  <span className="text-[15px] font-bold tabular-nums text-positive transition-transform duration-200 group-hover:scale-105">
+                    {Math.round(hit.confidence)}%
+                  </span>
                 </span>
               </button>
             );

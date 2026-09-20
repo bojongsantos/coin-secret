@@ -56,10 +56,10 @@ function InstagramMark({ className }: { className?: string }) {
 }
 
 const SOCIALS = [
-  { id: "x", href: "https://x.com", Icon: XMark, label: "X" },
-  { id: "instagram", href: "https://instagram.com", Icon: InstagramMark, label: "Instagram" },
+  { id: "x", href: "https://x.com/coinsecrethq", Icon: XMark, label: "X" },
+  { id: "instagram", href: "https://www.instagram.com/coinsecrethq/", Icon: InstagramMark, label: "Instagram" },
   { id: "telegram", href: "https://t.me/CoinSecretHQ", Icon: Send, label: "Telegram" },
-  { id: "email", href: "mailto:hello@coinsecret.app", Icon: Mail, label: "Email" },
+  { id: "email", href: "mailto:admin.coinsecret@gmail.com", Icon: Mail, label: "Email" },
 ] as const;
 
 /** The four things the product is, or will be. */

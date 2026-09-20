@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, ShieldAlert, TrendingDown, TrendingUp } from "lucide-react";
+import { Info, ShieldAlert } from "lucide-react";
 import type { MarketContext } from "@/core/domain/models";
 import { Delta } from "@/presentation/ui/delta";
 import { Tooltip } from "@/presentation/ui/tooltip";
@@ -45,14 +45,14 @@ function MetricRow({
   t: Translate;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <p className="text-[12px] font-medium text-muted">{label}</p>
+    <div className="flex min-h-10 items-center justify-between gap-3 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <p className="shrink-0 text-[15px] font-medium text-muted">{label}</p>
         {help && (
           <Tooltip content={warning ? `${help}
 
 ${t("metric.unavailableNote")}` : help}>
-            <Info className="size-3.5 shrink-0 text-muted-2 transition-colors hover:text-muted" />
+            <Info className="size-4 shrink-0 text-muted-2 transition-colors hover:text-muted" />
           </Tooltip>
         )}
         {warning && !help && (
@@ -60,11 +60,11 @@ ${t("metric.unavailableNote")}` : help}>
             <ShieldAlert className="size-3 shrink-0 text-warning" aria-hidden="true" />
           </span>
         )}
-        {hint && !warning && <p className="text-[10px] text-muted-2">{hint}</p>}
+        {hint && !warning && <p className="truncate text-[12px] text-muted-2">{hint}</p>}
       </div>
-      <div className="flex items-center gap-2 text-right">
+      <div className="flex shrink-0 items-center gap-2.5 text-right">
         <span
-          className={`text-[12px] font-semibold tabular-nums ${
+          className={`text-[16px] font-semibold tabular-nums ${
             tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : ""
           }`}
         >
@@ -79,34 +79,31 @@ ${t("metric.unavailableNote")}` : help}>
 export function MarketContextCard({ data }: { data: MarketContext }) {
   const { t } = useT();
   return (
-    <section className="cs-card @container p-4">
-      <h3 className="text-[13px] font-semibold">{t("rail.marketContext")}</h3>
+    <section className="cs-card @container p-5">
+      <h3 className="text-[16px] font-semibold">{t("rail.marketContext")}</h3>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 @[240px]:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-4 @[300px]:grid-cols-2">
         {[data.btc, data.eth].map((coin) => {
-          const up = coin.direction === "up";
-          const Icon = up ? TrendingUp : TrendingDown;
           return (
-            <div key={coin.id} className="rounded-xl border border-border bg-surface-2 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <CoinIcon symbol={`${coin.label}USDT`} size={20} />
-                  <span className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-2">
-                    {coin.label}/USDT
-                  </span>
-                </span>
-                <Icon className={`size-4 shrink-0 ${up ? "text-positive" : "text-negative"}`} />
-              </div>
-              <p className="mt-1 text-lg font-bold tabular-nums leading-none">
-                {coin.value === "—" ? coin.value : `$${coin.value}`}
+            <div key={coin.id} className="rounded-2xl border border-border bg-surface-2 p-4">
+              <p className="truncate text-[14px] font-semibold uppercase tracking-wide text-muted-2">
+                {coin.label}/USDT
               </p>
-              <Delta value={coin.change} className="mt-1" />
+              <div className="mt-3 flex items-center gap-4">
+                <CoinIcon symbol={`${coin.label}USDT`} size={48} />
+                <div className="min-w-0">
+                  <p className="truncate text-[27px] font-bold tabular-nums leading-none">
+                    {coin.value === "—" ? coin.value : `$${coin.value}`}
+                  </p>
+                  <Delta value={coin.change} direction={coin.direction} className="mt-2 text-[15px]" />
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-3 divide-y divide-border/60 border-t border-border pt-2">
+      <div className="mt-5 divide-y divide-border/60 border-t border-border pt-1">
         <MetricRow
           label={data.fundingRate.label}
           value={data.fundingRate.value}

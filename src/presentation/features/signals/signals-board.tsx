@@ -157,6 +157,39 @@ function SetupRow({
   );
 }
 
+/** A locked row silhouette. It suggests more results without repeating or exposing Pro data. */
+function LockedPreviewRow({ variant }: { variant: 0 | 1 }) {
+  return (
+    <div className={`${ROW_CLASS} py-3`}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span
+          className={`size-8 shrink-0 rounded-full bg-gradient-to-br ${
+            variant === 0
+              ? "from-accent-blue/60 to-positive/30"
+              : "from-warning/50 to-negative/30"
+          }`}
+        />
+        <span className="min-w-0 flex-1 space-y-2">
+          <span className={`block h-3 rounded-full bg-foreground/45 ${variant === 0 ? "w-20" : "w-14"}`} />
+          <span className={`block h-2 rounded-full bg-muted/40 ${variant === 0 ? "w-12" : "w-16"}`} />
+        </span>
+      </div>
+
+      <div className="hidden items-center gap-2.5 sm:flex">
+        <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-3">
+          <span
+            className={`block h-full rounded-full bg-accent-blue ${variant === 0 ? "w-4/5" : "w-3/5"}`}
+          />
+        </span>
+        <span className={`h-2 rounded-full bg-muted/35 ${variant === 0 ? "w-10" : "w-8"}`} />
+      </div>
+
+      <span className={`mx-auto block h-3 rounded-full bg-positive/45 ${variant === 0 ? "w-8" : "w-7"}`} />
+      <span className={`mx-auto block h-7 rounded-full bg-surface-3 ${variant === 0 ? "w-24" : "w-20"}`} />
+    </div>
+  );
+}
+
 function Column({
   title,
   hits,
@@ -176,7 +209,6 @@ function Column({
   const hiddenCount = Math.max(0, totalCount - hits.length);
   const dashboard = Boolean(onSelect);
   const showBlurredPreview = hiddenCount > 0 && dashboard && hits.length > 0;
-  const previewHits = showBlurredPreview ? [hits[0], hits[1] ?? hits[0]] : [];
   return (
     <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
@@ -214,11 +246,8 @@ function Column({
             className="relative h-[108px] select-none overflow-hidden [mask-image:linear-gradient(to_bottom,black_0%,black_32%,transparent_96%)]"
           >
             <div className="space-y-0.5 opacity-55 blur-[3px]">
-              {previewHits.map((hit, index) => (
-                <div key={`${hit.symbol}-${hit.timeframe}-preview-${index}`} className={ROW_CLASS}>
-                  <SetupRowContent hit={hit} max={max} t={t} prominent />
-                </div>
-              ))}
+              <LockedPreviewRow variant={0} />
+              <LockedPreviewRow variant={1} />
             </div>
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-surface-2/90" />
           </div>

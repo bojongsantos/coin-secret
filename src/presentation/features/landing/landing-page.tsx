@@ -137,19 +137,19 @@ function Hero({ t }: { t: Translate }) {
 
       <Reveal
         stagger
-        className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-5 pb-28 pt-16 text-center"
+        className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-5 pb-28 pt-16 text-center"
       >
-        <h1 className="cs-heading-gradient text-balance text-[34px] font-bold leading-[1.18] tracking-[-0.025em] sm:text-[52px] lg:text-[68px]">
+        <h1 className="cs-heading-gradient text-balance text-[40px] font-bold leading-[1.16] tracking-[-0.03em] sm:text-[56px] lg:text-[68px]">
           {t("landing.heroA")}
           <br />
           <span>{t("landing.heroB")}</span>
         </h1>
-        <p className="mt-6 max-w-xl text-pretty text-[12.5px] leading-relaxed text-white/50 sm:text-[13.5px]">
+        <p className="mt-6 max-w-2xl text-pretty text-[14.5px] leading-relaxed text-white/55 sm:text-[16px]">
           {t("landing.subhead")}
         </p>
         <Link
           href="/dashboard"
-          className={`${styles.launchButton} mt-9 inline-flex h-12 items-center rounded-full text-[14px] font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0`}
+          className={`${styles.launchButton} mt-9 inline-flex h-12 items-center rounded-full text-[15px] font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0`}
         >
           <span className={styles.launchButtonInner}>
             <span>{t("landing.launchApp")}</span>
@@ -165,10 +165,10 @@ function About({ t }: { t: Translate }) {
     <section id="about" className={`${styles.about} scroll-mt-20 py-20 sm:py-32`}>
       <div className="relative mx-auto max-w-[1104px] px-5 sm:px-8">
         <Reveal stagger>
-          <h2 className="text-center text-[26px] font-bold tracking-tight sm:text-[30px]">
+          <h2 className="text-center text-[30px] font-bold tracking-tight sm:text-[34px]">
             {t("landing.nav.about")}
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-center text-[12.5px] leading-relaxed text-white/50">
+          <p className="mx-auto mt-4 max-w-2xl text-center text-[14px] leading-relaxed text-white/55 sm:text-[15px]">
             {t("landing.aboutBody")}
           </p>
         </Reveal>
@@ -182,19 +182,19 @@ function About({ t }: { t: Translate }) {
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2.5">
                   <Icon className="size-[18px] text-accent-blue" />
-                  <h3 className="text-[15px] font-semibold">
+                  <h3 className="text-[17px] font-semibold">
                     {t(`landing.feature.${id}` as MessageKey)}
                   </h3>
                 </span>
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
                     live ? "border border-accent-blue/40 bg-accent-blue/15 text-accent-blue" : "border border-white/15 bg-white/10 text-white/55"
                   }`}
                 >
                   {t(live ? "landing.live" : "nav.comingSoon")}
                 </span>
               </div>
-              <p className="mt-4 text-[12.5px] leading-relaxed text-white/50">
+              <p className="mt-4 text-[14px] leading-relaxed text-white/55 sm:text-[14.5px]">
                 {t(`landing.feature.${id}Body` as MessageKey)}
               </p>
             </div>
@@ -235,12 +235,12 @@ function Pricing({
     <section id="pricing" className={`${styles.pricing} scroll-mt-20 py-20 sm:py-32`}>
       <div className="relative mx-auto max-w-[1060px] px-5 sm:px-8">
         <Reveal stagger>
-          <h2 className="cs-heading-gradient text-balance text-center text-[26px] font-bold leading-tight tracking-tight sm:text-[34px]">
+          <h2 className="cs-heading-gradient text-balance text-center text-[32px] font-bold leading-tight tracking-tight sm:text-[42px]">
             {t("landing.heroA")}
             <br />
             <span>{t("landing.heroB")}</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-md text-center text-[12.5px] leading-relaxed text-white/50">
+          <p className="mx-auto mt-4 max-w-xl text-center text-[14px] leading-relaxed text-white/55 sm:text-[15px]">
             {t("landing.subhead")}
           </p>
         </Reveal>
@@ -259,14 +259,14 @@ function Pricing({
                 type="button"
                 aria-pressed={active}
                 onClick={() => setPeriod(option)}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-[12.5px] font-semibold transition-colors ${
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-[13.5px] font-semibold transition-colors ${
                   active ? "bg-accent-blue text-white" : "text-white/55 hover:text-white"
                 }`}
               >
                 {t(`pricing.period.${option}` as MessageKey)}
                 {savings > 0 && (
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-bold ${
+                    className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-bold ${
                       active ? "bg-white/20 text-white" : "bg-white/10 text-white/60"
                     }`}
                   >
@@ -309,21 +309,21 @@ function Pricing({
                 card.featured ? "cs-plan-pro" : ""
               }`}
             >
-              <p className="text-[12.5px] font-semibold text-white/60">{card.name}</p>
+              <p className="text-[14px] font-semibold text-white/60">{card.name}</p>
               <p className="mt-2 flex items-baseline gap-1">
-                <span className="text-[48px] font-bold leading-none tracking-tight">{card.price}</span>
-                <span className="text-[13px] font-medium text-white/50">{t("pricing.perMonth")}</span>
+                <span className="text-[52px] font-bold leading-none tracking-tight">{card.price}</span>
+                <span className="text-[13.5px] font-medium text-white/50">{t("pricing.perMonth")}</span>
               </p>
-              <p className="mt-3 text-[12px] leading-relaxed text-white/50">{card.blurb}</p>
+              <p className="mt-3 text-[13.5px] leading-relaxed text-white/55">{card.blurb}</p>
 
-              <p className="mt-10 text-[12px] font-semibold">{t("pricing.included")}</p>
+              <p className="mt-10 text-[13px] font-semibold">{t("pricing.included")}</p>
               <ul className="mt-3 flex-1 space-y-2">
                 {rows.map((row) => {
                   const value = card.id === "pro" ? row.pro : row.free;
                   return (
                     <li
                       key={row.id}
-                      className="flex items-start gap-2 text-[12px] leading-snug text-white/55"
+                      className="flex items-start gap-2 text-[13px] leading-snug text-white/55"
                     >
                       <Check className="mt-0.5 size-3.5 shrink-0 text-white/35" aria-hidden />
                       <span>
@@ -339,7 +339,7 @@ function Pricing({
 
               <Link
                 href={card.href}
-                className={`mt-7 block rounded-xl px-4 py-2.5 text-center text-[13px] font-bold transition-opacity hover:opacity-90 ${
+                className={`mt-7 block rounded-xl px-4 py-2.5 text-center text-[14px] font-bold transition-opacity hover:opacity-90 ${
                   card.featured
                     ? "bg-gradient-to-r from-accent-blue to-accent text-white"
                     : "border border-white/15 text-white"
@@ -363,7 +363,7 @@ export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQ
       {/* The design's bar is the wordmark alone, centred. */}
       <header className="flex h-(--landing-bar) items-center justify-center border-b border-white/[0.07]">
         <Link href="/" aria-label={t("landing.home")}>
-          <BrandLockup height={24} tone="dark" />
+          <BrandLockup height={27} tone="dark" />
         </Link>
       </header>
 
@@ -377,7 +377,7 @@ export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQ
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 px-5 py-8 sm:flex-row sm:justify-between">
           <BrandLockup height={20} tone="dark" />
           <nav
-            className="flex items-center gap-7 text-[12.5px] text-white/55"
+            className="flex items-center gap-7 text-[13.5px] text-white/55"
             aria-label={t("nav.primary")}
           >
             <a href="#about" className="transition-colors hover:text-white">
@@ -392,7 +392,7 @@ export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQ
           </nav>
           <Socials />
         </div>
-        <p className="border-t border-white/[0.06] py-5 text-center text-[11.5px] text-white/35">
+        <p className="border-t border-white/[0.06] py-5 text-center text-[12.5px] text-white/35">
           {t("landing.copyright", { year: new Date().getFullYear() })}
         </p>
       </footer>

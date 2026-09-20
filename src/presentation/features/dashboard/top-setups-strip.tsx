@@ -51,7 +51,7 @@ export function TopSetupsStrip({
                 key={`${hit.symbol}-${hit.timeframe}`}
                 type="button"
                 onClick={() => onSelect(hit.symbol, hit.timeframe)}
-                className={`group flex w-[190px] shrink-0 items-center gap-2.5 rounded-xl border px-3 py-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 focus-visible:-translate-y-0.5 ${
+                className={`group flex w-[208px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 focus-visible:-translate-y-0.5 ${
                   active
                     ? "border-accent-blue/70 bg-accent-blue/10 shadow-[0_8px_24px_rgb(77_117_255_/_12%)]"
                     : "border-border bg-surface hover:border-border-strong hover:bg-surface-2"

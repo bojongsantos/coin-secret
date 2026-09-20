@@ -14,7 +14,8 @@ import { coinIconSources } from "@/core/domain/market/coin-icon";
 export function CoinIcon({ symbol, size = 28 }: { symbol: string; size?: number }) {
   const base = symbol.replace(/USDT$/i, "") || symbol;
   const sources = coinIconSources(base);
-  const [index, setIndex] = useState(0);
+  const [failure, setFailure] = useState({ base, index: 0 });
+  const index = failure.base === base ? failure.index : 0;
   const src = sources[index];
 
   return (
@@ -30,8 +31,7 @@ export function CoinIcon({ symbol, size = 28 }: { symbol: string; size?: number 
           width={size}
           height={size}
           className="size-full object-cover"
-          unoptimized
-          onError={() => setIndex((current) => current + 1)}
+          onError={() => setFailure({ base, index: index + 1 })}
         />
       ) : (
         base.slice(0, 2)

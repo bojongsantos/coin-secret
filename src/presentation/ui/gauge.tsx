@@ -14,17 +14,16 @@ interface GaugeProps {
 }
 
 export function Gauge({ score, label, width = 210 }: GaugeProps) {
-  const height = width * 0.58 + 46;
   const color = scoreColor(score);
   const needleTip = pointAt(score, GAUGE_R - 34);
   const needleBase = pointAt(score, 5);
 
   return (
-    <div className="relative inline-flex flex-col items-center justify-center" style={{ width, height }}>
+    <div className="relative flex w-full flex-col items-center" style={{ maxWidth: width }}>
       {/* No transform on the group: the viewBox already maps these 200 units
           onto `width`, and scaling again pushed the arc past the right and
           bottom edges where it was clipped. */}
-      <svg viewBox="0 0 200 116" width={width} height={width * 0.58}>
+      <svg viewBox="0 0 200 116" className="block h-auto w-full">
         <g>
           <path d={arcPath(0, 100, GAUGE_R)} fill="none" stroke="var(--color-surface-3)" strokeWidth={11} strokeLinecap="round" />
           <path
@@ -65,8 +64,8 @@ export function Gauge({ score, label, width = 210 }: GaugeProps) {
         </g>
       </svg>
       <div className="z-10 flex flex-col items-center leading-none">
-        <span className="mt-2 text-2xl font-bold">{score}</span>
-        <span className="mt-1 text-[11px] font-medium uppercase text-muted">{label ?? "Neutral"}</span>
+        <span className="mt-2 text-[36px] font-bold tracking-[-0.03em]">{score}</span>
+        <span className="mt-2 text-[14px] font-medium uppercase text-muted">{label ?? "Neutral"}</span>
       </div>
     </div>
   );

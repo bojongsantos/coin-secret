@@ -2,9 +2,9 @@
 
 import { useEffect, useId, useState } from "react";
 
-const SIZE = 164;
-const R = 68;
-const STROKE = 14;
+const SIZE = 220;
+const R = 88;
+const STROKE = 34;
 const C = 2 * Math.PI * R;
 
 function easeOutCubic(t: number): number {
@@ -42,13 +42,13 @@ export function ConvictionRing({ score }: ConvictionRingProps) {
   return (
     <div className="relative flex items-center justify-center" style={{ width: SIZE, height: SIZE }}>
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
-        {/* Background track — muted reference line only */}
+        {/* A broad track keeps the score readable at a glance, like the supplied design. */}
         <circle
           cx={SIZE / 2}
           cy={SIZE / 2}
           r={R}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="rgba(255,255,255,0.045)"
           strokeWidth={STROKE}
         />
         <defs>
@@ -57,7 +57,7 @@ export function ConvictionRing({ score }: ConvictionRingProps) {
             <stop offset="100%" stopColor="var(--color-accent)" />
           </linearGradient>
         </defs>
-        {/* Foreground progress — solid, flat, rounded caps */}
+        {/* Flat ends make the filled and remaining portions meet cleanly. */}
         <circle
           cx={SIZE / 2}
           cy={SIZE / 2}
@@ -65,24 +65,24 @@ export function ConvictionRing({ score }: ConvictionRingProps) {
           fill="none"
           stroke={`url(#${gradientId})`}
           strokeWidth={STROKE}
-          strokeLinecap="round"
+          strokeLinecap="butt"
           strokeDasharray={C}
           strokeDashoffset={dashOffset}
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
           style={{
             opacity: progress > 0.001 ? 1 : 0,
             transition: "opacity 200ms",
-            filter: "drop-shadow(0 5px 8px rgb(77 117 255 / 35%))",
+            filter: "drop-shadow(0 5px 9px rgb(77 117 255 / 32%))",
           }}
         />
       </svg>
 
       {/* Center text — no container, transparent */}
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[38px] font-bold leading-none text-foreground">
+        <span className="text-[50px] font-bold leading-none tracking-[-0.04em] text-foreground">
           {Math.round(animated)}
         </span>
-        <span className="mt-1 text-[12px] font-medium leading-none text-muted-2">/100</span>
+        <span className="mt-2 text-[17px] font-semibold leading-none text-muted-2">/100</span>
       </div>
     </div>
   );

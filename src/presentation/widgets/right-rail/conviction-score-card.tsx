@@ -38,12 +38,12 @@ export function ConvictionScoreCard({ data }: { data: ConvictionScore }) {
   const waiting = data.score === 0 && data.grade === "F";
 
   return (
-    <section className="cs-card @container p-4">
-      <h3 className="text-[13px] font-semibold">{t("rail.confidenceScore")}</h3>
+    <section className="cs-card @container p-5">
+      <h3 className="text-[16px] font-semibold">{t("rail.confidenceScore")}</h3>
 
       {/* Ring beside its parts, not above them: the four contributions are a
           reading of the number, and side by side they are read as one thing. */}
-      <div className="mt-4 flex flex-col items-center gap-5 @[310px]:flex-row @[310px]:justify-between @[310px]:gap-4">
+      <div className="mt-6 flex flex-col items-center gap-6 @[390px]:flex-row @[390px]:justify-between @[390px]:gap-6">
         <div className="shrink-0">
           {waiting ? (
             <span className="block w-32 py-10 text-center text-[13px] font-semibold text-muted-2">
@@ -54,26 +54,25 @@ export function ConvictionScoreCard({ data }: { data: ConvictionScore }) {
           )}
         </div>
 
-        <LockedOverlay feature="convictionDetail" className="w-full min-w-[124px] flex-1">
-          <ul className="space-y-3">
+        <LockedOverlay feature="convictionDetail" className="w-full min-w-[164px] flex-1">
+          <ul className="space-y-4">
             {data.components.map((comp) => (
-              <li key={comp.id} className="flex items-center gap-2.5">
+              <li key={comp.id} className="flex items-center gap-3">
                 <span
-                  className="size-2 shrink-0 rounded-full"
+                  className="size-2.5 shrink-0 rounded-full"
                   style={{ backgroundColor: dotColor(comp.id) }}
                 />
-                <span className="min-w-0 flex-1 text-[12px] font-medium leading-tight text-foreground">
+                <span className="min-w-0 flex-1 text-[15px] font-medium leading-snug text-foreground">
                   {labelFor(t, comp.id) ?? comp.label}
                 </span>
                 <Tooltip content={tooltipFor(t, comp.id) ?? comp.detail}>
-                  <Info className="size-3.5 shrink-0 text-muted-2 transition-colors hover:text-muted" />
+                  <Info className="size-4 shrink-0 text-muted-2 transition-colors hover:text-muted" />
                 </Tooltip>
               </li>
             ))}
           </ul>
         </LockedOverlay>
       </div>
-
     </section>
   );
 }

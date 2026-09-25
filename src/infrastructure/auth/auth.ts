@@ -2,6 +2,7 @@ import "server-only";
 
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { emailOTP } from "better-auth/plugins";
 import { prisma } from "@/infrastructure/database/prisma";
 import { sendTransactionalEmail } from "@/infrastructure/email/email-service";
 import { localIPv4Addresses } from "@/infrastructure/auth/local-addresses";
@@ -29,6 +30,7 @@ export const auth = betterAuth({
     minPasswordLength: 10,
     maxPasswordLength: 128,
     requireEmailVerification: true,
+    autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       const code = new URL(url).pathname.split("/").at(-1) ?? "";
@@ -42,16 +44,24 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     sendOnSignIn: true,
-    autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, url }) => {
-      const code = new URL(url).searchParams.get("token") ?? "";
+    autoSignInAfterVerification: false,
+  },
+  plugins: [emailOTP({
+    overrideDefaultEmailVerification: true,
+    disableSignUp: true,
+    otpLength: 6,
+    expiresIn: 300,
+    allowedAttempts: 5,
+    storeOTP: "encrypted",
+    async sendVerificationOTP({ email, otp, type }) {
+      if (type !== "email-verification") return;
       await sendTransactionalEmail({
-        to: user.email,
+        to: email,
         subject: "Verifikasi email CoinSecret",
-        html: `<p>Buka coinsecret.io/verify-email di browser, lalu masukkan kode verifikasi berikut:</p><p><code>${code}</code></p><p>Jika Anda tidak mendaftar CoinSecret, abaikan email ini.</p>`,
+        html: `<p>Buka coinsecret.io/verify-email di browser, lalu masukkan kode verifikasi 6 angka berikut:</p><p style="font-size:28px;letter-spacing:6px"><strong>${otp}</strong></p><p>Kode berlaku 5 menit. Jika Anda tidak mendaftar CoinSecret, abaikan email ini.</p>`,
       });
     },
-  },
+  })],
   user: {
     additionalFields: {
       role: {

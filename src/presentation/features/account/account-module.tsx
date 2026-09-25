@@ -7,6 +7,7 @@ import type { CurrentUserDto } from "@/core/domain/identity";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { useT } from "@/presentation/hooks/use-translate";
 import { Reveal } from "@/presentation/ui/reveal";
+import { PasswordField } from "@/presentation/ui/password-field";
 
 interface PaymentRow {
   id: string;
@@ -111,16 +112,16 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
 
         <Card title={t("billing.changePassword")}>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="password"
+            <PasswordField
+              aria-label={t("billing.currentPassword")}
               autoComplete="current-password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
               placeholder={t("billing.currentPassword")}
               className="h-11 rounded-xl border border-border bg-surface-2 px-3.5 text-[13px] placeholder:text-muted-2 focus:border-accent-blue/60 focus:outline-none"
             />
-            <input
-              type="password"
+            <PasswordField
+              aria-label={t("billing.newPassword")}
               autoComplete="new-password"
               minLength={10}
               value={newPassword}
@@ -138,6 +139,7 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
             {t("billing.savePassword")}
           </button>
           {message && <p className="mt-2.5 text-[12px] text-muted">{message}</p>}
+          <p className="mt-4 text-[13px] text-muted">{t("billing.forgotPasswordHelp")} <Link href="/forgot-password" className="font-semibold text-accent-2 hover:underline">{t("auth.forgotPassword")}</Link></p>
         </Card>
 
         <Card title={t("billing.history")}>

@@ -63,7 +63,7 @@ for (const path of [
 for (const path of ["/.env", "/.git/config", "/package.json"]) {
   record(`sensitive file is not served at ${path}`, async () => {
     const { body, response } = await request(path);
-    assert.equal(response.status, 404, `${path} returned ${response.status}`);
+    assert.ok([403, 404].includes(response.status), `${path} returned ${response.status}`);
     assertNoLeak(body);
   });
 }

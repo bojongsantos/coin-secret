@@ -12,14 +12,11 @@ export type { EmailMessage };
 /**
  * Sends one transactional email through Brevo.
  *
- * Brevo is used rather than a domain-only provider because this deployment has
- * no domain of its own yet: Brevo will send from a single address the operator
- * verified by clicking a link in that inbox, which is the only route available
- * without DNS records to publish.
+ * Brevo sends from the verified CoinSecret domain configured in EMAIL_FROM.
  *
  * Outside production a missing key logs instead of sending, so local sign-up
  * and password-reset flows stay usable without any mail account at all. In
- * production it raises, because a reset link that is silently never sent looks
+ * production it raises, because a reset code that is silently never sent looks
  * exactly like a working reset to the person waiting for it.
  */
 export async function sendTransactionalEmail(message: EmailMessage): Promise<void> {

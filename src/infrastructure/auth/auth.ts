@@ -35,7 +35,7 @@ export const auth = betterAuth({
       await sendTransactionalEmail({
         to: user.email,
         subject: "Reset password CoinSecret",
-        html: `<p>Gunakan tautan berikut untuk mengatur ulang password:</p><p><a href="${url}">Reset password</a></p><p>Jika tautan tidak terbuka, kunjungi coinsecret.io/reset-password secara langsung dan masukkan kode berikut:</p><p><code>${code}</code></p>`,
+        html: `<p>Buka coinsecret.io/reset-password di browser, lalu masukkan kode reset berikut:</p><p><code>${code}</code></p><p>Kode ini hanya untuk mengatur ulang password akun Anda. Jika Anda tidak meminta reset, abaikan email ini.</p>`,
       });
     },
   },
@@ -48,7 +48,7 @@ export const auth = betterAuth({
       await sendTransactionalEmail({
         to: user.email,
         subject: "Verifikasi email CoinSecret",
-        html: `<p>Verifikasi akun CoinSecret melalui tautan berikut:</p><p><a href="${url}">Verifikasi email</a></p><p>Jika tautan tidak terbuka, kunjungi coinsecret.io/verify-email secara langsung dan masukkan kode berikut:</p><p><code>${code}</code></p>`,
+        html: `<p>Buka coinsecret.io/verify-email di browser, lalu masukkan kode verifikasi berikut:</p><p><code>${code}</code></p><p>Jika Anda tidak mendaftar CoinSecret, abaikan email ini.</p>`,
       });
     },
   },

@@ -8,9 +8,50 @@ import type {
 } from "@/core/application/scanner/supply-demand-scan-service";
 import type { ScannerOpportunity } from "@/core/domain/models";
 
-interface SignalsApiPayload {
+export interface SignalsApiPayload {
   result: SdScanResult;
   top: TopSetup[];
+}
+
+/** The dashboard reads one response for its tables and top setups. */
+export function useDashboardSignals(initial: SignalsApiPayload | null) {
+  const [payload, setPayload] = useState<SignalsApiPayload | null>(initial);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  const execute = useCallback(async (force: boolean) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setLoading(true);
+    try {
+      setPayload(await postScan<SignalsApiPayload>("/api/signals", { force, limit: 20 }));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const kickoff = !initial ? window.setTimeout(() => void execute(false), 0) : null;
+    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
+    return () => {
+      if (kickoff !== null) window.clearTimeout(kickoff);
+      window.clearInterval(poll);
+    };
+  }, [execute, initial]);
+
+  return {
+    result: payload?.result ?? null,
+    top: payload?.top ?? [],
+    loading,
+    error,
+    failedCount: payload?.result.errors.length ?? 0,
+    refresh: () => void execute(true),
+  };
 }
 
 /**

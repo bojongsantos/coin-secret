@@ -5,23 +5,26 @@ import { Loader2 } from "lucide-react";
 import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import type { Timeframe } from "@/core/domain/models";
+import type { MarketContextPayload } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { MarketOverview } from "@/presentation/features/dashboard/market-overview";
 import { TopSetupsStrip } from "@/presentation/features/dashboard/top-setups-strip";
 import { SignalsBoard } from "@/presentation/features/signals/signals-board";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useMarketContext } from "@/presentation/hooks/use-market-context";
-import { useSdScan, useTopSetups } from "@/presentation/hooks/use-scanner";
+import { useDashboardSignals, type SignalsApiPayload } from "@/presentation/hooks/use-scanner";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Reveal } from "@/presentation/ui/reveal";
 
-export function DashboardClient() {
-  const { top, loading: topLoading } = useTopSetups(20);
-  const { result, loading: scanLoading, error: scanError, failedCount, refresh } = useSdScan();
-  const { context, sentiment } = useMarketContext(true);
+export function DashboardClient({ initialSignals, initialMarket }: {
+  initialSignals: SignalsApiPayload | null;
+  initialMarket: MarketContextPayload | null;
+}) {
+  const { top, result, loading: scanLoading, error: scanError, failedCount, refresh } = useDashboardSignals(initialSignals);
+  const { context, sentiment } = useMarketContext(true, initialMarket);
 
   const [symbol, setSymbol] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<Timeframe>("15m");
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialSignals?.top[0]?.hit.timeframe ?? "15m");
   const range = rangeForTimeframe(timeframe);
 
   // On a fresh mount nothing has been picked yet, so the page opens on the
@@ -59,11 +62,7 @@ export function DashboardClient() {
 
   return (
     <AppShell>
-      {/* The blocks arrive in the order they are read, a beat apart. The stagger
-          is per block rather than per card: a hundred rows each fading in on
-          their own turns a board into a slot machine. */}
       <div className="flex flex-col gap-4 sm:gap-5">
-        <Reveal>
           <MarketOverview
             context={context}
             sentiment={sentiment}
@@ -71,9 +70,7 @@ export function DashboardClient() {
             onRefresh={refresh}
             refreshing={scanLoading}
           />
-        </Reveal>
 
-        <Reveal step={1}>
           <SignalsBoard
             demand={result?.demand ?? []}
             supply={result?.supply ?? []}
@@ -86,17 +83,14 @@ export function DashboardClient() {
             maxHeight={352}
             onSelect={pick}
           />
-        </Reveal>
 
         <section className="cs-panel flex flex-col gap-6 p-4 sm:p-5">
-        <Reveal step={2}>
           <TopSetupsStrip
             setups={top}
-            loading={topLoading}
+            loading={scanLoading}
             activeSymbol={activeSymbol}
             onSelect={pick}
           />
-        </Reveal>
 
         {error && (
           <div className="rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-[12.5px] text-negative">

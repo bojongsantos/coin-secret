@@ -1,15 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import {
   Check,
-  CandlestickChart,
-  Lock,
   Mail,
-  Newspaper,
   Send,
-  Telescope,
 } from "lucide-react";
 import { PLAN_CAPABILITIES } from "@/core/domain/access/plan-catalog";
 import {
@@ -64,10 +61,10 @@ const SOCIALS = [
 
 /** The four things the product is, or will be. */
 const FEATURES = [
-  { id: "signals", icon: CandlestickChart, live: true },
-  { id: "alpha", icon: Telescope, live: false },
-  { id: "unlock", icon: Lock, live: false },
-  { id: "news", icon: Newspaper, live: false },
+  { id: "signals", icon: "/icons/landing/signals.png", live: true },
+  { id: "alpha", icon: "/icons/landing/alpha-report.png", live: false },
+  { id: "unlock", icon: "/icons/landing/token-unlock.png", live: false },
+  { id: "news", icon: "/icons/landing/news.png", live: false },
 ] as const;
 
 function Socials({ className = "" }: { className?: string }) {
@@ -174,14 +171,14 @@ function About({ t }: { t: Translate }) {
         </Reveal>
 
         <Reveal stagger className="mt-10 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
-          {FEATURES.map(({ id, icon: Icon, live }) => (
+          {FEATURES.map(({ id, icon, live }) => (
             <div
               key={id}
               className={`${styles.featureCard} cs-card min-h-[220px] p-6 sm:p-7`}
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2.5">
-                  <Icon className="size-[18px] text-accent-blue" />
+                  <Image src={icon} alt="" width={22} height={22} className="size-[22px] object-contain" />
                   <h3 className="text-[17px] font-semibold">
                     {t(`landing.feature.${id}` as MessageKey)}
                   </h3>

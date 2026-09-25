@@ -301,6 +301,12 @@ body {
   animation: cs-top-setups-slide linear infinite;
 }
 
+/* The moving row is intentionally clipped; fade partial cards at both edges
+   so pausing on hover never leaves a hard-cut card against the panel border. */
+.cs-top-setups-viewport {
+  mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+}
+
 .cs-top-setups-track:hover,
 .cs-top-setups-track:focus-within {
   animation-play-state: paused;

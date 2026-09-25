@@ -41,7 +41,7 @@ export function TopSetupsStrip({
       ) : setups.length === 0 ? (
         <p className="mt-5 py-6 text-center text-[12px] text-muted-2">{t("dashboard.noSetups")}</p>
       ) : (
-        <div className="mt-5 overflow-hidden" aria-label={t("dashboard.topSetups")}>
+        <div className="cs-top-setups-viewport mt-3 overflow-hidden py-2" aria-label={t("dashboard.topSetups")}>
           <div
             className="cs-top-setups-track flex w-max gap-3 pr-3"
             style={{ animationDuration: `${Math.max(28, setups.length * 4)}s` }}
@@ -57,7 +57,7 @@ export function TopSetupsStrip({
                 onClick={() => onSelect(hit.symbol, hit.timeframe)}
                 aria-hidden={index >= setups.length}
                 tabIndex={index >= setups.length ? -1 : 0}
-                className={`group flex w-[208px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 focus-visible:-translate-y-0.5 ${
+                className={`group flex w-[208px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-[border-color,background-color,box-shadow] duration-200 hover:shadow-lg hover:shadow-black/20 focus-visible:shadow-lg ${
                   active
                     ? "border-accent-blue/70 bg-accent-blue/10 shadow-[0_8px_24px_rgb(77_117_255_/_12%)]"
                     : "border-border bg-surface hover:border-border-strong hover:bg-surface-2"
@@ -80,7 +80,7 @@ export function TopSetupsStrip({
                   >
                     {t(up ? "direction.long" : "direction.short")}
                   </span>
-                  <span className="text-[15px] font-bold tabular-nums text-positive transition-transform duration-200 group-hover:scale-105">
+                  <span className="text-[15px] font-bold tabular-nums text-positive">
                     {Math.round(hit.confidence)}%
                   </span>
                 </span>

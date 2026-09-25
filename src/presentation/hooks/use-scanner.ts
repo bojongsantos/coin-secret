@@ -14,9 +14,9 @@ export interface SignalsApiPayload {
 }
 
 /** The dashboard reads one response for its tables and top setups. */
-export function useDashboardSignals(initial: SignalsApiPayload | null) {
-  const [payload, setPayload] = useState<SignalsApiPayload | null>(initial);
-  const [loading, setLoading] = useState(false);
+export function useDashboardSignals() {
+  const [payload, setPayload] = useState<SignalsApiPayload | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
@@ -36,13 +36,13 @@ export function useDashboardSignals(initial: SignalsApiPayload | null) {
   }, []);
 
   useEffect(() => {
-    const kickoff = !initial ? window.setTimeout(() => void execute(false), 0) : null;
+    const kickoff = window.setTimeout(() => void execute(false), 0);
     const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
     return () => {
-      if (kickoff !== null) window.clearTimeout(kickoff);
+      window.clearTimeout(kickoff);
       window.clearInterval(poll);
     };
-  }, [execute, initial]);
+  }, [execute]);
 
   return {
     result: payload?.result ?? null,

@@ -44,12 +44,14 @@ export function MarketOverview({
   context,
   sentiment,
   analysis,
+  loading = false,
   onRefresh,
   refreshing,
 }: {
   context: MarketContext | null;
   sentiment: SentimentData | null;
   analysis?: AnalysisResult | null;
+  loading?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
 }) {
@@ -61,11 +63,19 @@ export function MarketOverview({
       onRefresh={onRefresh}
       refreshing={refreshing}
     >
-      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
-        <MarketSentimentCard data={sentiment ?? sentimentFallback} />
-        <MarketContextCard data={context ?? marketFallback} />
-        <ConvictionScoreCard data={convictionFor(analysis)} />
-      </div>
+      {loading && !context && !sentiment ? (
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading market data">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="h-72 animate-pulse rounded-2xl border border-border bg-surface" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
+          <MarketSentimentCard data={sentiment ?? sentimentFallback} />
+          <MarketContextCard data={context ?? marketFallback} />
+          <ConvictionScoreCard data={convictionFor(analysis)} />
+        </div>
+      )}
     </Panel>
   );
 }

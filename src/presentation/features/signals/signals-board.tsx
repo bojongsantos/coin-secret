@@ -194,6 +194,7 @@ function Column({
   title,
   hits,
   totalCount,
+  loading,
   t,
   maxHeight,
   onSelect,
@@ -201,6 +202,7 @@ function Column({
   title: MessageKey;
   hits: SdScanHit[];
   totalCount: number;
+  loading: boolean;
   t: Translate;
   maxHeight: number;
   onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
@@ -213,7 +215,7 @@ function Column({
     <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h3 className={`${dashboard ? "text-[17px]" : "text-[15px]"} font-bold tracking-tight`}>{t(title)}</h3>
-        {!showBlurredPreview && (
+        {!showBlurredPreview && !loading && (
           <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
         )}
       </div>
@@ -231,7 +233,13 @@ function Column({
         className={`-mx-1 min-h-[220px] px-1 ${showBlurredPreview ? "overflow-hidden" : "scrollbar-thin overflow-y-auto"}`}
         style={showBlurredPreview ? undefined : { maxHeight }}
       >
-        {hits.length === 0 ? (
+        {loading && hits.length === 0 ? (
+          <div className="space-y-3 py-4" aria-hidden="true">
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="h-12 animate-pulse rounded-lg bg-surface-3/45" />
+            ))}
+          </div>
+        ) : hits.length === 0 ? (
           <p className="px-3 py-10 text-center text-[12px] text-muted-2">{t("zones.empty")}</p>
         ) : (
           <div className="space-y-0.5">
@@ -323,8 +331,8 @@ export function SignalsBoard({
       )}
 
       <div className="mt-7 grid gap-3.5 xl:grid-cols-2 [&>*]:min-w-0">
-        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} t={t} maxHeight={maxHeight} onSelect={onSelect} />
-        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} t={t} maxHeight={maxHeight} onSelect={onSelect} />
+        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} loading={loading} t={t} maxHeight={maxHeight} onSelect={onSelect} />
+        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} loading={loading} t={t} maxHeight={maxHeight} onSelect={onSelect} />
       </div>
     </div>
   );

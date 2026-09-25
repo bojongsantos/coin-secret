@@ -5,26 +5,22 @@ import { Loader2 } from "lucide-react";
 import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import type { Timeframe } from "@/core/domain/models";
-import type { MarketContextPayload } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { MarketOverview } from "@/presentation/features/dashboard/market-overview";
 import { TopSetupsStrip } from "@/presentation/features/dashboard/top-setups-strip";
 import { SignalsBoard } from "@/presentation/features/signals/signals-board";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useMarketContext } from "@/presentation/hooks/use-market-context";
-import { useDashboardSignals, type SignalsApiPayload } from "@/presentation/hooks/use-scanner";
+import { useDashboardSignals } from "@/presentation/hooks/use-scanner";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Reveal } from "@/presentation/ui/reveal";
 
-export function DashboardClient({ initialSignals, initialMarket }: {
-  initialSignals: SignalsApiPayload | null;
-  initialMarket: MarketContextPayload | null;
-}) {
-  const { top, result, loading: scanLoading, error: scanError, failedCount, refresh } = useDashboardSignals(initialSignals);
-  const { context, sentiment } = useMarketContext(true, initialMarket);
+export function DashboardClient() {
+  const { top, result, loading: scanLoading, error: scanError, failedCount, refresh } = useDashboardSignals();
+  const { context, sentiment, loading: marketLoading } = useMarketContext(true);
 
   const [symbol, setSymbol] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<Timeframe>(initialSignals?.top[0]?.hit.timeframe ?? "15m");
+  const [timeframe, setTimeframe] = useState<Timeframe>("15m");
   const range = rangeForTimeframe(timeframe);
 
   // On a fresh mount nothing has been picked yet, so the page opens on the
@@ -67,6 +63,7 @@ export function DashboardClient({ initialSignals, initialMarket }: {
             context={context}
             sentiment={sentiment}
             analysis={analysis}
+            loading={marketLoading}
             onRefresh={refresh}
             refreshing={scanLoading}
           />

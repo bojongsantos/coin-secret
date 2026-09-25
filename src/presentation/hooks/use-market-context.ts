@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import type { MarketContext, MarketContextPayload, SentimentData } from "@/core/domain/models";
 
-export function useMarketContext(enabled = true, initial: MarketContextPayload | null = null): {
+export function useMarketContext(enabled = true): {
   context: MarketContext | null;
   sentiment: SentimentData | null;
+  loading: boolean;
 } {
-  const [context, setContext] = useState<MarketContext | null>(initial?.context ?? null);
-  const [sentiment, setSentiment] = useState<SentimentData | null>(initial?.sentiment ?? null);
+  const [context, setContext] = useState<MarketContext | null>(null);
+  const [sentiment, setSentiment] = useState<SentimentData | null>(null);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
     if (!enabled) return;
@@ -34,18 +36,18 @@ export function useMarketContext(enabled = true, initial: MarketContextPayload |
         setContext(null);
         setSentiment(null);
       } finally {
+        if (!cancelled) setLoading(false);
         if (!cancelled) timer = setTimeout(load, 30_000);
       }
     }
 
-    if (!initial) void load();
-    else timer = setTimeout(load, 30_000);
+    void load();
     return () => {
       cancelled = true;
       controller?.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [enabled, initial]);
+  }, [enabled]);
 
-  return { context, sentiment };
+  return { context, sentiment, loading };
 }

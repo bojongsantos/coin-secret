@@ -61,7 +61,7 @@ export function Panel({
           </button>
         )}
       </div>
-      <div className="mt-7">{children}</div>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }

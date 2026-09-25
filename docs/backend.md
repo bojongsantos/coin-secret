@@ -6,7 +6,7 @@ Role dan paket tidak dicampur:
 
 - Role `USER` memakai aplikasi biasa.
 - Role `ADMIN` dapat membuka backoffice.
-- Plan `FREE` melihat tiga setup per sisi pada tabel sinyal; sisanya buram.
+- Plan `FREE` melihat pratinjau tiga setup per sisi pada Dashboard; halaman Signals penuh terkunci.
 - Plan `PREMIUM` melihat seluruh setup beserta fitur premium lainnya.
 
 Hak akses fitur diputuskan dalam tiga tingkat oleh `resolveFeatureAccess`. Grant per pengguna menang mutlak, termasuk ketika bernilai menolak, karena penolakan eksplisit adalah cara memutus satu akun tanpa menyentuh akun lain. Berikutnya gate global yang membuka atau menutup fitur bagi seluruh paket tanpa rilis. Bila keduanya tidak tercatat, bawaan statis paket yang berlaku.
@@ -21,7 +21,7 @@ Seluruh endpoint mutasi memeriksa session pada server. Resource per pengguna sel
 
 Better Auth menyimpan user, credential account, session, verification token, dan rate limit di PostgreSQL. Cookie session memakai `HttpOnly`, `SameSite=Lax`, dan `Secure` pada production. Password minimal 10 karakter dan session berlaku tujuh hari.
 
-Aktifkan `REQUIRE_EMAIL_VERIFICATION=true` setelah email terkonfigurasi. Reset password mencabut session lain.
+Pendaftaran mewajibkan verifikasi email sebelum akun dapat masuk atau mengakses data aplikasi, termasuk untuk sesi lama yang belum terverifikasi. Reset password mencabut session lain. `REQUIRE_EMAIL_VERIFICATION` pada deployment lama tidak lagi mengendalikan aturan ini; verifikasi wajib dikonfigurasi langsung di Better Auth.
 
 Origin yang boleh menggerakkan endpoint auth berasal dari `BETTER_AUTH_URL` ditambah `TRUSTED_ORIGINS` yang dipisah koma. Ini kendali CSRF, bukan daftar kemudahan: origin yang tercantum dapat mengirim permintaan sign-in dan ganti password dengan membawa cookie pengguna, sehingga daftarnya hanya disusun dari konfigurasi dan nilai yang bukan origin http(s) absolut dibuang, bukan diteruskan.
 
@@ -31,9 +31,9 @@ Di luar production, alias loopback beserta alamat LAN mesin itu sendiri ikut dip
 
 ## Email transaksional
 
-Pengiriman memakai Brevo melalui `BREVO_API_KEY` dan `EMAIL_FROM`, dengan `EMAIL_FROM_NAME` bersifat opsional. Brevo dipilih karena memverifikasi satu alamat pengirim lewat tautan di inbox, sehingga deployment tanpa domain sendiri tetap dapat mengirim. Penyedia yang mewajibkan record DNS tidak dapat dipakai selama aplikasi masih berjalan di subdomain milik platform hosting.
+Pengiriman memakai Brevo melalui `BREVO_API_KEY` dan `EMAIL_FROM`. Pengirim produksi adalah `CoinSecret <noreply@coinsecret.io>` pada domain yang terautentikasi dengan record verifikasi, DKIM, dan DMARC. Nama pengirim ditetapkan di `email-service.ts` agar email verifikasi serta reset konsisten. Jangan mengembalikan pengirim ke alamat Gmail tanpa autentikasi domain karena Brevo dapat mengganti domain pengirim menjadi `brevosend.com`.
 
-Di luar production, kunci yang kosong mencetak log alih-alih mengirim, agar alur daftar dan reset password tetap dapat dijalankan secara lokal tanpa akun email apa pun. Pada production keadaan tersebut melempar galat, sebab tautan reset yang diam-diam tidak pernah terkirim tampak persis seperti reset yang berhasil bagi orang yang menunggunya.
+Di luar production, kunci yang kosong mencetak log alih-alih mengirim, agar alur daftar dan reset password dapat diperiksa secara lokal tanpa akun email. Pada production keadaan tersebut melempar galat, sebab tautan reset yang diam-diam tidak pernah terkirim tampak persis seperti reset yang berhasil bagi orang yang menunggunya.
 
 Kegagalan kiriman melaporkan `code` dan `message` dari Brevo, bukan sekadar status HTTP. Pengirim yang belum diverifikasi adalah kegagalan pertama yang paling mungkin ditemui operator, dan hanya body respons yang menyebutkannya.
 

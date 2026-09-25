@@ -78,6 +78,18 @@ test("top setups are ranked by confidence and given stable ranks", () => {
   ]);
 });
 
+test("top setup strip shows each coin only once", () => {
+  const first = hit("AAAUSDT", 90, "fresh");
+  const repeated = { ...hit("AAAUSDT", 80, "tested"), timeframe: "1h" as const };
+  const second = hit("BBBUSDT", 70, "fresh");
+  const result = {
+    demand: [first, repeated, second],
+    supply: [],
+  } as unknown as SdScanResult;
+
+  assert.deepEqual(rankTopSetups(result, 20).map((item) => item.hit.symbol), ["AAAUSDT", "BBBUSDT"]);
+});
+
 test("signal category follows Buy/Sell direction even when zone metadata is inconsistent", () => {
   const sell = { ...hit("BTCUSDT", 90, "fresh"), direction: "short" as const, zoneType: "demand" as const };
   const buy = { ...hit("ETHUSDT", 90, "fresh"), direction: "long" as const, zoneType: "supply" as const };

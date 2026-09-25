@@ -16,7 +16,7 @@ import { AppShell } from "@/presentation/layout/app-shell";
 import { Reveal } from "@/presentation/ui/reveal";
 
 export function DashboardClient() {
-  const { top, loading: topLoading } = useTopSetups(5);
+  const { top, loading: topLoading } = useTopSetups(20);
   const { result, loading: scanLoading, error: scanError, failedCount, refresh } = useSdScan();
   const { context, sentiment } = useMarketContext(true);
 

@@ -41,7 +41,7 @@ export async function sendTransactionalEmail(message: EmailMessage): Promise<voi
       "api-key": apiKey,
       "content-type": "application/json",
     },
-    body: JSON.stringify(brevoPayload(message, { email: from, name: process.env.EMAIL_FROM_NAME })),
+    body: JSON.stringify(brevoPayload(message, { email: from, name: "CoinSecret" })),
   });
 
   if (!response.ok) {

@@ -21,6 +21,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   // Coin Secret keeps a concise discovery stub and the full rules under docs/.
   agentRules: false,
   turbopack: {

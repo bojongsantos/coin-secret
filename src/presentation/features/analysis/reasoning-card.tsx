@@ -5,16 +5,7 @@ import type { ReasoningSection } from "@/core/domain/models";
 import { useT } from "@/presentation/hooks/use-translate";
 
 function renderPoint(text: string) {
-  const parts = text.split(/\*\*(.+?)\*\*/g);
-  return parts.map((part, i) =>
-    i % 2 === 1 ? (
-      <strong key={i} className="font-semibold text-foreground">
-        {part}
-      </strong>
-    ) : (
-      part
-    ),
-  );
+  return text.replace(/\*\*(.+?)\*\*/g, "$1");
 }
 
 function SectionCard({ section, prominent = false }: { section: ReasoningSection; prominent?: boolean }) {

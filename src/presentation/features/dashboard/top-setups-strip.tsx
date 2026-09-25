@@ -41,16 +41,22 @@ export function TopSetupsStrip({
       ) : setups.length === 0 ? (
         <p className="mt-5 py-6 text-center text-[12px] text-muted-2">{t("dashboard.noSetups")}</p>
       ) : (
-        <div className="scrollbar-thin -mx-1 mt-6 flex gap-3 overflow-x-auto px-1 pb-2">
-          {setups.map((entry) => {
+        <div className="mt-5 overflow-hidden" aria-label={t("dashboard.topSetups")}>
+          <div
+            className="cs-top-setups-track flex w-max gap-3 pr-3"
+            style={{ animationDuration: `${Math.max(28, setups.length * 4)}s` }}
+          >
+          {[...setups, ...setups].map((entry, index) => {
             const hit = entry.hit;
             const up = hit.direction === "long";
             const active = hit.symbol === activeSymbol;
             return (
               <button
-                key={`${hit.symbol}-${hit.timeframe}`}
+                key={`${hit.symbol}-${hit.timeframe}-${index}`}
                 type="button"
                 onClick={() => onSelect(hit.symbol, hit.timeframe)}
+                aria-hidden={index >= setups.length}
+                tabIndex={index >= setups.length ? -1 : 0}
                 className={`group flex w-[208px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 focus-visible:-translate-y-0.5 ${
                   active
                     ? "border-accent-blue/70 bg-accent-blue/10 shadow-[0_8px_24px_rgb(77_117_255_/_12%)]"
@@ -81,6 +87,7 @@ export function TopSetupsStrip({
               </button>
             );
           })}
+          </div>
         </div>
       )}
     </section>

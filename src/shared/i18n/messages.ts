@@ -331,9 +331,22 @@ export const MESSAGES = {
     en: "Carry on to the Coin Secret dashboard.",
   },
   "auth.signUpBlurb": {
-    id: "Paket Free aktif setelah registrasi.",
-    en: "The Free plan is active as soon as you register.",
+    id: "Verifikasi email terlebih dahulu untuk mengaktifkan akun Free.",
+    en: "Verify your email first to activate your Free account.",
   },
+  "auth.verifyEmailNotice": {
+    id: "Jika alamat ini dapat didaftarkan, tautan verifikasi telah dikirim. Periksa kotak masuk dan spam sebelum login.",
+    en: "If this address can be registered, a verification link has been sent. Check your inbox and spam before signing in.",
+  },
+  "auth.verifyTitle": { id: "Verifikasi email", en: "Verify your email" },
+  "auth.verifyCodeHelp": {
+    id: "Jika tautan email tidak terbuka, tempel kode verifikasi dari email di sini.",
+    en: "If the email link does not open, paste the verification code from the email here.",
+  },
+  "auth.verifyCodePlaceholder": { id: "Kode verifikasi dari email", en: "Verification code from email" },
+  "auth.verifyCodeError": { id: "Kode verifikasi tidak valid atau kedaluwarsa.", en: "The verification code is invalid or expired." },
+  "auth.verifySuccess": { id: "Email berhasil diverifikasi.", en: "Your email has been verified." },
+  "auth.verifySubmit": { id: "Verifikasi email", en: "Verify email" },
   "auth.name": { id: "Nama", en: "Name" },
   "auth.email": { id: "Email", en: "Email" },
   "auth.password": { id: "Password", en: "Password" },
@@ -467,6 +480,7 @@ export const MESSAGES = {
     en: "If an account exists, a reset link has been sent.",
   },
   "recovery.badToken": { id: "Token reset tidak valid.", en: "That reset token is not valid." },
+  "recovery.codePlaceholder": { id: "Kode reset dari email", en: "Reset code from email" },
   "recovery.sendLink": { id: "Kirim tautan reset", en: "Send the reset link" },
   "recovery.backToLogin": { id: "Kembali ke login", en: "Back to sign in" },
   "recovery.redirecting": {

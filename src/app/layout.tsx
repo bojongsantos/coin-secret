@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const TITLE = "Coin Secret — Crypto Technical Analysis";
+const TITLE = "CoinSecret";
 const DESCRIPTION =
   "Rule-based crypto chart analysis, supply-demand detection, and market scanning.";
 

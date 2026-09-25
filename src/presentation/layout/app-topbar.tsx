@@ -18,7 +18,6 @@ import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useT } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { LanguageModal } from "@/presentation/ui/language-modal";
-import { ThemeToggle } from "@/presentation/ui/theme-toggle";
 
 /**
  * The bar above every page: search, language, and who is signed in.
@@ -260,10 +259,6 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                     <Settings className="size-4" />
                     {t("account.settings")}
                   </Link>
-                  <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
-                    <span className="text-[12.5px] font-semibold text-muted">{t("theme.label")}</span>
-                    <ThemeToggle className="size-8 rounded-lg" />
-                  </div>
                   {user.role === "ADMIN" && (
                     <Link
                       href="/admin"

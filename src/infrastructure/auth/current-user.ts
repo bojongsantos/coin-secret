@@ -15,7 +15,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUserDto | null> => 
     where: { id: session.user.id },
     select: { id: true, name: true, email: true, emailVerified: true, role: true, plan: true, subscription: { select: { currentPeriodEnd: true } } },
   });
-  if (!record) return null;
+  if (!record || !record.emailVerified) return null;
   const expired = isSubscriptionExpired(
     record.plan as SubscriptionPlan,
     record.subscription?.currentPeriodEnd,

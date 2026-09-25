@@ -1,6 +1,7 @@
 "use client";
 
-import { Scale, TrendingDown, TrendingUp } from "lucide-react";
+import Image from "next/image";
+import { Scale } from "lucide-react";
 import type { PatternSummary, TradeLevel } from "@/core/domain/models";
 import { formatPercent, formatPrice } from "@/shared/lib/format";
 import { Badge } from "@/presentation/ui/badge";
@@ -24,7 +25,6 @@ function levelLabel(t: Translate, label: string): string {
 export function PatternCard({ pattern, levels, riskReward, precision }: PatternCardProps) {
   const { t } = useT();
   const bullish = pattern.trend === "bullish";
-  const TrendIcon = bullish ? TrendingUp : TrendingDown;
   const finished =
     pattern.status === "Invalidated (SL hit)" || pattern.status === "Target 2 reached";
 
@@ -61,7 +61,7 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
         </span>
         {pattern.trend !== "neutral" && (
           <Badge tone={bullish ? "positive" : "negative"}>
-            <TrendIcon className="size-3" />
+            <Image src={`/icons/status/${bullish ? "bullish" : "bearish"}.png`} alt="" width={14} height={14} className="size-3.5 object-contain" unoptimized />
             {trendKey ? t(trendKey) : pattern.trend}
           </Badge>
         )}

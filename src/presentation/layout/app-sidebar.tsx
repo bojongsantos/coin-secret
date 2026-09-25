@@ -61,7 +61,7 @@ export function AppSidebar() {
       style={{ width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH }}
     >
       <div className="cs-panel cs-sidebar-panel flex h-full flex-col overflow-hidden">
-        <div className={`flex h-28 shrink-0 items-start pt-6 ${collapsed ? "justify-center px-2" : "px-5"}`}>
+        <div className={`flex h-24 shrink-0 items-center ${collapsed ? "justify-center px-2" : "px-5"}`}>
           <Link href="/dashboard" aria-label={t("nav.dashboardHome", { brand: BRAND_NAME })}>
             {collapsed ? <BrandMark size={26} /> : <BrandLockup height={26} />}
           </Link>

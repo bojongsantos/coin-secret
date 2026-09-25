@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     // shares the scan cache. A caller-supplied list is still capped by plan,
     // which is where the fan-out guard actually matters.
     const symbols = requested ? requested.slice(0, fullAccess ? 200 : 20) : DEFAULT_WATCHLIST;
-    const limit = typeof body.limit === "number" ? Math.min(10, Math.max(1, Math.trunc(body.limit))) : 5;
+    const limit = typeof body.limit === "number" ? Math.min(20, Math.max(1, Math.trunc(body.limit))) : 5;
 
     // The store is what keeps a published setup on screen until price finishes
     // it. Without it a refresh would pick the best zone visible right now and

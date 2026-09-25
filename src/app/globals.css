@@ -158,6 +158,7 @@ body {
  * sideways for anyone who had collapsed the rail.
  */
 @media (min-width: 1024px) {
+  .cs-app { zoom: 0.8; }
   .app-main {
     padding-left: 309px;
     /* The rail animates its own width; without this the column it makes room
@@ -292,6 +293,19 @@ body {
   animation: cs-drift 14s ease-in-out infinite alternate;
 }
 
+@keyframes cs-top-setups-slide {
+  to { transform: translateX(-50%); }
+}
+
+.cs-top-setups-track {
+  animation: cs-top-setups-slide linear infinite;
+}
+
+.cs-top-setups-track:hover,
+.cs-top-setups-track:focus-within {
+  animation-play-state: paused;
+}
+
 /**
  * The two halves of a scroll reveal, driven by `<Reveal>`.
  *
@@ -363,4 +377,5 @@ body {
   .animate-drift {
     animation: none !important;
   }
+  .cs-top-setups-track { animation: none !important; }
 }

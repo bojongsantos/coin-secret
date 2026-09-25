@@ -355,7 +355,15 @@ export function rankTopSetups(result: SdScanResult, limit = 5): TopSetup[] {
     return b.volume24h - a.volume24h;
   });
 
-  return ranked.slice(0, limit).map((hit, index) => ({ hit, rank: index + 1 }));
+  const symbols = new Set<string>();
+  return ranked
+    .filter((hit) => {
+      if (symbols.has(hit.symbol)) return false;
+      symbols.add(hit.symbol);
+      return true;
+    })
+    .slice(0, limit)
+    .map((hit, index) => ({ hit, rank: index + 1 }));
 }
 
 /** A zone's identity: the same four fields the stored signature is built from. */

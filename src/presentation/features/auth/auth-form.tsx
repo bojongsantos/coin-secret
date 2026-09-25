@@ -18,17 +18,23 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
     const result = mode === "register"
       ? await authClient.signUp.email({ name: name.trim(), email: email.trim(), password })
       : await authClient.signIn.email({ email: email.trim(), password });
     setLoading(false);
     if (result.error) {
       setError(result.error.message ?? t("auth.failed"));
+      return;
+    }
+    if (mode === "register") {
+      setNotice(t("auth.verifyEmailNotice"));
       return;
     }
     notifyAuthStateChanged();
@@ -50,6 +56,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           <label className="block text-xs font-semibold">{t("auth.password")}<input required type="password" minLength={10} maxLength={128} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:border-accent/60 focus:outline-none" /></label>
           {mode === "login" && <Link href="/forgot-password" className="block text-right text-xs font-semibold text-accent-2">{t("auth.forgotPassword")}</Link>}
           {error && <p role="alert" className="rounded-lg border border-negative/30 bg-negative/10 p-3 text-xs text-negative">{error}</p>}
+          {notice && <p role="status" className="rounded-lg border border-positive/30 bg-positive/10 p-3 text-xs text-positive">{notice}</p>}
           <button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-accent to-accent-blue py-2.5 text-sm font-bold text-white disabled:opacity-60">{loading && <Loader2 className="size-4 animate-spin" />}{t(mode === "login" ? "account.signIn" : "account.signUp")}</button>
         </form>
         <p className="mt-5 text-center text-xs text-muted">{t(mode === "login" ? "auth.noAccount" : "auth.haveAccount")} <Link className="font-semibold text-accent-2 hover:underline" href={mode === "login" ? "/register" : "/login"}>{t(mode === "login" ? "account.signUp" : "account.signIn")}</Link></p>

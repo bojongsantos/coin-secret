@@ -11,7 +11,7 @@ const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
 const development = process.env.NODE_ENV !== "production";
 
 export const auth = betterAuth({
-  appName: "Coin Secret",
+  appName: "CoinSecret",
   baseURL: appUrl,
   secret: process.env.BETTER_AUTH_SECRET,
   // A deployment can answer on more than one origin — the current domain and
@@ -28,24 +28,27 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 10,
     maxPasswordLength: 128,
-    requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
+    requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
+      const code = new URL(url).pathname.split("/").at(-1) ?? "";
       await sendTransactionalEmail({
         to: user.email,
-        subject: "Reset password Coin Secret",
-        html: `<p>Gunakan tautan berikut untuk mengatur ulang password:</p><p><a href="${url}">Reset password</a></p>`,
+        subject: "Reset password CoinSecret",
+        html: `<p>Gunakan tautan berikut untuk mengatur ulang password:</p><p><a href="${url}">Reset password</a></p><p>Jika tautan tidak terbuka, kunjungi coinsecret.io/reset-password secara langsung dan masukkan kode berikut:</p><p><code>${code}</code></p>`,
       });
     },
   },
   emailVerification: {
-    sendOnSignUp: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
+    sendOnSignUp: true,
+    sendOnSignIn: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
+      const code = new URL(url).searchParams.get("token") ?? "";
       await sendTransactionalEmail({
         to: user.email,
-        subject: "Verifikasi email Coin Secret",
-        html: `<p>Verifikasi akun Coin Secret melalui tautan berikut:</p><p><a href="${url}">Verifikasi email</a></p>`,
+        subject: "Verifikasi email CoinSecret",
+        html: `<p>Verifikasi akun CoinSecret melalui tautan berikut:</p><p><a href="${url}">Verifikasi email</a></p><p>Jika tautan tidak terbuka, kunjungi coinsecret.io/verify-email secara langsung dan masukkan kode berikut:</p><p><code>${code}</code></p>`,
       });
     },
   },
@@ -75,7 +78,7 @@ export const auth = betterAuth({
     window: 60,
     max: 100,
     customRules: {
-      "/sign-in/email": { window: 60, max: 8 },
+      "/sign-in/email": { window: 60, max: 60 },
       "/sign-up/email": { window: 60 * 10, max: 5 },
       "/request-password-reset": { window: 60 * 10, max: 3 },
     },
@@ -83,6 +86,7 @@ export const auth = betterAuth({
   advanced: {
     useSecureCookies: process.env.NODE_ENV === "production",
     cookiePrefix: "coinsecret",
+    ipAddress: { ipAddressHeaders: ["x-forwarded-for", "x-real-ip"] },
   },
 });
 

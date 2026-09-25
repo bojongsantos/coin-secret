@@ -5,7 +5,6 @@ import {
   DEFAULT_THEME,
   normalizeSidebar,
   normalizeTheme,
-  oppositeTheme,
   preferencesScript,
   SIDEBAR_ATTRIBUTE,
   SIDEBAR_STORAGE_KEY,
@@ -14,8 +13,8 @@ import {
   toggledSidebar,
 } from "@/shared/lib/ui-preferences";
 
-test("a stored preference is honoured and anything else falls back", () => {
-  assert.equal(normalizeTheme("light"), "light");
+test("the only supported theme is dark; sidebar preference still persists", () => {
+  assert.equal(normalizeTheme("light"), "dark");
   assert.equal(normalizeTheme("dark"), "dark");
   // localStorage is writable by anyone with the console open, so a junk value
   // must land on the default rather than reaching the DOM as an attribute.
@@ -31,17 +30,14 @@ test("the defaults keep the product as it was before the toggle existed", () => 
   assert.equal(DEFAULT_SIDEBAR, "expanded");
 });
 
-test("toggling twice returns to where it started", () => {
-  assert.equal(oppositeTheme("dark"), "light");
-  assert.equal(oppositeTheme(oppositeTheme("dark")), "dark");
+test("toggling the sidebar twice returns to where it started", () => {
   assert.equal(toggledSidebar("expanded"), "collapsed");
   assert.equal(toggledSidebar(toggledSidebar("expanded")), "expanded");
 });
 
-test("the pre-paint script sets both attributes from storage", () => {
+test("the pre-paint script forces dark and restores the sidebar", () => {
   const script = preferencesScript();
   for (const needle of [
-    THEME_STORAGE_KEY,
     SIDEBAR_STORAGE_KEY,
     THEME_ATTRIBUTE,
     SIDEBAR_ATTRIBUTE,
@@ -74,7 +70,7 @@ test("the script survives a browser that refuses storage", () => {
   assert.doesNotThrow(() => run(documentStub, throwing));
 });
 
-test("the script applies stored values verbatim and rejects the rest", () => {
+test("the script ignores stored light theme and validates the sidebar", () => {
   const script = preferencesScript();
   const run = (stored: Record<string, string | null>) => {
     const attributes = new Map<string, string>();
@@ -89,7 +85,7 @@ test("the script applies stored values verbatim and rejects the rest", () => {
   };
 
   const light = run({ [THEME_STORAGE_KEY]: "light", [SIDEBAR_STORAGE_KEY]: "collapsed" });
-  assert.equal(light.get(THEME_ATTRIBUTE), "light");
+  assert.equal(light.get(THEME_ATTRIBUTE), DEFAULT_THEME);
   assert.equal(light.get(SIDEBAR_ATTRIBUTE), "collapsed");
 
   const empty = run({});

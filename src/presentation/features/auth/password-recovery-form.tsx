@@ -21,6 +21,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [manualToken, setManualToken] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const { t } = useT();
   const [error, setError] = useState<string | null>(params.get("error"));
@@ -57,7 +58,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
         return;
       }
 
-      const token = params.get("token");
+      const token = params.get("token") ?? manualToken.trim();
       if (!token) {
         setError(t("recovery.badToken"));
         return;
@@ -108,16 +109,30 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
                 className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
               />
             ) : (
-              <input
-                required
-                type="password"
-                minLength={10}
-                maxLength={128}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={t("billing.newPassword")}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
-              />
+              <>
+                {!params.get("token") && (
+                  <input
+                    required
+                    type="text"
+                    autoComplete="one-time-code"
+                    value={manualToken}
+                    onChange={(e) => setManualToken(e.target.value)}
+                    placeholder={t("recovery.codePlaceholder")}
+                    aria-label={t("recovery.codePlaceholder")}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                  />
+                )}
+                <input
+                  required
+                  type="password"
+                  minLength={10}
+                  maxLength={128}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t("billing.newPassword")}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                />
+              </>
             )}
             {error && <p className="text-xs text-negative">{error}</p>}
             {message && <p className="text-xs text-positive">{message}</p>}

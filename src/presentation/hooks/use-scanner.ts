@@ -37,7 +37,10 @@ async function postScan<T>(path: string, body: Record<string, unknown>): Promise
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const payload = (await response.json()) as T & { error?: string };
+  const payload = response.headers.get("content-type")?.includes("application/json")
+    ? (await response.json()) as T & { error?: string }
+    : null;
+  if (!payload) throw new Error(`Signals sementara tidak tersedia (${response.status}). Coba refresh.`);
   if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
   return payload;
 }

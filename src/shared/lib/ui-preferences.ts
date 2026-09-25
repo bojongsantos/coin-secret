@@ -60,15 +60,12 @@ export function isSidebarState(value: unknown): value is SidebarState {
 
 /** A stored value, or the default when it is absent or has been tampered with. */
 export function normalizeTheme(value: unknown): Theme {
-  return isTheme(value) ? value : DEFAULT_THEME;
+  void value;
+  return DEFAULT_THEME;
 }
 
 export function normalizeSidebar(value: unknown): SidebarState {
   return isSidebarState(value) ? value : DEFAULT_SIDEBAR;
-}
-
-export function oppositeTheme(theme: Theme): Theme {
-  return theme === "dark" ? "light" : "dark";
 }
 
 export function toggledSidebar(state: SidebarState): SidebarState {
@@ -84,9 +81,7 @@ export function toggledSidebar(state: SidebarState): SidebarState {
  * outcome than a page that opens in the default theme.
  */
 export function preferencesScript(): string {
-  return `(function(){try{var d=document.documentElement;var t=localStorage.getItem(${JSON.stringify(
-    THEME_STORAGE_KEY,
-  )});d.setAttribute(${JSON.stringify(THEME_ATTRIBUTE)},t==="light"||t==="dark"?t:${JSON.stringify(
+  return `(function(){try{var d=document.documentElement;d.setAttribute(${JSON.stringify(THEME_ATTRIBUTE)},${JSON.stringify(
     DEFAULT_THEME,
   )});var s=localStorage.getItem(${JSON.stringify(
     SIDEBAR_STORAGE_KEY,

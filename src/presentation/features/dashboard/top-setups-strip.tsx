@@ -41,7 +41,7 @@ export function TopSetupsStrip({
       ) : setups.length === 0 ? (
         <p className="mt-5 py-6 text-center text-[12px] text-muted-2">{t("dashboard.noSetups")}</p>
       ) : (
-        <div className="cs-top-setups-viewport mt-3 overflow-hidden py-2" aria-label={t("dashboard.topSetups")}>
+        <div className="cs-top-setups-viewport mt-3 max-w-[1088px] overflow-hidden py-2" aria-label={t("dashboard.topSetups")}>
           <div
             className="cs-top-setups-track flex w-max gap-3 pr-3"
             style={{ animationDuration: `${Math.max(28, setups.length * 4)}s` }}

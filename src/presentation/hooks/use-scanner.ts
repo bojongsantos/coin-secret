@@ -25,7 +25,7 @@ export function useDashboardSignals() {
     inFlight.current = true;
     setLoading(true);
     try {
-      setPayload(await postScan<SignalsApiPayload>("/api/signals", { force, limit: 20 }));
+      setPayload(await postScan<SignalsApiPayload>("/api/signals", { force, limit: 5 }));
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));

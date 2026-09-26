@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   CandlestickChart,
-  Check,
   Loader2,
   Lock,
   RefreshCw,
@@ -14,47 +12,14 @@ import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 import { formatCompact } from "@/shared/lib/format";
+import { StatusIcon } from "@/presentation/ui/status-icon";
 
-/**
- * The tone each status is shown in. Terminal outcomes are not neutral news:
- * a stop taken reads red, a target reached reads green.
- */
-/**
- * The mark each status carries.
- *
- * The chip itself stays dark and only the mark is coloured. A column of
- * saturated pills competed with the confidence figure beside it, which is the
- * number the row exists to show.
- */
-const STATUS_MARK: Record<string, string> = {
-  "Limit Order": "limit-order",
-  Filled: "filled",
-  Running: "running",
-  "Target 1 reached": "target-1-reached",
-  "Target 2 reached": "target-1-reached",
-  "Invalidated (SL hit)": "bearish",
-  Missed: "bearish",
-  Bullish: "bullish",
-  Bearish: "bearish",
-};
-
+/** The chip stays dark so its status icon does not compete with confidence. */
 function StatusPill({ status, t, prominent = false }: { status: string; t: Translate; prominent?: boolean }) {
   const key = statusMessageKey(status);
-  const mark = STATUS_MARK[status];
   return (
     <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface font-medium text-foreground ${prominent ? "px-2.5 py-1.5 text-[10px]" : "px-2 py-1.5 text-[9px]"}`}>
-      {mark ? (
-        <Image
-          src={`/icons/status/${mark}.png`}
-          alt=""
-          width={prominent ? 20 : 17}
-          height={prominent ? 19 : 16}
-          unoptimized
-          className={`${prominent ? "h-[19px] w-5" : "h-4 w-[17px]"} shrink-0 object-contain`}
-        />
-      ) : (
-        <Check className="size-3 shrink-0 text-muted-2" aria-hidden />
-      )}
+      <StatusIcon status={status} size={prominent ? 20 : 17} />
       {key ? t(key) : status}
     </span>
   );

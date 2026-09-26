@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { Scale } from "lucide-react";
 import type { PatternSummary, TradeLevel } from "@/core/domain/models";
 import { formatPercent, formatPrice } from "@/shared/lib/format";
@@ -8,6 +7,7 @@ import { Badge } from "@/presentation/ui/badge";
 import { LockedOverlay } from "@/presentation/ui/locked-overlay";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { domainMessageKey, statusMessageKey } from "@/shared/i18n/messages";
+import { StatusIcon } from "@/presentation/ui/status-icon";
 
 interface PatternCardProps {
   pattern: PatternSummary;
@@ -25,8 +25,7 @@ function levelLabel(t: Translate, label: string): string {
 export function PatternCard({ pattern, levels, riskReward, precision }: PatternCardProps) {
   const { t } = useT();
   const bullish = pattern.trend === "bullish";
-  const finished =
-    pattern.status === "Invalidated (SL hit)" || pattern.status === "Target 2 reached";
+  const negativeStatus = pattern.status === "Invalidated (SL hit)" || pattern.status === "Missed";
 
   // The engine names patterns, trends and risk in stable English so the rest
   // of the system can compare them. They are turned into the reader's language
@@ -42,15 +41,12 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
         <h3 className="text-[14px] font-semibold">{t("plan.tradingPlan")}</h3>
         <span
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-semibold ${
-            finished
+            negativeStatus
               ? "border-negative/30 bg-negative/10 text-negative"
               : "border-positive/30 bg-positive/10 text-positive"
           }`}
         >
-          <span
-            className={`size-1.5 rounded-full ${finished ? "bg-negative" : "bg-positive"}`}
-            aria-hidden
-          />
+          <StatusIcon status={pattern.status} size={18} />
           {statusKey ? t(statusKey) : pattern.status}
         </span>
       </div>
@@ -61,7 +57,7 @@ export function PatternCard({ pattern, levels, riskReward, precision }: PatternC
         </span>
         {pattern.trend !== "neutral" && (
           <Badge tone={bullish ? "positive" : "negative"}>
-            <Image src={`/icons/status/${bullish ? "bullish" : "bearish"}.png`} alt="" width={14} height={14} className="size-3.5 object-contain" unoptimized />
+            <StatusIcon status={bullish ? "Bullish" : "Bearish"} size={16} />
             {trendKey ? t(trendKey) : pattern.trend}
           </Badge>
         )}

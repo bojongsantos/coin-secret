@@ -46,7 +46,7 @@ export function TopSetupsStrip({
             className="cs-top-setups-track flex w-max gap-3 pr-3"
             style={{ animationDuration: `${Math.max(28, setups.length * 4)}s` }}
           >
-          {[...setups, ...setups].map((entry, index) => {
+          {Array.from({ length: 5 }, () => setups).flat().map((entry, index) => {
             const hit = entry.hit;
             const up = hit.direction === "long";
             const active = hit.symbol === activeSymbol;

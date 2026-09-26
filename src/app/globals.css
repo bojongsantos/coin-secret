@@ -294,7 +294,7 @@ body {
 }
 
 @keyframes cs-top-setups-slide {
-  to { transform: translateX(-50%); }
+  to { transform: translateX(-20%); }
 }
 
 .cs-top-setups-track {

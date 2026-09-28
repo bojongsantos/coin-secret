@@ -16,12 +16,12 @@ export interface ProviderCopy {
 const COPY: Record<string, ProviderCopy> = {
   midtrans: {
     name: "Midtrans",
-    assurance: "Pembayaran diproses Midtrans. Coin Secret tidak menyimpan nomor kartu Anda.",
+    assurance: "Pembayaran diproses Midtrans. CoinSecret tidak menyimpan nomor kartu Anda.",
   },
   nowpayments: {
     name: "NOWPayments",
     assurance:
-      "Pembayaran kripto diproses NOWPayments. Coin Secret tidak pernah memegang dana maupun kunci dompet Anda.",
+      "Pembayaran kripto diproses NOWPayments. CoinSecret tidak pernah memegang dana maupun kunci dompet Anda.",
   },
 };
 

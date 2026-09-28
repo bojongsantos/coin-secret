@@ -27,7 +27,7 @@ export async function sendTransactionalEmail(message: EmailMessage): Promise<voi
     if (process.env.NODE_ENV === "production") {
       throw new Error("BREVO_API_KEY dan EMAIL_FROM wajib untuk email production.");
     }
-    console.info(`[Coin Secret email] ${message.subject} -> ${message.to}`);
+    console.info(`[CoinSecret email] ${message.subject} -> ${message.to}`);
     return;
   }
 

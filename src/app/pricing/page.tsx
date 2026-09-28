@@ -8,8 +8,8 @@ import { AppShell } from "@/presentation/layout/app-shell";
 import { billingQuote } from "@/core/domain/billing/plans";
 
 export const metadata: Metadata = {
-  title: "Pricing · Coin Secret",
-  description: "Perbandingan paket Free dan Pro Coin Secret.",
+  title: "Pricing · CoinSecret",
+  description: "Perbandingan paket Free dan Pro CoinSecret.",
 };
 
 export default async function PricingPage() {

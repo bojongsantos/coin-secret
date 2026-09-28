@@ -47,7 +47,7 @@ export async function POST(request: Request) {
         orderId,
         amount: quote.total,
         currency: quote.currency,
-        description: `Coin Secret Premium — ${plan.label}`,
+        description: `CoinSecret Premium — ${plan.label}`,
         customer: { name: user.name, email: user.email },
       });
       await prisma.payment.update({

@@ -19,8 +19,8 @@ function storedLocale(): "id" | "en" {
 export default function GlobalError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
   const locale = storedLocale();
   const copy = {
-    id: { title: "Coin Secret mengalami gangguan.", body: "Muat ulang aplikasi untuk mencoba pemulihan.", action: "Muat ulang" },
-    en: { title: "Coin Secret has run into trouble.", body: "Reload the app to try to recover.", action: "Reload" },
+    id: { title: "CoinSecret mengalami gangguan.", body: "Muat ulang aplikasi untuk mencoba pemulihan.", action: "Muat ulang" },
+    en: { title: "CoinSecret has run into trouble.", body: "Reload the app to try to recover.", action: "Reload" },
   }[locale];
   return (
     <html lang={locale}>

@@ -71,7 +71,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-border px-6">
-          <h1 className="text-sm font-bold tracking-tight">Coin Secret Backoffice</h1>
+          <h1 className="text-sm font-bold tracking-tight">CoinSecret Backoffice</h1>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-2">
             <span className="size-1.5 rounded-full bg-positive" />
             Live · PostgreSQL

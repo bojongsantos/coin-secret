@@ -4,7 +4,7 @@ import { SignalsClient } from "@/presentation/features/signals/signals-client";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Signals — Coin Secret",
+  title: "Signals — CoinSecret",
   description: "Live supply and demand setups across the whole board.",
 };
 

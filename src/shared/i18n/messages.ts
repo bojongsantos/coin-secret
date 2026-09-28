@@ -286,8 +286,8 @@ export const MESSAGES = {
     en: "When the period ends the account returns to Free. Your payment history and account data are kept.",
   },
   "pricing.noteDisclaimer": {
-    id: "Coin Secret adalah alat analisis teknikal berbasis aturan. Ia tidak memberi nasihat investasi dan tidak menjanjikan hasil.",
-    en: "Coin Secret is a rule-based technical analysis tool. It gives no investment advice and promises no outcome.",
+    id: "CoinSecret adalah alat analisis teknikal berbasis aturan. Ia tidak memberi nasihat investasi dan tidak menjanjikan hasil.",
+    en: "CoinSecret is a rule-based technical analysis tool. It gives no investment advice and promises no outcome.",
   },
 
   // ------------------------------------------------------------ capabilities
@@ -327,8 +327,8 @@ export const MESSAGES = {
   "auth.signInTitle": { id: "Masuk ke akun", en: "Sign in to your account" },
   "auth.signUpTitle": { id: "Buat akun baru", en: "Create an account" },
   "auth.signInBlurb": {
-    id: "Lanjutkan ke dashboard Coin Secret.",
-    en: "Carry on to the Coin Secret dashboard.",
+    id: "Lanjutkan ke dashboard CoinSecret.",
+    en: "Carry on to the CoinSecret dashboard.",
   },
   "auth.signUpBlurb": {
     id: "Verifikasi email terlebih dahulu untuk mengaktifkan akun Free.",
@@ -362,10 +362,10 @@ export const MESSAGES = {
 
   // ----------------------------------------------------------------- billing
   "billing.title": { id: "Akun & Tagihan", en: "Account & Bill" },
-  "billing.proTitle": { id: "Coin Secret Pro", en: "Coin Secret Pro" },
+  "billing.proTitle": { id: "CoinSecret Pro", en: "CoinSecret Pro" },
   "billing.subtitle": {
-    id: "Kelola identitas dan paket Coin Secret Anda.",
-    en: "Manage your identity and Coin Secret packages.",
+    id: "Kelola identitas dan paket CoinSecret Anda.",
+    en: "Manage your identity and CoinSecret packages.",
   },
   "billing.profile": { id: "Profil", en: "Profile" },
   "billing.role": { id: "Role", en: "Role" },
@@ -466,11 +466,11 @@ export const MESSAGES = {
   "error.reference": { id: "Referensi: {digest}", en: "Reference: {digest}" },
   "error.notFound": { id: "Halaman tidak ditemukan.", en: "Page not found." },
   "error.notFoundBody": {
-    id: "Alamat tidak tersedia pada Coin Secret.",
-    en: "There is nothing at this address on Coin Secret.",
+    id: "Alamat tidak tersedia pada CoinSecret.",
+    en: "There is nothing at this address on CoinSecret.",
   },
   "error.backHome": { id: "Kembali ke dashboard", en: "Back to the dashboard" },
-  "loading.app": { id: "Memuat Coin Secret…", en: "Loading Coin Secret…" },
+  "loading.app": { id: "Memuat CoinSecret…", en: "Loading CoinSecret…" },
 
   // ---------------------------------------------------------------- recovery
   "recovery.forgotTitle": { id: "Lupa password", en: "Forgotten password" },
@@ -511,8 +511,8 @@ export const MESSAGES = {
     en: "Global per-plan access rules, read from the database.",
   },
   "admin.healthBlurb": {
-    id: "Status seluruh layanan eksternal Coin Secret.",
-    en: "The state of every external service Coin Secret depends on.",
+    id: "Status seluruh layanan eksternal CoinSecret.",
+    en: "The state of every external service CoinSecret depends on.",
   },
   "admin.recheck": { id: "Cek Ulang", en: "Re-check" },
   "admin.summary": { id: "Ringkasan", en: "Summary" },
@@ -537,14 +537,14 @@ export const MESSAGES = {
   "admin.finished": { id: "Selesai", en: "Finished" },
 
   // ----------------------------------------------------------------- landing
-  "landing.home": { id: "Beranda Coin Secret", en: "Coin Secret home" },
+  "landing.home": { id: "Beranda CoinSecret", en: "CoinSecret home" },
   "landing.launchApp": { id: "Buka Aplikasi", en: "Launch App" },
   "landing.howItWorks": { id: "Cara kerjanya", en: "How it works" },
   "landing.nav.about": { id: "Tentang", en: "About" },
   "landing.nav.technologies": { id: "Teknologi", en: "Technologies" },
   "landing.nav.products": { id: "Produk", en: "Products" },
   "landing.nav.buyPremium": { id: "Beli Premium", en: "Buy Premium" },
-  "landing.eyebrow": { id: "Coin Secret", en: "Coin Secret" },
+  "landing.eyebrow": { id: "CoinSecret", en: "CoinSecret" },
   "landing.heroA": { id: "Berhenti menyisir chart.", en: "Stop scrolling charts." },
   "landing.heroB": { id: "Mulai temukan setup.", en: "Start finding setups." },
   "landing.live": { id: "Live", en: "Live" },

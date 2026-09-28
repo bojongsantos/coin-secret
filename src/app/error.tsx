@@ -12,7 +12,7 @@ export default function AppError({
 }) {
   const { t } = useT();
   useEffect(() => {
-    console.error("Coin Secret route error", error);
+    console.error("CoinSecret route error", error);
   }, [error]);
 
   return (

@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Coin Secret" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "CoinSecret" }],
     type: "website",
   },
   twitter: {

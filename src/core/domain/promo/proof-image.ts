@@ -378,7 +378,7 @@ export function composeProofImage(raw: ProofInput & { logoHref?: string }): stri
   // ---------------------------------------------------------------- header
   const logo = input.logoHref
     ? `<image href="${escapeXml(input.logoHref)}" x="${PAD}" y="${PAD - 6}" width="${Math.round((32 * 844) / 105)}" height="32"/>`
-    : text("Coin Secret", PAD, PAD + 20, { size: 22, weight: 700 });
+    : text("CoinSecret", PAD, PAD + 20, { size: 22, weight: 700 });
 
   const header =
     logo +

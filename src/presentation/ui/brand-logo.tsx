@@ -5,14 +5,14 @@ import { useTheme } from "@/presentation/hooks/use-ui-preference";
 import type { Theme } from "@/shared/lib/ui-preferences";
 
 /**
- * The Coin Secret wordmark and mark.
+ * The CoinSecret wordmark and mark.
  *
  * Both are raster art, so they cannot be recoloured with CSS: each ships in
  * two inks instead, and the theme picks. `unoptimized` keeps them out of the
  * image optimizer — they are already trimmed to the ink and a few kilobytes
  * each, so a round trip through it would cost more than it saves.
  */
-export const BRAND_NAME = "Coin Secret";
+export const BRAND_NAME = "CoinSecret";
 
 /**
  * The wordmark ships in two files because its lettering is pixels, not text.

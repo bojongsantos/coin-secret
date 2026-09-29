@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   rejectUserChange,
   subscriptionStatusForPlan,
@@ -67,6 +69,23 @@ test("a free account is never downgraded further", () => {
   const lapsed = new Date("2026-08-01T00:00:00.000Z");
   assert.equal(isSubscriptionExpired("FREE", lapsed, now), false);
   assert.equal(effectivePlan("FREE", lapsed, now), "FREE");
+});
+
+test("reading the current account never writes the subscription back", () => {
+  // The regression this guards: the read path used to downgrade an expired
+  // plan with an unconditional write on the values it had just read, so a
+  // settlement landing in between was overwritten and the buyer lost the
+  // period they had just paid for. Expiry is resolved on read instead.
+  const source = readFileSync(
+    join(process.cwd(), "src", "infrastructure", "auth", "current-user.ts"),
+    "utf8",
+  );
+  assert.equal(
+    /prisma\.(?:user|subscription)\.(?:update|updateMany|upsert|delete)/.test(source),
+    false,
+    "getCurrentUser must not write to the database while reading an account",
+  );
+  assert.equal(source.includes("effectivePlan"), true, "expiry must still be applied on read");
 });
 
 test("the effective plan is what the rest of the app should act on", () => {

@@ -101,3 +101,29 @@ export function shouldRevokeAccess(
 ): boolean {
   return incomingStatus === "REFUNDED" && storedStatus === "SETTLED";
 }
+
+/**
+ * The status a callback is allowed to store, or `null` when it must be ignored.
+ *
+ * Providers retry, deliver out of order, and resend after a refund. Without a
+ * rule the newest message always wins, which lets a replayed settlement put a
+ * refunded order back to SETTLED and reopen access that was paid back. The
+ * status is therefore treated as monotonic per payment:
+ *
+ * - `REFUNDED` is terminal: nothing reopens an order the customer was paid for.
+ * - `SETTLED` is only written once. A later `pending`, `expired`, or `canceled`
+ *   is a stale replay and must not downgrade it — `refunded` is the only way
+ *   back out, which is exactly what `shouldRevokeAccess` then acts on.
+ * - A first `SETTLED` is still accepted from any other state: a buyer who pays
+ *   just after the invoice lapsed has still bought the access, and a refund can
+ *   legitimately arrive before the settlement callback.
+ */
+export function paymentTransition(
+  storedStatus: PaymentStatus,
+  incomingStatus: PaymentStatus,
+): PaymentStatus | null {
+  if (storedStatus === incomingStatus) return null;
+  if (storedStatus === "REFUNDED") return null;
+  if (storedStatus === "SETTLED") return incomingStatus === "REFUNDED" ? "REFUNDED" : null;
+  return incomingStatus;
+}

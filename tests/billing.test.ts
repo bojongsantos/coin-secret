@@ -9,7 +9,9 @@ import {
   shouldGrantAccess,
   shouldRevokeAccess,
   statusForOutcome,
+  paymentTransition,
 } from "@/core/domain/billing/payment-rules";
+import { isSerializationConflict, withSerializationRetry } from "@/infrastructure/billing/transaction-retry";
 import { billingPlan } from "@/core/domain/billing/plans";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -110,6 +112,60 @@ test("a refund revokes access only for a payment that was actually paid", () => 
   // Other outcomes must not revoke a paid period.
   assert.equal(shouldRevokeAccess("EXPIRED", "SETTLED"), false);
   assert.equal(shouldRevokeAccess("FAILED", "SETTLED"), false);
+});
+
+test("payment transition rejects a paid retry after refund", () => {
+  assert.equal(paymentTransition("REFUNDED", "SETTLED"), null);
+  assert.equal(paymentTransition("REFUNDED", "REFUNDED"), null);
+  assert.equal(paymentTransition("SETTLED", "SETTLED"), null);
+  assert.equal(paymentTransition("SETTLED", "PENDING"), null);
+  assert.equal(paymentTransition("SETTLED", "REFUNDED"), "REFUNDED");
+});
+
+test("payment transition accepts a late refund before settlement", () => {
+  assert.equal(paymentTransition("PENDING", "REFUNDED"), "REFUNDED");
+  assert.equal(paymentTransition("PENDING", "SETTLED"), "SETTLED");
+  assert.equal(paymentTransition("FAILED", "SETTLED"), "SETTLED");
+  // A buyer who pays after the order lapsed still bought access.
+  assert.equal(paymentTransition("EXPIRED", "SETTLED"), "SETTLED");
+  assert.equal(paymentTransition("CANCELED", "SETTLED"), "SETTLED");
+});
+
+test("only Prisma P2034 identifies a serialization conflict", () => {
+  assert.equal(isSerializationConflict(Object.assign(new Error("conflict"), { code: "P2034" })), true);
+  assert.equal(isSerializationConflict(Object.assign(new Error("other"), { code: "P1001" })), false);
+  assert.equal(isSerializationConflict(null), false);
+});
+
+test("P2034 retries the whole work and returns its later result", async () => {
+  const reads: string[] = [];
+  const result = await withSerializationRetry(async () => {
+    reads.push(`read-${reads.length + 1}`);
+    if (reads.length < 3) throw Object.assign(new Error("conflict"), { code: "P2034" });
+    return reads.at(-1);
+  });
+  assert.equal(result, "read-3");
+  assert.deepEqual(reads, ["read-1", "read-2", "read-3"]);
+});
+
+test("exhausted P2034 stops after three attempts and preserves error identity", async () => {
+  const conflict = Object.assign(new Error("conflict"), { code: "P2034" });
+  let attempts = 0;
+  await assert.rejects(withSerializationRetry(async () => {
+    attempts += 1;
+    throw conflict;
+  }), (error: unknown) => error === conflict);
+  assert.equal(attempts, 3);
+});
+
+test("non-P2034 error propagates unchanged without retry", async () => {
+  const failure = Object.assign(new Error("database unavailable"), { code: "P1001" });
+  let attempts = 0;
+  await assert.rejects(withSerializationRetry(async () => {
+    attempts += 1;
+    throw failure;
+  }), (error: unknown) => error === failure);
+  assert.equal(attempts, 1);
 });
 
 test("a longer plan grants the days it charged for", () => {

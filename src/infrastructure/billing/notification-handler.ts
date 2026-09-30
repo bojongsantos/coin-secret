@@ -12,7 +12,7 @@ import {
 import { getBillingGateway } from "@/infrastructure/billing/gateway-factory";
 import { billingPlan, isBillingPeriod } from "@/core/domain/billing/plans";
 import { prisma } from "@/infrastructure/database/prisma";
-import { apiError, HttpError } from "@/shared/server/http";
+import { apiError, HttpError, readBoundedJson } from "@/shared/server/http";
 import {
   isSerializationConflict,
   withSerializationRetry,
@@ -32,7 +32,7 @@ export async function handlePaymentNotification(
   provider: string,
 ): Promise<Response> {
   try {
-    const payload: unknown = await request.json();
+    const payload = (await readBoundedJson(request, 65_536)) as Record<string, unknown>;
     const gateway = getBillingGateway(provider);
     const event = gateway.parseAndVerifyNotification({ payload, headers: request.headers });
 
@@ -42,6 +42,9 @@ export async function handlePaymentNotification(
         // snapshot from before the retry.
         const payment = await tx.payment.findUnique({ where: { orderId: event.orderId } });
         if (!payment) throw new HttpError(404, "Order pembayaran tidak ditemukan.", "ORDER_NOT_FOUND");
+        if (payment.provider !== gateway.id) {
+          throw new HttpError(400, "Penyedia pembayaran tidak sesuai.", "PROVIDER_MISMATCH");
+        }
         if (event.paidCurrency && event.paidCurrency.toUpperCase() !== payment.currency.toUpperCase()) {
           throw new HttpError(400, "Mata uang pembayaran tidak sesuai.", "CURRENCY_MISMATCH");
         }

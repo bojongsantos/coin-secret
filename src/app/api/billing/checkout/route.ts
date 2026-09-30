@@ -2,17 +2,29 @@ import { randomUUID } from "node:crypto";
 import { requireUser } from "@/infrastructure/auth/current-user";
 import { getBillingGateway } from "@/infrastructure/billing/gateway-factory";
 import { prisma } from "@/infrastructure/database/prisma";
-import { apiError, getRequestIp, HttpError } from "@/shared/server/http";
+import { apiError, getRequestIp, HttpError, readBoundedJson, tooManyRequests } from "@/shared/server/http";
+import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 import { writeAuditLog } from "@/infrastructure/audit/audit-log";
 import { billingPlan, billingQuote, isBillingPeriod } from "@/core/domain/billing/plans";
+
+const checkoutLimiter = createFixedWindowLimiter({ limit: 5, windowMs: 60_000 });
 
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
+    const decision = checkoutLimiter.check(user.id);
+    if (!decision.allowed) return tooManyRequests(decision.retryAfterSeconds);
     // Priced from the catalogue, never from the request. A period name is all
     // the browser gets to choose; the amount is ours.
-    const body = (await request.json().catch(() => ({}))) as { period?: unknown };
-    const period = isBillingPeriod(body.period) ? body.period : "monthly";
+    const body = await readBoundedJson(request, 16_384);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new HttpError(400, "Body JSON tidak valid.", "INVALID_JSON");
+    }
+    const requestedPeriod = "period" in body ? body.period : undefined;
+    if (!isBillingPeriod(requestedPeriod)) {
+      throw new HttpError(400, "Periode paket tidak valid.", "INVALID_PERIOD");
+    }
+    const period = requestedPeriod;
     const plan = billingPlan(period);
     const gateway = getBillingGateway();
     const quote = billingQuote(period, gateway.id, Number(process.env.PREMIUM_PRICE_IDR));

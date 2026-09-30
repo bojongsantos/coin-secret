@@ -48,7 +48,9 @@ export function createFixedWindowLimiter(options: FixedWindowOptions): RateLimit
         // Only sweep when the map is under pressure; a per-request scan would
         // make the limiter itself the expensive part.
         if (windows.size >= maxKeys) evictExpired(current);
-        if (windows.size >= maxKeys) windows.clear();
+        if (windows.size >= maxKeys) {
+          return { allowed: false, remaining: 0, retryAfterSeconds: Math.max(1, Math.ceil(options.windowMs / 1_000)) };
+        }
         windows.set(key, { count: 1, resetAt: current + options.windowMs });
         return { allowed: true, remaining: Math.max(0, options.limit - 1), retryAfterSeconds: 0 };
       }

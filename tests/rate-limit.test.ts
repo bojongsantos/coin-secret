@@ -38,6 +38,17 @@ test("the budget refills once the window has passed", () => {
   assert.equal(limiter.check("ip-a").allowed, true);
 });
 
+test("new keys cannot reset existing budgets when capacity is full", () => {
+  let clock = 0;
+  const limiter = createFixedWindowLimiter({ limit: 1, windowMs: 1_000, maxKeys: 2, now: () => clock });
+  assert.equal(limiter.check("a").allowed, true);
+  assert.equal(limiter.check("b").allowed, true);
+  assert.deepEqual(limiter.check("c"), { allowed: false, remaining: 0, retryAfterSeconds: 1 });
+  assert.equal(limiter.check("a").allowed, false);
+  clock = 1_000;
+  assert.equal(limiter.check("c").allowed, true);
+});
+
 test("the key map cannot grow without bound", () => {
   let clock = 0;
   const limiter = createFixedWindowLimiter({

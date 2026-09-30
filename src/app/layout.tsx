@@ -52,6 +52,13 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        {/* Hostinger replaces the app's CSP response header. These directives
+            still apply in browsers when delivered as an early meta policy;
+            frame-ancestors stays covered by X-Frame-Options: DENY. */}
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content="base-uri 'self'; form-action 'self'; object-src 'none'"
+        />
         {/* Runs before the first paint. Restoring the theme afterwards would
             show the default one first, and a page that flashes white on a dark
             theme is the most visible bug a theme toggle can have. */}

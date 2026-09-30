@@ -9,7 +9,8 @@ import { billingQuote } from "@/core/domain/billing/plans";
 
 export const metadata: Metadata = {
   title: "Pricing · CoinSecret",
-  description: "Perbandingan paket Free dan Pro CoinSecret.",
+  description: "Compare CoinSecret Free and Pro plans, access periods, and payment options.",
+  alternates: { canonical: "https://coinsecret.io/pricing" },
 };
 
 export default async function PricingPage() {

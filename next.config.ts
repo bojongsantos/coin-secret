@@ -20,6 +20,14 @@ const securityHeaders = [
   },
 ];
 
+const noindexPaths = [
+  "/dashboard", "/signals", "/scanner", "/analysis", "/patterns",
+  "/account", "/admin", "/admin/:path*", "/login", "/register",
+  "/forgot-password", "/reset-password", "/verify-email",
+  // Legal drafts are linked for review but must not enter search until approved.
+  "/terms", "/privacy", "/refund", "/support",
+];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Coin Secret keeps a concise discovery stub and the full rules under docs/.
@@ -44,7 +52,18 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      ...noindexPaths.map((source) => ({ source, headers: [{ key: "X-Robots-Tag", value: "noindex" }] })),
+    ];
+  },
+  async redirects() {
+    return [{
+      source: "/:path*",
+      has: [{ type: "host", value: "www.coinsecret.io" }],
+      destination: "https://coinsecret.io/:path*",
+      permanent: true,
+    }];
   },
 };
 

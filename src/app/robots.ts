@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/admin/", "/account/"],
+        disallow: ["/api/"],
       },
     ],
     sitemap: "https://coinsecret.io/sitemap.xml",

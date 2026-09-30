@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LandingPage } from "@/presentation/features/landing/landing-page";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
@@ -5,6 +6,10 @@ import { billingQuote } from "@/core/domain/billing/plans";
 import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factory";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "https://coinsecret.io/" },
+};
 
 /**
  * The root, which is two different things depending on who is asking.

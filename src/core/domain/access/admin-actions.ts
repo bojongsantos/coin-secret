@@ -14,8 +14,8 @@ export type UserChangeRejection = "EMPTY_CHANGE" | "SELF_DEMOTION" | null;
  * lock themselves out of the backoffice in one click, and since only an admin
  * can restore the role, nobody would be left able to undo it.
  *
- * Demoting a *different* admin stays allowed, and cannot empty the room: the
- * one performing it always keeps their own role.
+ * The writer also rechecks authority and admin count transactionally to
+ * protect against concurrent demotions.
  */
 export function rejectUserChange(
   actorId: string,

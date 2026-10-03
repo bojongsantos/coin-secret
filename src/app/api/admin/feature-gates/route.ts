@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { requireAdmin } from "@/infrastructure/auth/current-user";
 import { prisma } from "@/infrastructure/database/prisma";
-import { apiError, getRequestIp, readJson } from "@/shared/server/http";
-import { writeAuditLog } from "@/infrastructure/audit/audit-log";
+import { apiError, getRequestIp, tooManyRequests } from "@/shared/server/http";
+import { readAdminMutation } from "@/shared/server/admin-request";
+import { updateAdminGate } from "@/infrastructure/admin/mutations";
+import { adminMutationLimiter } from "@/infrastructure/admin/rate-limit";
 
-const gateSchema = z.object({ feature: z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{2,64}$/), free: z.boolean(), premium: z.boolean() });
+const gateSchema = z.object({ feature: z.enum(["scannerExtended", "signals", "symbolSearch"]), free: z.boolean(), premium: z.boolean() }).strict();
 
 export async function GET() {
   try {
@@ -18,9 +20,10 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const admin = await requireAdmin();
-    const input = await readJson(request, gateSchema);
-    const gate = await prisma.featureGate.upsert({ where: { feature: input.feature }, create: input, update: input });
-    await writeAuditLog({ actorId: admin.id, action: "admin.feature-gate.update", entityType: "FeatureGate", entityId: gate.id, metadata: input, ipAddress: getRequestIp(request) });
+    const decision = adminMutationLimiter.check(admin.id);
+    if (!decision.allowed) return tooManyRequests(decision.retryAfterSeconds);
+    const input = await readAdminMutation(request, gateSchema);
+    const gate = await updateAdminGate(admin.id, input, getRequestIp(request));
     return Response.json({ gate });
   } catch (error) {
     return apiError(error);

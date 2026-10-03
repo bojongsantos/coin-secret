@@ -1,6 +1,8 @@
 import { assessReadiness, type CapabilityReport } from "@/core/domain/ops/readiness";
 import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factory";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
+import { getMarketContextPayload } from "@/infrastructure/market-data/market-context-service";
+import { prisma } from "@/infrastructure/database/prisma";
 
 /** Names of the variables that currently hold a non-empty value. */
 function configuredKeys(): string[] {
@@ -52,22 +54,67 @@ async function check(
   }
 }
 
+async function checkDerivatives(): Promise<HealthResult> {
+  const start = performance.now();
+  try {
+    const { context } = await getMarketContextPayload();
+    const available = !context.fundingRate.warning && !context.openInterest.warning;
+    const latencyMs = Math.round(performance.now() - start);
+    return {
+      id: "binance-futures", name: "Futures Market Data", endpoint: "market context",
+      status: available ? "ok" : "down", latencyMs,
+      detail: available ? `Market context available · ${latencyMs}ms` : "Funding rate or open interest unavailable",
+    };
+  } catch {
+    return {
+      id: "binance-futures", name: "Futures Market Data", endpoint: "market context",
+      status: "down", latencyMs: Math.round(performance.now() - start),
+      detail: "Market context unavailable",
+    };
+  }
+}
+
 export async function GET() {
   // Which keys are absent tells an attacker which flows are unguarded or
   // unavailable, so the configuration report is for admins only. The external
   // service checks reveal nothing private and stay public.
   const user = await getCurrentUser();
+  const isAdmin = user?.role === "ADMIN";
   const configuration: CapabilityReport[] | undefined =
-    user?.role === "ADMIN" ? assessReadiness(configuredKeys(), selectedPaymentProvider()) : undefined;
+    isAdmin ? assessReadiness(configuredKeys(), selectedPaymentProvider()) : undefined;
+
+  let dbResult: HealthResult | null = null;
+  if (isAdmin) {
+    const dbStart = performance.now();
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      const latencyMs = Math.round(performance.now() - dbStart);
+      dbResult = {
+        id: "database-live",
+        name: "PostgreSQL Database",
+        endpoint: "prisma $queryRaw",
+        status: "ok",
+        latencyMs,
+        detail: `Connected · ${latencyMs}ms`,
+      };
+    } catch {
+      const latencyMs = Math.round(performance.now() - dbStart);
+      dbResult = {
+        id: "database-live",
+        name: "PostgreSQL Database",
+        endpoint: "prisma $queryRaw",
+        status: "down",
+        latencyMs,
+        detail: "Database connection failed",
+      };
+    }
+  }
 
   const results = await Promise.all([
     check("binance-spot", "Binance Spot", "data-api.binance.vision", [
       "https://data-api.binance.vision/api/v3/ping",
     ]),
-    check("binance-futures", "Binance Futures", "fapi.binance.com", [
-      "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT",
-      "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT",
-    ]),
+    checkDerivatives(),
     check("coingecko", "CoinGecko", "api.coingecko.com", [
       "https://api.coingecko.com/api/v3/global",
     ]),
@@ -75,6 +122,10 @@ export async function GET() {
       "https://api.alternative.me/fng/",
     ]),
   ]);
+
+  if (dbResult) {
+    results.unshift(dbResult);
+  }
 
   return Response.json(
     { results, configuration, checkedAt: new Date().toISOString() },

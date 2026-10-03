@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, ImageIcon, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, ImageIcon, Loader2, X } from "lucide-react";
 import { useT } from "@/presentation/hooks/use-translate";
+import { AdminFeedback, useAdminData } from "./admin-data";
 
 interface ResultRow {
   id: string;
@@ -15,6 +16,7 @@ interface ResultRow {
   resultAt: string;
   firstSeenAt: string;
 }
+const validResults = (value: unknown): value is { results: ResultRow[] } => !!value && typeof value === "object" && "results" in value && Array.isArray(value.results);
 
 /**
  * The captured proof archive.
@@ -25,26 +27,15 @@ interface ResultRow {
  */
 export function SetupResultsModule() {
   const { t } = useT();
-  const [rows, setRows] = useState<ResultRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, reload } = useAdminData("/api/admin/setup-results", validResults);
+  const rows = loading ? null : (data?.results ?? []);
   const [preview, setPreview] = useState<string | null>(null);
-
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch("/api/admin/setup-results", { cache: "no-store" });
-        const payload = (await response.json()) as { results?: ResultRow[]; error?: { message: string } };
-        // Empty means "the server gave no reason"; the wording is chosen at
-        // render, so the effect does not have to re-run when the language does.
-        if (!response.ok) throw new Error(payload.error?.message ?? "");
-        setRows(payload.results ?? []);
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : String(caught));
-        setRows([]);
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+    if (preview) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [preview]);
+
 
   return (
     <div className="flex flex-col gap-4">
@@ -57,11 +48,7 @@ export function SetupResultsModule() {
         </p>
       </div>
 
-      {error !== null && (
-        <p className="rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-[12px] text-negative">
-          {error || t("admin.resultsFailed")}
-        </p>
-      )}
+      <AdminFeedback loading={false} error={error} retry={() => void reload()} />
 
       {rows === null && (
         <div className="flex h-40 items-center justify-center text-muted-2">
@@ -77,7 +64,7 @@ export function SetupResultsModule() {
       )}
 
       {rows !== null && rows.length > 0 && (
-        <div className="card overflow-hidden">
+        <div className="card overflow-x-auto">
           <table className="w-full border-collapse text-left text-[12px]">
             <thead>
               <tr className="border-b border-border bg-surface-2/40 text-[10px] uppercase text-muted-2">
@@ -127,16 +114,13 @@ export function SetupResultsModule() {
         </div>
       )}
 
-      {preview && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
-          onClick={() => setPreview(null)}
-          role="presentation"
-        >
+      <dialog ref={dialog} aria-label="Setup result preview" onCancel={() => setPreview(null)} onClose={() => setPreview(null)} onClick={(event) => { if (event.target === event.currentTarget) setPreview(null); }} className="m-auto max-h-[95dvh] max-w-[95vw] overflow-auto rounded-lg bg-surface p-4 text-foreground backdrop:bg-black/80">
+        <button type="button" autoFocus aria-label="Close preview" onClick={() => setPreview(null)} className="mb-3 flex items-center gap-2"><X className="size-4" />Close</button>
+        {preview && <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="Hasil setup" className="max-h-full max-w-full rounded-lg" />
-        </div>
-      )}
+          <img src={preview} alt="Hasil setup" className="max-h-[80dvh] max-w-full rounded-lg" />
+        </>}
+      </dialog>
     </div>
   );
 }

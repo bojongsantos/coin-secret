@@ -8,6 +8,9 @@ if (!connectionString) throw new Error("DATABASE_URL wajib untuk seed.");
 if (process.env.NODE_ENV === "production") {
   throw new Error("Seed demo tidak boleh dijalankan pada production.");
 }
+if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(connectionString).hostname)) {
+  throw new Error("Demo seed requires a local database. Remote databases are never seeded with demo credentials.");
+}
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 function required(name: "SEED_USER_PASSWORD" | "SEED_ADMIN_PASSWORD"): string {

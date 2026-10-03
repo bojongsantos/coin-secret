@@ -102,8 +102,8 @@ export function HealthModule() {
           <div>
             <h3 className="text-[13px] font-semibold">{t("admin.configReadiness")}</h3>
             <p className="mt-0.5 text-[12px] text-muted">
-              Kunci yang belum diisi tidak memunculkan galat apa pun sampai ada pengguna yang
-              mencobanya.
+              Configuration checks confirm only that required variables are present.
+              Email delivery and payment settlement require separate end-to-end tests.
             </p>
           </div>
 
@@ -119,7 +119,7 @@ export function HealthModule() {
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-[13px] font-semibold">{item.name}</h4>
                   <Badge tone={item.level === "ready" ? "positive" : "negative"}>
-                    {item.level === "ready" ? t("admin.ready") : t("admin.halted")}
+                    {item.level === "ready" ? "Configured" : t("admin.halted")}
                   </Badge>
                 </div>
                 {item.missing.length > 0 ? (

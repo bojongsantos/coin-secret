@@ -1,22 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { z } from "zod";
+import { AdminFeedback, useAdminData } from "./admin-data";
 import { useT } from "@/presentation/hooks/use-translate";
 
-interface Stats {
-  users: number;
-  premiumUsers: number;
-  activeSubscriptions: number;
-  revenue: Array<{ currency: string; amount: number }>;
-  pendingPayments: number;
-}
+const statsSchema = z.object({ users: z.number(), premiumUsers: z.number(), activeSubscriptions: z.number(), pendingPayments: z.number(), revenue: z.array(z.object({ currency: z.string().length(3), amount: z.number() })) });
+type Stats = z.infer<typeof statsSchema>;
+const validStats = (value: unknown): value is Stats => statsSchema.safeParse(value).success;
 
 export function Overview() {
   const { t } = useT();
-  const [stats, setStats] = useState<Stats | null>(null);
-  useEffect(() => { fetch("/api/admin/overview", { cache: "no-store" }).then((response) => response.json()).then(setStats).catch(() => setStats(null)); }, []);
-  if (!stats) return <div className="flex h-64 items-center justify-center"><Loader2 className="size-5 animate-spin text-muted" /></div>;
+  const { data: stats, loading, error, reload } = useAdminData("/api/admin/overview", validStats);
+  if (!stats || loading) return <div className="p-6"><AdminFeedback loading={loading} error={error} retry={() => void reload()} /></div>;
   const revenue = stats.revenue.length > 0
     ? stats.revenue.map((item) => new Intl.NumberFormat("id-ID", {
         style: "currency",

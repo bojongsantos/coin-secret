@@ -1,40 +1,23 @@
 import { z } from "zod";
-import { rejectUserChange, subscriptionStatusForPlan } from "@/core/domain/access/admin-actions";
 import { requireAdmin } from "@/infrastructure/auth/current-user";
-import { prisma } from "@/infrastructure/database/prisma";
-import { writeAuditLog } from "@/infrastructure/audit/audit-log";
-import { apiError, getRequestIp, HttpError, readJson } from "@/shared/server/http";
+import { updateAdminUser } from "@/infrastructure/admin/mutations";
+import { apiError, getRequestIp, tooManyRequests } from "@/shared/server/http";
+import { readAdminMutation } from "@/shared/server/admin-request";
+import { adminMutationLimiter } from "@/infrastructure/admin/rate-limit";
 
 const patchSchema = z.object({
   role: z.enum(["USER", "ADMIN"]).optional(),
   plan: z.enum(["FREE", "PREMIUM"]).optional(),
-}).refine((data) => data.role || data.plan, "Minimal satu perubahan diperlukan.");
+}).strict().refine((data) => data.role || data.plan, "Minimal satu perubahan diperlukan.");
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin();
+    const decision = adminMutationLimiter.check(admin.id);
+    if (!decision.allowed) return tooManyRequests(decision.retryAfterSeconds);
     const { id } = await context.params;
-    const input = await readJson(request, patchSchema);
-    const rejection = rejectUserChange(admin.id, id, input);
-    if (rejection === "SELF_DEMOTION") {
-      throw new HttpError(400, "Admin tidak dapat menurunkan role sendiri.", "SELF_DEMOTION");
-    }
-    if (rejection === "EMPTY_CHANGE") {
-      throw new HttpError(400, "Minimal satu perubahan diperlukan.", "EMPTY_CHANGE");
-    }
-    const user = await prisma.user.update({
-      where: { id },
-      data: input,
-      select: { id: true, name: true, email: true, role: true, plan: true },
-    });
-    if (input.plan) {
-      await prisma.subscription.upsert({
-        where: { userId: id },
-        create: { userId: id, plan: input.plan, status: subscriptionStatusForPlan(input.plan), provider: "admin" },
-        update: { plan: input.plan, status: subscriptionStatusForPlan(input.plan), provider: "admin" },
-      });
-    }
-    await writeAuditLog({ actorId: admin.id, action: "admin.user.update", entityType: "User", entityId: id, metadata: input, ipAddress: getRequestIp(request) });
+    const input = await readAdminMutation(request, patchSchema);
+    const user = await updateAdminUser(admin.id, id, input, getRequestIp(request));
     return Response.json({ user });
   } catch (error) {
     return apiError(error);

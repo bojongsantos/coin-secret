@@ -11,7 +11,7 @@ function load(path: string, globals: Record<string, unknown>, dependencies: Reco
   runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, {
-    exports, Response, Date, Error, DOMException, AbortSignal, AbortController, setTimeout, clearTimeout,
+    exports, Response, Date, Error, DOMException, AbortSignal, AbortController, performance, setTimeout, clearTimeout,
     require: (name: string) => name === "server-only" ? {} : dependencies[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
     ...globals,
   });
@@ -46,10 +46,12 @@ test("an already cancelled exchange read never reaches the provider", async () =
   assert.equal(calls, 0);
 });
 
-function contextService(mode: "fallback" | "timeout") {
+function contextService(mode: "fallback" | "timeout" | "errors", failure?: unknown) {
   const requests: string[] = [];
   const budgets: number[] = [];
+  const warnings: Array<{ event: string; detail: { provider: string; elapsedMs: number; code: string } }> = [];
   const api = load("src/infrastructure/market-data/market-context-service.ts", {
+    console: { warn: (event: string, detail: { provider: string; elapsedMs: number; code: string }) => warnings.push({ event, detail }) },
     AbortSignal: {
       any: AbortSignal.any,
       timeout: (ms: number) => {
@@ -63,6 +65,7 @@ function contextService(mode: "fallback" | "timeout") {
       requests.push(url);
       if (url.includes("coingecko")) return Response.json({ data: { market_cap_percentage: { btc: 58 }, market_cap_change_percentage_24h_usd: 1 } });
       if (url.includes("alternative.me")) return Response.json({ data: [{ value: "71" }] });
+      if (mode === "errors") throw failure;
       if (mode === "timeout") return new Promise<Response>((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
       if (url.includes("binance")) return new Response("{}", { status: 451 });
       return Response.json({ result: { list: [{ fundingRate: "0.0001", openInterestValue: "9000000000" }] } });
@@ -72,11 +75,11 @@ function contextService(mode: "fallback" | "timeout") {
     "@/shared/lib/format": format,
     "@/infrastructure/market-data/market-data-provider": { marketData: { fetchTicker24h: async () => ({ lastPrice: 80000, priceChangePercent: 1 }) } },
   });
-  return { api, requests, budgets };
+  return { api, requests, budgets, warnings };
 }
 
 test("futures fallback reports the answering source and sanitized failure diagnostics", async () => {
-  const { api, requests } = contextService("fallback");
+  const { api, requests, warnings } = contextService("fallback");
   const payload = await api.getMarketContextPayload() as { context: { fundingRate: { warning: boolean; hint: string }; openInterest: { value: string } } };
   assert.equal(payload.context.fundingRate.warning, false);
   assert.match(payload.context.fundingRate.hint, /bybit/);
@@ -84,13 +87,15 @@ test("futures fallback reports the answering source and sanitized failure diagno
   const diagnostic = api.getDerivativesDiagnostics() as { source: string; providers: Array<{ provider: string; detail: string }> };
   assert.equal(diagnostic.source, "bybit");
   assert.equal(diagnostic.providers[0].detail, "HTTP 451");
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].detail.code, "HTTP_ERROR");
   assert.equal(requests.some((url) => url.includes("okx")), false);
   await api.getMarketContextPayload();
   assert.equal(requests.length, 5, "cached reads do not re-probe providers");
 });
 
 test("all stalled futures sources finish within the shared budget and never fabricate metrics", async () => {
-  const { api, budgets } = contextService("timeout");
+  const { api, budgets, warnings } = contextService("timeout");
   const started = Date.now();
   const payload = await api.getMarketContextPayload() as { context: { fundingRate: { warning: boolean; value: string }; openInterest: { warning: boolean } } };
   assert.ok(Date.now() - started < 400, "scaled deadlines should bound all three attempts");
@@ -103,6 +108,36 @@ test("all stalled futures sources finish within the shared budget and never fabr
   assert.equal(diagnostic.source, null);
   assert.equal(diagnostic.providers.length, 3);
   assert.ok(diagnostic.providers.every((row) => row.detail === "timeout"));
+  assert.equal(warnings.length, 3);
+  assert.ok(warnings.every((warning) => warning.detail.code === "TIMEOUT"));
+});
+
+test("provider warnings expose only allowlisted failure codes and preserve response diagnostics", async () => {
+  const privateCanary = "private-diagnostic-canary";
+  const failures: Array<[unknown, string]> = [
+    [new Error(privateCanary, { cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID", headers: privateCanary } }), "ERR_TLS_CERT_ALTNAME_INVALID"],
+    [Object.assign(new Error(privateCanary), { code: "ENOTFOUND" }), "ENOTFOUND"],
+    [new SyntaxError(privateCanary), "JSON_PARSE_ERROR"],
+    [new Error(privateCanary, { cause: { code: privateCanary } }), "UNKNOWN"],
+    [Object.assign(new Error(privateCanary), { code: "ERR_UNLISTED", name: privateCanary }), "UNKNOWN"],
+    [privateCanary, "UNKNOWN"],
+  ];
+  for (const [failure, code] of failures) {
+    const { api, warnings } = contextService("errors", failure);
+    const payload = await api.getMarketContextPayload() as { context: { fundingRate: { warning: boolean } } };
+    assert.equal(payload.context.fundingRate.warning, true);
+    assert.deepEqual(warnings.map((warning) => warning.detail.provider), ["binance", "bybit", "okx"]);
+    for (const warning of warnings) {
+      assert.equal(warning.event, "[market.derivatives.failure]");
+      assert.deepEqual(Object.keys(warning.detail).sort(), ["code", "elapsedMs", "provider"]);
+      assert.equal(warning.detail.code, code);
+      assert.ok(Number.isInteger(warning.detail.elapsedMs) && warning.detail.elapsedMs >= 0);
+    }
+    assert.equal(JSON.stringify(warnings).includes(privateCanary), false);
+    const diagnostic = api.getDerivativesDiagnostics() as { providers: Array<{ detail: string }> };
+    assert.ok(diagnostic.providers.every((row) => row.detail === "network or response failure"));
+    assert.equal(JSON.stringify(diagnostic).includes(code), false, "failure codes stay in server logs, not API diagnostics");
+  }
 });
 
 function captureQueue(kind: "entry" | "result") {

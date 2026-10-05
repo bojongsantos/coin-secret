@@ -40,6 +40,20 @@ class ExternalHttpError extends Error {
   constructor(readonly status: number) { super(`HTTP ${status}`); }
 }
 
+const SAFE_FAILURE_CODES = new Set([
+  "ERR_TLS_CERT_ALTNAME_INVALID", "CERT_HAS_EXPIRED", "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "ENOTFOUND", "EAI_AGAIN", "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+]);
+
+function failureCode(error: unknown): string {
+  if (error instanceof ExternalHttpError) return "HTTP_ERROR";
+  const failure = error as { code?: unknown; cause?: { code?: unknown }; name?: unknown } | null;
+  const code = failure?.cause?.code ?? failure?.code;
+  if (typeof code === "string" && SAFE_FAILURE_CODES.has(code)) return code;
+  return failure?.name === "SyntaxError" ? "JSON_PARSE_ERROR" : "UNKNOWN";
+}
+
 async function externalJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const timeout = AbortSignal.timeout(EXTERNAL_TIMEOUT_MS);
   const res = await fetch(url, {
@@ -67,10 +81,8 @@ function fearGreedLabel(value: number): string {
 /**
  * Funding rate and open interest, from whichever futures venue answers.
  *
- * Binance stays first because it is the deepest BTC perp book and therefore
- * the reference figure, but its `fapi` host is unreachable from several
- * regions — including the one the app is deployed in, which is how both
- * figures came to be permanently blank. Bybit and OKX are asked in turn.
+ * Binance is tried first. Some regions or providers may be unavailable,
+ * so Bybit and OKX are asked in turn.
  *
  * Sources are tried in sequence, not in parallel: on the normal path the first
  * one answers and the other two are never called at all. Each venue has a
@@ -117,6 +129,7 @@ async function fetchDerivatives(btcPrice: number): Promise<DerivativesSnapshot |
   const diagnostic: DerivativesDiagnostic = { checkedAt: new Date().toISOString(), source: null, providers: [] };
   for (const { provider, load } of attempts) {
     if (budget.aborted) break;
+    const started = performance.now();
     const controller = new AbortController();
     const signal = AbortSignal.any([budget, AbortSignal.timeout(DERIVATIVES_PROVIDER_MS), controller.signal]);
     try {
@@ -129,6 +142,11 @@ async function fetchDerivatives(btcPrice: number): Promise<DerivativesSnapshot |
         return result;
       }
     } catch (error) {
+      console.warn("[market.derivatives.failure]", {
+        provider,
+        elapsedMs: Math.round(performance.now() - started),
+        code: signal.aborted ? "TIMEOUT" : failureCode(error),
+      });
       const detail = signal.aborted ? "timeout" : error instanceof ExternalHttpError ? `HTTP ${error.status}` : "network or response failure";
       diagnostic.providers.push({ provider, status: "down", detail });
     } finally {

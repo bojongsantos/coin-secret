@@ -11,7 +11,7 @@ import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-wi
 
 function load(path: string, dependencies: Record<string, unknown>, extra = {}) {
   const exports: Record<string, unknown> = {};
-  runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {
+  runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
     exports, Response, Request, Headers, URL, TextDecoder, Uint8Array, console,
     process: { env: { NODE_ENV: "production", BETTER_AUTH_URL: "http://localhost:3000" } },
     require(name: string) { if (name in dependencies) return dependencies[name]; throw new Error(`Unexpected import ${name}`); }, ...extra,
@@ -90,4 +90,59 @@ test("actual auth configuration disables unused OTP paths and retains verify-the
   const before = sent.length;
   assert.equal((await send("request-password-reset", { email, redirectTo: "/reset-password" })).status, 200);
   assert.equal(sent.length, before + 1, "Recovery sends one reset message, not a verification email as well");
+});
+
+test("unverified login offers verification without sending mail or creating a session", async () => {
+  type View = { type: unknown; props: Record<string, unknown> };
+  function nodes(value: unknown): View[] {
+    if (Array.isArray(value)) return value.flatMap(nodes);
+    if (!value || typeof value !== "object" || !("props" in value)) return [];
+    const view = value as View;
+    return [view, ...nodes(view.props.children)];
+  }
+  const state: unknown[] = [];
+  const redirects: string[] = [];
+  const submitted: Array<{ email: string; password: string }> = [];
+  let cursor = 0;
+  let notices = 0;
+  let code = "EMAIL_NOT_VERIFIED";
+  const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
+  const component = load("src/presentation/features/auth/auth-form.tsx", {
+    react: { useState: (initial: unknown) => {
+      const index = cursor++;
+      if (index === state.length) state.push(initial);
+      return [state[index], (value: unknown) => { state[index] = value; }];
+    } },
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "next/link": { default: "link" },
+    "next/navigation": { useRouter: () => ({ replace: (path: string) => redirects.push(path), refresh() {} }), useSearchParams: () => new URLSearchParams() },
+    "lucide-react": { Loader2: "loader" },
+    "@/infrastructure/auth/auth-client": {
+      authClient: { signIn: { email: async (body: { email: string; password: string }) => { submitted.push(body); return { error: { code, message: "Sign-in refused" } }; } } },
+      notifyAuthStateChanged: () => { notices++; },
+    },
+    "@/shared/lib/safe-redirect": { safeRedirectPath: () => "/dashboard" },
+    "@/presentation/ui/brand-logo": { BrandLockup: "brand", BRAND_NAME: "CoinSecret" },
+    "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: string) => key }) },
+    "@/presentation/ui/password-field": { PasswordField: "password" },
+  }, { URLSearchParams }).AuthForm as (props: { mode: string }) => unknown;
+  const render = () => { cursor = 0; return nodes(component({ mode: "login" })); };
+  const input = render().find((view) => view.type === "input" && view.props.type === "email")!;
+  (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: " verify+tag@example.invalid " } });
+  const password = render().find((view) => view.type === "password")!;
+  (password.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "unchanged-test-password" } });
+  const submit = () => (render().find((view) => view.type === "form")!.props.onSubmit as (event: { preventDefault(): void }) => Promise<void>)({ preventDefault() {} });
+  await submit();
+  const link = render().find((view) => view.type === "link" && String(view.props.href).startsWith("/verify-email"));
+  assert.ok(link);
+  assert.equal(link.props.href, "/verify-email?email=verify%2Btag%40example.invalid");
+  assert.equal(submitted[0].email, "verify+tag@example.invalid");
+  assert.equal(submitted[0].password, "unchanged-test-password");
+  assert.equal(redirects.length, 0);
+  assert.equal(notices, 0);
+  code = "INVALID_EMAIL_OR_PASSWORD";
+  await submit();
+  assert.equal(render().some((view) => String(view.props.href).startsWith("/verify-email")), false);
+  assert.equal(redirects.length, 0);
+  assert.equal(notices, 0);
 });

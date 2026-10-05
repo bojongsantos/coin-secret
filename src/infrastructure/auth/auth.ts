@@ -15,6 +15,17 @@ export const auth = betterAuth({
   appName: "CoinSecret",
   baseURL: appUrl,
   secret: process.env.BETTER_AUTH_SECRET,
+  // Only email verification uses OTP here. Password recovery keeps the
+  // separate, high-entropy reset token; no passwordless or pre-check routes.
+  disabledPaths: [
+    "/email-otp/check-verification-otp",
+    "/sign-in/email-otp",
+    "/email-otp/request-password-reset",
+    "/forget-password/email-otp",
+    "/email-otp/reset-password",
+    "/email-otp/request-email-change",
+    "/email-otp/change-email",
+  ],
   // A deployment can answer on more than one origin — the current domain and
   // the one it was renamed from. Naming only `appUrl` here made every sign-in
   // from the other domain fail as "Invalid origin".

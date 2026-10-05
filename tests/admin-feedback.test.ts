@@ -7,6 +7,7 @@ import * as React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as zod from "zod";
+import * as paymentRules from "@/core/domain/billing/payment-rules";
 function load(path: string, dependencies: Record<string, unknown>, fetcher?: typeof fetch) {
   const exports: Record<string, unknown> = {};
   runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
@@ -40,7 +41,10 @@ test("user and payment tables explain genuine empty results", () => {
   const shared = load("src/presentation/features/admin/admin-data.tsx", {});
   for (const [name, key, text] of [["Users", "users", "No users match"], ["Payments", "payments", "No payments match"]]) {
     const path = `src/presentation/features/admin/${key}-module.tsx`;
-    const view = load(path, { "./admin-data": { ...shared, useAdminData: () => ({ data: { [key]: [], page: 1, hasMore: false }, loading: false, error: null, reload() {} }) } })[`${name}Module`] as React.ComponentType;
+    const view = load(path, {
+      "./admin-data": { ...shared, useAdminData: () => ({ data: { [key]: [], page: 1, hasMore: false }, loading: false, error: null, reload() {} }) },
+      "@/core/domain/billing/payment-rules": paymentRules,
+    })[`${name}Module`] as React.ComponentType;
     assert.match(renderToStaticMarkup(React.createElement(view)), new RegExp(text));
   }
 });

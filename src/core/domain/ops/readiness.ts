@@ -31,6 +31,7 @@ interface Capability {
 const PAYMENT_PROVIDER_KEYS: Record<string, string[]> = {
   midtrans: ["MIDTRANS_SERVER_KEY", "PREMIUM_PRICE_IDR"],
   nowpayments: ["NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET"],
+  "nowpayments-sandbox": ["NOWPAYMENTS_SANDBOX_API_KEY", "NOWPAYMENTS_SANDBOX_IPN_SECRET"],
 };
 
 

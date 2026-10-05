@@ -70,8 +70,11 @@ export function outcomeFor(notification: {
     case "cancel":
       return "canceled";
     case "refund":
-    case "partial_refund":
+    case "chargeback":
       return "refunded";
+    case "partial_refund":
+    case "partial_chargeback":
+      return "partially_refunded";
     case "deny":
     case "failure":
       return "failed";

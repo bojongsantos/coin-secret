@@ -190,7 +190,7 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
     );
   }
 
-  if (entry) {
+  if (entry && ctx.status === "Limit Order") {
     const gapPct = ((price - entry) / entry) * 100;
     riskPoints.push(
       Math.abs(gapPct) < 0.05

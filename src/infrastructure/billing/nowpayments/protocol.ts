@@ -27,18 +27,14 @@ export const ipnSchema = z
 
 export type NowPaymentsIpn = z.infer<typeof ipnSchema>;
 
-/**
- * Serialises a payload the way NOWPayments signs it: keys sorted, then
- * `JSON.stringify` with that key list.
- *
- * Passing an array as the second argument makes `JSON.stringify` use it as a
- * key filter at *every* level, not just the top one. That is a quirk rather
- * than a design, but it is what NOWPayments' own example does, so reproducing
- * it exactly is the only way a signature verifies. Deviating "correctly" here
- * would reject every genuine callback.
- */
+/** Recursively sort object keys, preserving array order and every nested value. */
 export function canonicalPayload(payload: Record<string, unknown>): string {
-  return JSON.stringify(payload, Object.keys(payload).sort());
+  return JSON.stringify(payload, (_key, value: unknown) => {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+    }
+    return value;
+  });
 }
 
 /** HMAC-SHA512 of the canonical payload, as hex. */

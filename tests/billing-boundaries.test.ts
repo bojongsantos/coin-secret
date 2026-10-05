@@ -15,6 +15,7 @@ function load(path: string, dependencies: Record<string, unknown>) {
     exports, Response, TextDecoder, Uint8Array,
     require: (name: string) => {
       if (name in dependencies) return dependencies[name];
+      if (name === "@/core/domain/billing/refund-access" || name === "@/infrastructure/billing/checkout-reservation") return {};
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });

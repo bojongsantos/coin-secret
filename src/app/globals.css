@@ -384,4 +384,6 @@ body {
     animation: none !important;
   }
   .cs-top-setups-track { animation: none !important; }
+  .cs-top-setups-viewport { overflow-x: auto; mask-image: none; }
+  .cs-top-setups-track > [aria-hidden="true"] { display: none; }
 }

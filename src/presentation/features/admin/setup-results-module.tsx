@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, ImageIcon, Loader2, X } from "lucide-react";
 import { useT } from "@/presentation/hooks/use-translate";
-import { AdminFeedback, useAdminData } from "./admin-data";
+import { AdminFeedback, AdminPagination, isList, useAdminData } from "./admin-data";
 
 interface ResultRow {
   id: string;
@@ -16,7 +16,7 @@ interface ResultRow {
   resultAt: string;
   firstSeenAt: string;
 }
-const validResults = (value: unknown): value is { results: ResultRow[] } => !!value && typeof value === "object" && "results" in value && Array.isArray(value.results);
+const validResults = (value: unknown): value is { results: ResultRow[]; page: number; hasMore: boolean } => isList(value, "results");
 
 /**
  * The captured proof archive.
@@ -27,7 +27,8 @@ const validResults = (value: unknown): value is { results: ResultRow[] } => !!va
  */
 export function SetupResultsModule() {
   const { t } = useT();
-  const { data, loading, error, reload } = useAdminData("/api/admin/setup-results", validResults);
+  const [page, setPage] = useState(1);
+  const { data, loading, error, reload } = useAdminData(`/api/admin/setup-results?page=${page}`, validResults);
   const rows = loading ? null : (data?.results ?? []);
   const [preview, setPreview] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -49,6 +50,7 @@ export function SetupResultsModule() {
       </div>
 
       <AdminFeedback loading={false} error={error} retry={() => void reload()} />
+      <AdminPagination page={page} hasMore={data?.hasMore ?? false} disabled={loading || !!error} change={setPage} />
 
       {rows === null && (
         <div className="flex h-40 items-center justify-center text-muted-2">

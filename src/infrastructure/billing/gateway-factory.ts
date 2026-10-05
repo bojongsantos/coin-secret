@@ -15,6 +15,19 @@ function missing(variable: string): never {
   throw new HttpError(503, `${variable} belum dikonfigurasi.`, "PAYMENT_NOT_CONFIGURED");
 }
 
+/** Simulated settlements must never reach the production application/database. */
+function requireIsolatedSandbox(): void {
+  let isolated = false;
+  try {
+    const database = new URL(process.env.DATABASE_URL ?? "");
+    isolated = ["localhost", "127.0.0.1", "[::1]"].includes(database.hostname) &&
+      /_(sandbox|test)$/.test(database.pathname);
+  } catch { /* Invalid configuration fails closed. */ }
+  if (process.env.NODE_ENV === "production" || !isolated) {
+    throw new HttpError(503, "Sandbox pembayaran memerlukan aplikasi development dan database lokal terpisah berakhiran _sandbox atau _test.", "SANDBOX_NOT_ISOLATED");
+  }
+}
+
 /**
  * Builds a payment gateway.
  *
@@ -34,13 +47,19 @@ export function getBillingGateway(provider: string = selectedPaymentProvider()):
     case "midtrans": {
       const serverKey = process.env.MIDTRANS_SERVER_KEY;
       if (!serverKey) missing("MIDTRANS_SERVER_KEY");
-      return new MidtransGateway(serverKey, process.env.MIDTRANS_IS_PRODUCTION === "true");
+      const production = process.env.MIDTRANS_IS_PRODUCTION === "true";
+      if (!production) requireIsolatedSandbox();
+      return new MidtransGateway(serverKey, production);
     }
-    case "nowpayments": {
-      const apiKey = process.env.NOWPAYMENTS_API_KEY;
-      if (!apiKey) missing("NOWPAYMENTS_API_KEY");
-      const ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET;
-      if (!ipnSecret) missing("NOWPAYMENTS_IPN_SECRET");
+    case "nowpayments":
+    case "nowpayments-sandbox": {
+      const sandbox = provider === "nowpayments-sandbox";
+      if (sandbox) requireIsolatedSandbox();
+      const prefix = sandbox ? "NOWPAYMENTS_SANDBOX" : "NOWPAYMENTS";
+      const apiKey = process.env[`${prefix}_API_KEY`];
+      if (!apiKey) missing(`${prefix}_API_KEY`);
+      const ipnSecret = process.env[`${prefix}_IPN_SECRET`];
+      if (!ipnSecret) missing(`${prefix}_IPN_SECRET`);
       // The provider calls back to us and returns the buyer here afterwards,
       // so it needs an address reachable from outside this process.
       const publicUrl = process.env.BETTER_AUTH_URL;
@@ -49,6 +68,7 @@ export function getBillingGateway(provider: string = selectedPaymentProvider()):
         apiKey,
         ipnSecret,
         publicUrl: publicUrl.replace(/\/+$/, ""),
+        sandbox,
       });
     }
     default:

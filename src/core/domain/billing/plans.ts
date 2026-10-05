@@ -50,7 +50,7 @@ export function billingQuote(
   midtransMonthlyIdr?: number,
 ): BillingQuote | null {
   const plan = PLANS[period];
-  if (provider === "nowpayments") {
+  if (provider === "nowpayments" || provider === "nowpayments-sandbox") {
     return { currency: "USD", total: plan.totalUsd, perMonth: plan.perMonthUsd };
   }
   if (provider !== "midtrans") return null;

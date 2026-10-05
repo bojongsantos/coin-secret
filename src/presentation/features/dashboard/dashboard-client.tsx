@@ -17,7 +17,7 @@ import { Reveal } from "@/presentation/ui/reveal";
 
 export function DashboardClient() {
   const { top, result, loading: scanLoading, error: scanError, failedCount, refresh } = useDashboardSignals();
-  const { context, sentiment, loading: marketLoading } = useMarketContext(true);
+  const { context, sentiment, loading: marketLoading, refresh: refreshMarket } = useMarketContext(true);
 
   const [symbol, setSymbol] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
@@ -64,8 +64,8 @@ export function DashboardClient() {
             sentiment={sentiment}
             analysis={analysis}
             loading={marketLoading}
-            onRefresh={refresh}
-            refreshing={scanLoading}
+            onRefresh={refreshMarket}
+            refreshing={marketLoading}
           />
 
           <SignalsBoard

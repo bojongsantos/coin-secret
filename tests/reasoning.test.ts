@@ -100,8 +100,19 @@ test("a re-tested zone reports its touch count instead of claiming fresh liquidi
 
 test("invalidation follows the direction of the trade", () => {
   const candles = series(60, 0.1, 1);
-  assert.match(riskPoints(candles, { ...base, direction: "long" }).join(" "), /closes below/);
-  assert.match(riskPoints(candles, { ...base, direction: "short" }).join(" "), /closes above/);
+  for (const direction of ["long", "short"] as const) {
+    const points = riskPoints(candles, { ...base, direction }).join(" ");
+    assert.match(points, /price touches the stop loss.*candle wick/);
+    assert.doesNotMatch(points, /candle closes/);
+  }
+});
+
+test("only unfilled limit orders receive pending-entry guidance", () => {
+  const candles = series(60, 0.1, 1);
+  assert.match(riskPoints(candles, base).join(" "), /goes in as a limit order/);
+  for (const status of ["Filled", "Running", "Target 1 reached", "Target 2 reached", "Missed", "Invalidated"] as const) {
+    assert.doesNotMatch(riskPoints(candles, { ...base, status }).join(" "), /goes in as a limit order/);
+  }
 });
 
 test("without entry or stop the block says there is nothing to measure", () => {

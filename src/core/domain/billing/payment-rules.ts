@@ -31,6 +31,7 @@ export function statusForOutcome(outcome: PaymentOutcomeKind): PaymentStatus {
     case "refunded":
       return "REFUNDED";
     case "underpaid":
+    case "partially_refunded":
     case "pending":
       return "PENDING";
   }
@@ -126,4 +127,10 @@ export function paymentTransition(
   if (storedStatus === "REFUNDED") return null;
   if (storedStatus === "SETTLED") return incomingStatus === "REFUNDED" ? "REFUNDED" : null;
   return incomingStatus;
+}
+
+/** Unpaid attempts can change ID; a credited or review-held purchase cannot. */
+export function paymentIdentityLocked(payment: { status: string; rawStatus?: string | null }): boolean {
+  return payment.status === "SETTLED" || payment.status === "REFUNDED" ||
+    (payment.rawStatus?.startsWith("REFUND_REQUIRES_REVIEW:") ?? false);
 }

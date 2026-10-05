@@ -17,17 +17,37 @@ import { marketData } from "@/infrastructure/market-data/market-data-provider";
 
 const MARKET_TTL_MS = 30_000;
 const EXTERNAL_TIMEOUT_MS = 8_000;
+const DERIVATIVES_BUDGET_MS = 8_000;
+const DERIVATIVES_PROVIDER_MS = 2_500;
 
 let cached: { timestamp: number; payload: MarketContextPayload } | null = null;
 let inFlight: Promise<MarketContextPayload> | null = null;
 
-async function externalJson<T>(url: string): Promise<T> {
+interface DerivativesDiagnostic {
+  checkedAt: string;
+  source: string | null;
+  providers: Array<{ provider: string; status: "ok" | "down"; detail: string }>;
+}
+
+let derivativesDiagnostic: DerivativesDiagnostic | null = null;
+
+/** Safe provider outcomes for the authenticated operations report. */
+export function getDerivativesDiagnostics(): DerivativesDiagnostic | null {
+  return derivativesDiagnostic;
+}
+
+class ExternalHttpError extends Error {
+  constructor(readonly status: number) { super(`HTTP ${status}`); }
+}
+
+async function externalJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const timeout = AbortSignal.timeout(EXTERNAL_TIMEOUT_MS);
   const res = await fetch(url, {
     cache: "no-store",
-    signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     headers: { Accept: "application/json" },
   });
-  if (!res.ok) throw new Error(`${new URL(url).hostname} HTTP ${res.status}`);
+  if (!res.ok) throw new ExternalHttpError(res.status);
   return (await res.json()) as T;
 }
 
@@ -53,48 +73,70 @@ function fearGreedLabel(value: number): string {
  * figures came to be permanently blank. Bybit and OKX are asked in turn.
  *
  * Sources are tried in sequence, not in parallel: on the normal path the first
- * one answers and the other two are never called at all.
+ * one answers and the other two are never called at all. Each venue has a
+ * short deadline within one shared budget, rather than three full waits.
  */
 async function fetchDerivatives(btcPrice: number): Promise<DerivativesSnapshot | null> {
-  const attempts: Array<() => Promise<DerivativesSnapshot | null>> = [
-    async () => {
+  const attempts: Array<{ provider: string; load: (signal: AbortSignal) => Promise<DerivativesSnapshot | null> }> = [
+    { provider: "binance", load: async (signal) => {
       const [premium, oi] = await Promise.all([
         externalJson<{ lastFundingRate?: string }>(
           "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT",
+          signal,
         ),
         externalJson<{ openInterest?: string }>(
           "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT",
+          signal,
         ),
       ]);
       return parseBinanceDerivatives(premium, oi, btcPrice);
-    },
-    async () =>
+    } },
+    { provider: "bybit", load: async (signal) =>
       parseBybitDerivatives(
         await externalJson<BybitTickerResponse>(
           "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT",
+          signal,
         ),
-      ),
-    async () => {
+      ) },
+    { provider: "okx", load: async (signal) => {
       const [funding, oi] = await Promise.all([
         externalJson<OkxFundingResponse>(
           "https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP",
+          signal,
         ),
         externalJson<OkxOpenInterestResponse>(
           "https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId=BTC-USDT-SWAP",
+          signal,
         ),
       ]);
       return parseOkxDerivatives(funding, oi, btcPrice);
-    },
+    } },
   ];
 
-  for (const attempt of attempts) {
+  const budget = AbortSignal.timeout(DERIVATIVES_BUDGET_MS);
+  const diagnostic: DerivativesDiagnostic = { checkedAt: new Date().toISOString(), source: null, providers: [] };
+  for (const { provider, load } of attempts) {
+    if (budget.aborted) break;
+    const controller = new AbortController();
+    const signal = AbortSignal.any([budget, AbortSignal.timeout(DERIVATIVES_PROVIDER_MS), controller.signal]);
     try {
-      const result = await attempt();
-      if (result) return result;
-    } catch {
-      // Unreachable or rate limited; the next venue gets its turn.
+      const result = await load(signal);
+      signal.throwIfAborted();
+      diagnostic.providers.push({ provider, status: result ? "ok" : "down", detail: result ? "available" : "invalid response" });
+      if (result) {
+        diagnostic.source = result.source;
+        derivativesDiagnostic = diagnostic;
+        return result;
+      }
+    } catch (error) {
+      const detail = signal.aborted ? "timeout" : error instanceof ExternalHttpError ? `HTTP ${error.status}` : "network or response failure";
+      diagnostic.providers.push({ provider, status: "down", detail });
+    } finally {
+      // Cancel a sibling request when one half of a venue's response fails.
+      controller.abort();
     }
   }
+  derivativesDiagnostic = diagnostic;
   return null;
 }
 
@@ -173,7 +215,7 @@ async function buildPayload(): Promise<MarketContextPayload> {
             : derivatives.fundingRate > 0
               ? "up"
               : "down",
-        hint: "BTC perp · 8h",
+        hint: derivatives ? `BTC perp · ${derivatives.source}` : "BTC perp",
         tone:
           derivatives === null ? undefined : derivatives.fundingRate >= 0 ? "positive" : "negative",
         warning: derivatives === null,
@@ -185,7 +227,7 @@ async function buildPayload(): Promise<MarketContextPayload> {
         value: derivatives === null ? "—" : formatOpenInterest(derivatives.openInterestUsd),
         change: 0,
         direction: "flat",
-        hint: "BTC futures",
+        hint: derivatives ? `BTC futures · ${derivatives.source}` : "BTC futures",
         warning: derivatives === null,
         hideDelta: true,
       },
@@ -225,7 +267,7 @@ export function getMarketContextPayload(force = false): Promise<MarketContextPay
   if (!force && cached && Date.now() - cached.timestamp < MARKET_TTL_MS) {
     return Promise.resolve(cached.payload);
   }
-  if (!force && inFlight) return inFlight;
+  if (inFlight) return inFlight;
   inFlight = buildPayload()
     .then((payload) => {
       cached = { timestamp: Date.now(), payload };

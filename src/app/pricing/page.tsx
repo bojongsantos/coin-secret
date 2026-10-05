@@ -8,7 +8,7 @@ import { AppShell } from "@/presentation/layout/app-shell";
 import { billingQuote } from "@/core/domain/billing/plans";
 
 export const metadata: Metadata = {
-  title: "Pricing · CoinSecret",
+  title: "CoinSecret",
   description: "Compare CoinSecret Free and Pro plans, access periods, and payment options.",
   alternates: { canonical: "https://coinsecret.io/pricing" },
 };

@@ -131,8 +131,8 @@ const COPY = {
     en: "Price **{price}** is still **{percent}%** {side} the entry, so the position goes in as a limit order rather than at market.",
   },
   "risk.invalidation": {
-    id: "Setup batal apabila candle ditutup {side} **{stopLoss}**.",
-    en: "The setup is void once a candle closes {side} **{stopLoss}**.",
+    id: "Setup batal apabila harga menyentuh stop loss **{stopLoss}**, termasuk melalui wick candle.",
+    en: "The setup is void when price touches the stop loss at **{stopLoss}**, including a candle wick.",
   },
   "risk.nothingToMeasure": {
     id: "Belum ada level entry maupun stop yang valid, sehingga belum ada risiko yang dapat diukur.",

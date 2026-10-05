@@ -107,7 +107,9 @@ test("every other Midtrans status maps to one outcome", () => {
   assert.equal(outcomeFor({ transaction_status: "expire", status_code: "200" }), "expired");
   assert.equal(outcomeFor({ transaction_status: "cancel", status_code: "200" }), "canceled");
   assert.equal(outcomeFor({ transaction_status: "refund", status_code: "200" }), "refunded");
-  assert.equal(outcomeFor({ transaction_status: "partial_refund", status_code: "200" }), "refunded");
+  assert.equal(outcomeFor({ transaction_status: "chargeback", status_code: "200" }), "refunded");
+  assert.equal(outcomeFor({ transaction_status: "partial_refund", status_code: "200" }), "partially_refunded");
+  assert.equal(outcomeFor({ transaction_status: "partial_chargeback", status_code: "200" }), "partially_refunded");
   assert.equal(outcomeFor({ transaction_status: "deny", status_code: "200" }), "failed");
   assert.equal(outcomeFor({ transaction_status: "failure", status_code: "200" }), "failed");
   assert.equal(outcomeFor({ transaction_status: "pending", status_code: "200" }), "pending");

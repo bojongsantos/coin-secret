@@ -14,6 +14,10 @@ export interface ProviderCopy {
 }
 
 const COPY: Record<string, ProviderCopy> = {
+  "nowpayments-sandbox": {
+    name: "NOWPayments Sandbox",
+    assurance: "Simulasi pembayaran kripto pada database testing terpisah. Jangan mengirim dana sungguhan.",
+  },
   midtrans: {
     name: "Midtrans",
     assurance: "Pembayaran diproses Midtrans. CoinSecret tidak menyimpan nomor kartu Anda.",

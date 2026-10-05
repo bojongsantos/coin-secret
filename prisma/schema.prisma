@@ -143,6 +143,11 @@ model Payment {
   checkoutUrl           String?
   rawStatus             String?
   paidAt                DateTime?
+  /// Exact credited interval. Refunds remove only this payment's unused time.
+  /// Null on legacy/manual grants; never infer a historical entitlement.
+  grantedDays           Int?
+  accessStartsAt        DateTime?
+  accessEndsAt          DateTime?
   expiresAt             DateTime?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt

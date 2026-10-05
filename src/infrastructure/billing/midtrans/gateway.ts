@@ -14,6 +14,7 @@ import {
   toPaymentEvent,
 } from "@/infrastructure/billing/midtrans/protocol";
 import { HttpError } from "@/shared/server/http";
+import { checkoutFailure, paymentJson, safeCheckoutUrl } from "@/infrastructure/billing/provider-http";
 
 export class MidtransGateway implements BillingGateway {
   readonly id = "midtrans";
@@ -28,7 +29,7 @@ export class MidtransGateway implements BillingGateway {
       throw new HttpError(500, "Midtrans hanya dapat menagih dalam IDR.", "PAYMENT_CURRENCY_ERROR");
     }
     const base = this.production ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com";
-    const response = await fetch(`${base}/snap/v1/transactions`, {
+    const response = await paymentJson(`${base}/snap/v1/transactions`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -49,19 +50,17 @@ export class MidtransGateway implements BillingGateway {
         expiry: { unit: "hours", duration: 24 },
       }),
     });
-    const data = (await response.json()) as {
+    const data = response.data as {
       token?: string;
       redirect_url?: string;
       error_messages?: string[];
     };
-    if (!response.ok || !data.token || !data.redirect_url) {
-      throw new HttpError(
-        502,
-        data.error_messages?.join(", ") ?? "Gateway pembayaran tidak tersedia.",
-        "PAYMENT_GATEWAY_ERROR",
-      );
+    if (!response.ok) throw checkoutFailure(response.status);
+    const redirectUrl = safeCheckoutUrl(data?.redirect_url, [new URL(base).hostname]);
+    if (!redirectUrl || typeof data?.token !== "string" || !data.token) {
+      throw new HttpError(502, "Jawaban gateway tidak lengkap. Pembayaran perlu diperiksa sebelum dicoba kembali.", "PAYMENT_GATEWAY_UNCERTAIN");
     }
-    return { reference: data.token, redirectUrl: data.redirect_url };
+    return { reference: data.token, redirectUrl };
   }
 
   /** Midtrans signs the body, so the headers carry nothing to verify here. */

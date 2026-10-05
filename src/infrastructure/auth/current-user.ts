@@ -15,7 +15,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUserDto | null> => 
     where: { id: session.user.id },
     select: { id: true, name: true, email: true, emailVerified: true, role: true, plan: true, subscription: { select: { currentPeriodEnd: true } } },
   });
-  if (!record || !record.emailVerified) return null;
+  if (!record || !record.emailVerified || (process.env.NODE_ENV === "production" && record.email.toLowerCase().endsWith(".local"))) return null;
   // Reading an account must not rewrite it. The previous version downgraded an
   // expired plan here with an unconditional update on the values it had just
   // read, so a settlement landing in between was overwritten and the buyer lost

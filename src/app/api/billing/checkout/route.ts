@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { requireUser } from "@/infrastructure/auth/current-user";
 import { getBillingGateway } from "@/infrastructure/billing/gateway-factory";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -6,6 +5,7 @@ import { apiError, getRequestIp, HttpError, readBoundedJson, tooManyRequests } f
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 import { writeAuditLog } from "@/infrastructure/audit/audit-log";
 import { billingPlan, billingQuote, isBillingPeriod } from "@/core/domain/billing/plans";
+import { reserveCheckout } from "@/infrastructure/billing/checkout-reservation";
 
 const checkoutLimiter = createFixedWindowLimiter({ limit: 5, windowMs: 60_000 });
 
@@ -31,29 +31,17 @@ export async function POST(request: Request) {
     if (!quote) {
       throw new HttpError(503, "PREMIUM_PRICE_IDR belum dikonfigurasi dengan benar.", "PAYMENT_NOT_CONFIGURED");
     }
-    const recent = await prisma.payment.findFirst({
-      where: {
-        userId: user.id,
-        provider: gateway.id,
-        planPeriod: period,
-        amount: quote.total,
-        currency: quote.currency,
-        status: "PENDING",
-        createdAt: { gt: new Date(Date.now() - 5 * 60 * 1000) },
-        checkoutUrl: { not: null },
-      },
-      orderBy: { createdAt: "desc" },
-      select: { orderId: true, amount: true, currency: true, checkoutToken: true, checkoutUrl: true },
+    const reserved = await reserveCheckout({
+      userId: user.id, provider: gateway.id, planPeriod: period, amount: quote.total, currency: quote.currency, grantedDays: plan.days,
     });
-    if (recent?.checkoutUrl && recent.checkoutToken) {
-      return Response.json({ orderId: recent.orderId, amount: recent.amount, currency: recent.currency, token: recent.checkoutToken, redirectUrl: recent.checkoutUrl });
+    const payment = reserved.payment;
+    const orderId = payment.orderId;
+    if (reserved.existing) {
+      if (payment.checkoutUrl && payment.checkoutToken) {
+        return Response.json({ orderId, amount: payment.amount, currency: payment.currency, token: payment.checkoutToken, redirectUrl: payment.checkoutUrl });
+      }
+      throw new HttpError(409, "Permintaan pembayaran ini masih diproses atau perlu diperiksa. Hubungi dukungan sebelum membuat pembayaran ulang.", "PAYMENT_REQUIRES_RECONCILIATION");
     }
-    const orderId = `CS-${Date.now()}-${randomUUID().slice(0, 8)}`;
-    const payment = await prisma.payment.create({
-      // Recorded from the gateway itself, so each charge says who processed it.
-      data: { orderId, userId: user.id, amount: quote.total, currency: quote.currency, provider: gateway.id, planPeriod: period },
-      select: { id: true },
-    });
     try {
       const checkout = await gateway.createCheckout({
         orderId,
@@ -72,7 +60,13 @@ export async function POST(request: Request) {
         { status: 201 },
       );
     } catch (error) {
-      await prisma.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+      // A callback may already have settled this invoice. Never downgrade it.
+      // Timeout/network/bookkeeping errors do not prove invoice creation failed.
+      const rejected = error instanceof HttpError && error.code === "PAYMENT_GATEWAY_REJECTED";
+      await prisma.payment.updateMany({
+        where: { id: payment.id, status: "PENDING" },
+        data: { status: rejected ? "FAILED" : "PENDING", rawStatus: rejected ? "CHECKOUT_REJECTED" : "CHECKOUT_UNCERTAIN" },
+      });
       throw error;
     }
   } catch (error) {

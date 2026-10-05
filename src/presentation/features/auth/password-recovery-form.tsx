@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/infrastructure/auth/auth-client";
 import { useT } from "@/presentation/hooks/use-translate";
+import { PasswordField } from "@/presentation/ui/password-field";
 
 /**
  * Seconds the confirmation stays on screen before the login page takes over.
@@ -21,6 +22,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [manualToken, setManualToken] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const { t } = useT();
@@ -44,6 +46,11 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setMessage(null);
+    if (mode === "reset" && password !== confirmation) {
+      setError(t("auth.passwordMismatch"));
+      return;
+    }
     setPending(true);
     try {
       if (mode === "request") {
@@ -70,6 +77,8 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
       }
       setMessage(t("billing.passwordChanged"));
       setCountdown(REDIRECT_SECONDS);
+    } catch {
+      setError(t("recovery.requestFailed"));
     } finally {
       setPending(false);
     }
@@ -103,6 +112,8 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
               <input
                 required
                 type="email"
+                aria-label={t("auth.email")}
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@example.com"
@@ -122,14 +133,26 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
                     className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
                   />
                 )}
-                <input
+                <PasswordField
                   required
-                  type="password"
+                  autoComplete="new-password"
                   minLength={10}
                   maxLength={128}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t("billing.newPassword")}
+                  aria-label={t("billing.newPassword")}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                />
+                <PasswordField
+                  required
+                  autoComplete="new-password"
+                  minLength={10}
+                  maxLength={128}
+                  value={confirmation}
+                  onChange={(e) => setConfirmation(e.target.value)}
+                  placeholder={t("auth.confirmPassword")}
+                  aria-label={t("auth.confirmPassword")}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
                 />
               </>

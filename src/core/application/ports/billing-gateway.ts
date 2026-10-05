@@ -13,6 +13,7 @@ export type PaymentOutcomeKind =
   | "failed"
   | "expired"
   | "canceled"
+  | "partially_refunded"
   | "refunded";
 
 export interface CheckoutRequest {
@@ -73,4 +74,6 @@ export interface BillingGateway {
   createCheckout(request: CheckoutRequest): Promise<CheckoutResult>;
   /** Verifies authenticity, then normalises. Throws when verification fails. */
   parseAndVerifyNotification(input: NotificationInput): PaymentEvent;
+  /** Authenticated provider lookup by its actual payment ID, never invoice ID. */
+  readPaymentStatus?(paymentId: string): Promise<PaymentEvent>;
 }

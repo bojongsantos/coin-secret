@@ -32,6 +32,10 @@ async function healthWithDerivatives(
         },
       };
       if (name.endsWith("/market-context-service")) return {
+        getDerivativesDiagnostics: () => ({ checkedAt: "2026-10-05T00:00:00.000Z", source: available ? "bybit" : null, providers: [
+          { provider: "binance", status: "down", detail: "HTTP 451" },
+          { provider: "bybit", status: available ? "ok" : "down", detail: available ? "available" : "timeout" },
+        ] }),
         getMarketContextPayload: async () => {
           if (mode === "error") throw new Error("offline");
           return { context: {
@@ -75,6 +79,15 @@ test("futures health reflects derivative figures served by product, including fa
   const result = results.find((item) => item.id === "binance-futures");
   assert.equal(result?.status, "ok");
   assert.match(result?.detail ?? "", /market context/i);
+  assert.doesNotMatch(result?.detail ?? "", /HTTP 451|binance:/, "provider diagnostics stay admin-only");
+});
+
+test("admin futures health identifies safe provider failures and the observation time", async () => {
+  const { results } = await healthWithDerivatives(false, "normal", "ADMIN");
+  const detail = results.find((item) => item.id === "binance-futures")?.detail ?? "";
+  assert.match(detail, /binance: HTTP 451/);
+  assert.match(detail, /bybit: timeout/);
+  assert.match(detail, /Checked 2026-10-05/);
 });
 
 test("futures health is down when product cannot obtain either derivative figure", async () => {

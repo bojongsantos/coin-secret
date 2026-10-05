@@ -32,6 +32,14 @@ const MAX_CAPTURES_PER_RUN = 8;
  * is a rate, not a cap on how many setups can ever be resolved.
  */
 const MAX_RESULT_CHECKS_PER_RUN = 24;
+const CAPTURE_RECHECK_MS = 5 * 60_000;
+
+function eligibleCheck(now: Date) {
+  return [
+    { resultCheckedAt: null },
+    { resultCheckedAt: { lte: new Date(now.getTime() - CAPTURE_RECHECK_MS) } },
+  ];
+}
 
 /**
  * History fetched when composing a proof.
@@ -135,8 +143,9 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
     where: {
       firstStatus: "Limit Order",
       snapshots: { none: { kind: "ENTRY" } },
+      OR: eligibleCheck(now),
     },
-    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }],
+    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
     take: MAX_ENTRY_CANDIDATES,
   });
   if (candidates.length === 0) return 0;
@@ -158,6 +167,9 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       .catch(() => [] as Candle[]);
     if (history.length === 0) {
       if (!report.skippedSymbols.includes(setup.symbol)) report.skippedSymbols.push(setup.symbol);
+      // A failed read changes neither the trade status nor the archive. It
+      // still advances the queue and waits before retrying the same record.
+      await prisma.trackedSetup.update({ where: { id: setup.id }, data: { resultCheckedAt: now } });
       continue;
     }
 
@@ -214,7 +226,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       filledPrice: filled.close,
     };
 
-    await prisma.setupSnapshot.upsert({
+    await prisma.$transaction([prisma.setupSnapshot.upsert({
       where: { setupId_kind: { setupId: setup.id, kind: "ENTRY" } },
       create: {
         setupId: setup.id,
@@ -224,7 +236,12 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
         payload: JSON.parse(JSON.stringify(payload)),
       },
       update: {},
-    });
+    }), prisma.trackedSetup.update({
+      where: { id: setup.id },
+      // A new entry proof deserves an immediate result check in this sweep,
+      // even when its terminal outcome was already observed above.
+      data: { resultCheckedAt: null },
+    })]);
     captured++;
   }
   return captured;
@@ -251,10 +268,11 @@ async function resolveResults(now: Date): Promise<number> {
       // photograph, and filtering on "not terminal" skipped exactly those.
       status: { notIn: ["Invalidated (SL hit)", "Missed"] },
       snapshots: { some: { kind: "ENTRY" } },
+      OR: eligibleCheck(now),
     },
     // Nulls first: a setup never checked before takes priority over one
     // checked an hour ago.
-    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }],
+    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
     take: MAX_RESULT_CHECKS_PER_RUN,
   });
   if (pending.length === 0) return 0;
@@ -265,7 +283,10 @@ async function resolveResults(now: Date): Promise<number> {
     const history = await marketData
       .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: PROOF_HISTORY_BARS })
       .catch(() => [] as Candle[]);
-    if (history.length === 0) continue;
+    if (history.length === 0) {
+      await prisma.trackedSetup.update({ where: { id: setup.id }, data: { resultCheckedAt: now } });
+      continue;
+    }
 
     const plan = {
       direction: setup.direction as SetupDirection,

@@ -1,7 +1,7 @@
 import { assessReadiness, type CapabilityReport } from "@/core/domain/ops/readiness";
 import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factory";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
-import { getMarketContextPayload } from "@/infrastructure/market-data/market-context-service";
+import { getDerivativesDiagnostics, getMarketContextPayload } from "@/infrastructure/market-data/market-context-service";
 import { prisma } from "@/infrastructure/database/prisma";
 
 /** Names of the variables that currently hold a non-empty value. */
@@ -54,16 +54,20 @@ async function check(
   }
 }
 
-async function checkDerivatives(): Promise<HealthResult> {
+async function checkDerivatives(includeDiagnostics: boolean): Promise<HealthResult> {
   const start = performance.now();
   try {
     const { context } = await getMarketContextPayload();
     const available = !context.fundingRate.warning && !context.openInterest.warning;
     const latencyMs = Math.round(performance.now() - start);
+    const diagnostic = includeDiagnostics ? getDerivativesDiagnostics() : null;
+    const providerDetail = diagnostic
+      ? ` · Checked ${diagnostic.checkedAt} · ${diagnostic.providers.map((item) => `${item.provider}: ${item.detail}`).join("; ")}`
+      : "";
     return {
       id: "binance-futures", name: "Futures Market Data", endpoint: "market context",
       status: available ? "ok" : "down", latencyMs,
-      detail: available ? `Market context available · ${latencyMs}ms` : "Funding rate or open interest unavailable",
+      detail: (available ? `Market context available · ${latencyMs}ms` : "Funding rate or open interest unavailable") + providerDetail,
     };
   } catch {
     return {
@@ -114,7 +118,7 @@ export async function GET() {
     check("binance-spot", "Binance Spot", "data-api.binance.vision", [
       "https://data-api.binance.vision/api/v3/ping",
     ]),
-    checkDerivatives(),
+    checkDerivatives(isAdmin),
     check("coingecko", "CoinGecko", "api.coingecko.com", [
       "https://api.coingecko.com/api/v3/global",
     ]),

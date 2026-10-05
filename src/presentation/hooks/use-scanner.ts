@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScanResult } from "@/core/application/scanner/scanner-service";
-import type {
-  SdScanResult,
-  TopSetup,
-} from "@/core/application/scanner/supply-demand-scan-service";
+import type { SdScanResult, TopSetup } from "@/core/application/scanner/supply-demand-scan-service";
 import type { ScannerOpportunity } from "@/core/domain/models";
 
 export interface SignalsApiPayload {
@@ -13,77 +10,80 @@ export interface SignalsApiPayload {
   top: TopSetup[];
 }
 
-/** The dashboard reads one response for its tables and top setups. */
-export function useDashboardSignals() {
-  const [payload, setPayload] = useState<SignalsApiPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+const SCAN_REFRESH_MS = 60_000;
+// A cold scan can read the complete universe. Bound the client wait while
+// allowing that normal work substantially more time than a cached response.
+const SCAN_REQUEST_MS = 90_000;
+
+async function postScan<T>(path: string, body: Record<string, unknown>, signal: AbortSignal): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(SCAN_REQUEST_MS)]),
+  });
+  const payload = response.headers.get("content-type")?.includes("application/json")
+    ? (await response.json()) as T & { error?: string }
+    : null;
+  if (!payload) throw new Error(`Signals temporarily unavailable (${response.status}). Try refreshing.`);
+  if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
+  return payload;
+}
+
+/** Every scan view shares bounded, single-flight polling and unmount cancellation. */
+function usePollingScan<T>(path: string, enabled = true, limit?: number) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
-  const inFlight = useRef(false);
+  const request = useRef<AbortController | null>(null);
 
   const execute = useCallback(async (force: boolean) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+    if (!enabled || request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
     setLoading(true);
     try {
-      setPayload(await postScan<SignalsApiPayload>("/api/signals", { force, limit: 5 }));
+      const payload = await postScan<T>(path, { force, ...(limit === undefined ? {} : { limit }) }, controller.signal);
+      if (controller.signal.aborted) return;
+      setData(payload);
       setError(null);
     } catch (caught) {
+      if (controller.signal.aborted) return;
+      // A failed refresh must not leave an old setup presented as current.
+      setData(null);
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      inFlight.current = false;
-      setLoading(false);
+      if (request.current === controller) {
+        request.current = null;
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [path, enabled, limit]);
 
   useEffect(() => {
+    if (!enabled) return;
     const kickoff = window.setTimeout(() => void execute(false), 0);
     const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
     return () => {
       window.clearTimeout(kickoff);
       window.clearInterval(poll);
+      request.current?.abort();
+      request.current = null;
     };
-  }, [execute]);
+  }, [execute, enabled]);
 
-  return {
-    result: payload?.result ?? null,
-    top: payload?.top ?? [],
-    loading,
-    error,
-    failedCount: payload?.result.errors.length ?? 0,
-    refresh: () => void execute(true),
-  };
+  return { data, loading: enabled && loading, error, refresh: useCallback(() => void execute(true), [execute]) };
 }
 
-/**
- * How often the scan lists re-read the market.
- *
- * Matches the server's own cache window, so a refresh is nearly free while the
- * screen stays truthful. Fetching once on mount left the tables and the top-5
- * strip frozen at the moment the page opened while the chart beside them kept
- * streaming — click a setup listed minutes ago and the chart, correctly, shows
- * nothing there any more.
- */
-const SCAN_REFRESH_MS = 60_000;
-
-/**
- * Posts a scan request.
- *
- * No symbol list travels with it any more: the browser used to send the user's
- * saved watchlist, and with that gone every caller gets the server's default
- * universe — which is also the only way the scan cache can be shared.
- */
-async function postScan<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const payload = response.headers.get("content-type")?.includes("application/json")
-    ? (await response.json()) as T & { error?: string }
-    : null;
-  if (!payload) throw new Error(`Signals sementara tidak tersedia (${response.status}). Coba refresh.`);
-  if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
-  return payload;
+/** The dashboard reads one response for its tables and five top setups. */
+export function useDashboardSignals() {
+  const { data, loading, error, refresh } = usePollingScan<SignalsApiPayload>("/api/signals", true, 5);
+  return {
+    result: data?.result ?? null,
+    top: data?.top ?? [],
+    loading, error, refresh,
+    failedCount: data?.result.errors.length ?? 0,
+  };
 }
 
 export function useScanner(): {
@@ -94,88 +94,32 @@ export function useScanner(): {
   lastRun: string | null;
   refresh: () => void;
 } {
-  const [opportunities, setOpportunities] = useState<ScannerOpportunity[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRun, setLastRun] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
-
-  const execute = useCallback(async (force: boolean) => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    setLoading(true);
-    try {
-      const result = await postScan<ScanResult>("/api/scanner", { force });
-      setOpportunities(result.opportunities);
-      setTotal(result.total);
-      setError(result.errors.length ? result.errors.join("; ") : null);
-      setLastRun(result.scannedAt);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      inFlightRef.current = false;
-      setLoading(false);
-    }
-  }, []);
-
-  const refresh = useCallback(() => void execute(true), [execute]);
-  useEffect(() => {
-    const timer = window.setTimeout(() => void execute(false), 0);
-    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(poll);
-    };
-  }, [execute]);
-
-  return { opportunities, total, loading, error, lastRun, refresh };
+  const { data, loading, error, refresh } = usePollingScan<ScanResult>("/api/scanner");
+  return {
+    opportunities: data?.opportunities ?? [],
+    total: data?.total ?? 0,
+    loading,
+    error: error ?? (data?.errors.length ? data.errors.join("; ") : null),
+    lastRun: data?.scannedAt ?? null,
+    refresh,
+  };
 }
 
 export function useSdScan(enabled = true): {
   result: SdScanResult | null;
   loading: boolean;
   error: string | null;
-  /** Symbols the scan could not read, as a number rather than as a sentence. */
   failedCount: number;
   lastRun: string | null;
   refresh: () => void;
 } {
-  const [result, setResult] = useState<SdScanResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [failedCount, setFailedCount] = useState(0);
-  const [lastRun, setLastRun] = useState<string | null>(null);
-
-  const execute = useCallback(async (force: boolean) => {
-    setLoading(true);
-    try {
-      const payload = await postScan<SignalsApiPayload>("/api/signals", { force });
-      setResult(payload.result);
-      // A count, not a sentence: the wording is chosen at render, where the
-      // reader's language is known.
-      setFailedCount(payload.result.errors.length);
-      setError(null);
-      setLastRun(payload.result.scannedAt);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const refresh = useCallback(() => void execute(true), [execute]);
-  useEffect(() => {
-    if (!enabled) return;
-    const timer = window.setTimeout(() => void execute(false), 0);
-    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(poll);
-    };
-  }, [execute, enabled]);
-
-  return { result, loading, error, failedCount, lastRun, refresh };
+  const { data, loading, error, refresh } = usePollingScan<SignalsApiPayload>("/api/signals", enabled);
+  return {
+    result: data?.result ?? null,
+    loading, error, refresh,
+    failedCount: data?.result.errors.length ?? 0,
+    lastRun: data?.result.scannedAt ?? null,
+  };
 }
 
 export function useTopSetups(limit = 5): {
@@ -184,32 +128,6 @@ export function useTopSetups(limit = 5): {
   error: string | null;
   refresh: () => void;
 } {
-  const [top, setTop] = useState<TopSetup[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const execute = useCallback(async (force: boolean) => {
-    setLoading(true);
-    try {
-      const payload = await postScan<SignalsApiPayload>("/api/signals", { force, limit });
-      setTop(payload.top);
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, [limit]);
-
-  const refresh = useCallback(() => void execute(true), [execute]);
-  useEffect(() => {
-    const timer = window.setTimeout(() => void execute(false), 0);
-    const poll = window.setInterval(() => void execute(false), SCAN_REFRESH_MS);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(poll);
-    };
-  }, [execute]);
-
-  return { top, loading, error, refresh };
+  const { data, loading, error, refresh } = usePollingScan<SignalsApiPayload>("/api/signals", true, limit);
+  return { top: data?.top ?? [], loading, error, refresh };
 }

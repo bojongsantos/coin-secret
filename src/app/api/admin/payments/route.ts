@@ -13,10 +13,10 @@ export async function GET(request: Request) {
     const payments = await prisma.payment.findMany({
       where: selected ? { status: selected } : undefined,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip, take: take + 1,
-      select: { id: true, orderId: true, providerTransactionId: true, amount: true, currency: true, status: true, rawStatus: true, createdAt: true, paidAt: true, user: { select: { id: true, name: true, email: true } } },
+      select: { id: true, orderId: true, provider: true, providerTransactionId: true, amount: true, currency: true, status: true, rawStatus: true, createdAt: true, paidAt: true, user: { select: { id: true, name: true, email: true } } },
     });
     const now = Date.now();
-    return Response.json({ payments: payments.slice(0, take).map((payment) => ({ ...payment, needsReconciliation: payment.status === "PENDING" && now - payment.createdAt.getTime() > 86_400_000 })), page, hasMore: payments.length > take }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ payments: payments.slice(0, take).map((payment) => ({ ...payment, needsReconciliation: (payment.status === "PENDING" && (now - payment.createdAt.getTime() > 86_400_000 || payment.rawStatus === "CHECKOUT_UNCERTAIN")) || !!payment.rawStatus?.startsWith("REFUND_REQUIRES_REVIEW:") })), page, hasMore: payments.length > take }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiError(error);
   }

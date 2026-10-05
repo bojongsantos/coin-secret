@@ -10,20 +10,27 @@ test("every supported provider is named on the checkout page", () => {
   for (const provider of PAYMENT_PROVIDERS) {
     const copy = providerCopy(provider);
     assert.notEqual(copy.name, "penyedia pembayaran", provider);
-    assert.ok(copy.assurance.length > 20, provider);
+    assert.ok(copy.assurance.id.length > 20, provider);
+    assert.ok(copy.assurance.en.length > 20, provider);
   }
 });
 
 test("the card wording is never shown for a crypto checkout", () => {
-  assert.match(providerCopy("midtrans").assurance, /kartu/);
-  assert.doesNotMatch(providerCopy("nowpayments").assurance, /kartu/);
-  assert.match(providerCopy("nowpayments").assurance, /kripto/);
+  assert.match(providerCopy("midtrans").assurance.id, /kartu/);
+  assert.doesNotMatch(providerCopy("nowpayments").assurance.id, /kartu/);
+  assert.match(providerCopy("nowpayments").assurance.id, /kripto/);
+  assert.match(providerCopy("midtrans").assurance.en, /card/);
+  assert.doesNotMatch(providerCopy("nowpayments").assurance.en, /card/);
+  assert.match(providerCopy("nowpayments").assurance.en, /[Cc]rypto/);
+  assert.match(providerCopy("nowpayments-sandbox").assurance.id, /Jangan mengirim dana sungguhan/);
+  assert.match(providerCopy("nowpayments-sandbox").assurance.en, /Do not send real funds/);
 });
 
 test("an unknown provider names no processor at all", () => {
   const copy = providerCopy("stripe");
   assert.equal(copy.name, "penyedia pembayaran");
-  assert.doesNotMatch(copy.assurance, /Midtrans|NOWPayments/);
+  assert.doesNotMatch(copy.assurance.id, /Midtrans|NOWPayments/);
+  assert.doesNotMatch(copy.assurance.en, /Midtrans|NOWPayments/);
 });
 
 test("every supported provider declares the keys it cannot charge without", () => {

@@ -1,3 +1,5 @@
+import type { Locale } from "@/core/domain/i18n/locale";
+
 /**
  * How each payment provider is described to a buyer.
  *
@@ -10,22 +12,30 @@ export interface ProviderCopy {
   /** Display name, used mid-sentence and on the button. */
   name: string;
   /** What the buyer should know about how the money is handled. */
-  assurance: string;
+  assurance: Record<Locale, string>;
 }
 
 const COPY: Record<string, ProviderCopy> = {
   "nowpayments-sandbox": {
     name: "NOWPayments Sandbox",
-    assurance: "Simulasi pembayaran kripto pada database testing terpisah. Jangan mengirim dana sungguhan.",
+    assurance: {
+      id: "Simulasi pembayaran kripto pada database testing terpisah. Jangan mengirim dana sungguhan.",
+      en: "Simulated crypto payments use a separate testing database. Do not send real funds.",
+    },
   },
   midtrans: {
     name: "Midtrans",
-    assurance: "Pembayaran diproses Midtrans. CoinSecret tidak menyimpan nomor kartu Anda.",
+    assurance: {
+      id: "Pembayaran diproses Midtrans. CoinSecret tidak menyimpan nomor kartu Anda.",
+      en: "Payments are processed by Midtrans. CoinSecret does not store your card number.",
+    },
   },
   nowpayments: {
     name: "NOWPayments",
-    assurance:
-      "Pembayaran kripto diproses NOWPayments. CoinSecret tidak pernah memegang dana maupun kunci dompet Anda.",
+    assurance: {
+      id: "Pembayaran kripto diproses NOWPayments. CoinSecret tidak pernah memegang dana maupun kunci dompet Anda.",
+      en: "Crypto payments are processed by NOWPayments. CoinSecret never holds your funds or wallet keys.",
+    },
   },
 };
 
@@ -40,7 +50,10 @@ export function providerCopy(provider: string): ProviderCopy {
   return (
     COPY[provider] ?? {
       name: "penyedia pembayaran",
-      assurance: "Pembayaran diproses oleh penyedia eksternal.",
+      assurance: {
+        id: "Pembayaran diproses oleh penyedia eksternal.",
+        en: "Payments are processed by an external provider.",
+      },
     }
   );
 }

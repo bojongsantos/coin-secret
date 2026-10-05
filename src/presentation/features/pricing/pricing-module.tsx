@@ -310,7 +310,7 @@ export function PricingModule({ authenticated, plan, periodEnd, provider, quotes
         <div className="text-[12px] leading-relaxed text-muted">
           <p className="font-semibold text-foreground">{t("pricing.beforeYouPay")}</p>
           <p className="mt-2">
-            {provider.assurance} {t("pricing.noteUpfrontPlain")} {t("pricing.noteExpiry")}{" "}
+            {provider.assurance[locale]} {t("pricing.noteUpfrontPlain")} {t("pricing.noteExpiry")}{" "}
             {t("pricing.noteDisclaimer")}
           </p>
         </div>

@@ -221,8 +221,8 @@ export const MESSAGES = {
   "pricing.subscribe": { id: "Berlangganan", en: "Subscribe" },
   "pricing.benefits": { id: "Manfaat", en: "Benefits" },
   "pricing.noteUpfrontPlain": {
-    id: "Pro dibayar sekali di muka untuk periode yang dipilih dan tidak diperpanjang otomatis; tidak ada tagihan berulang.",
-    en: "Pro is paid once up front for the period you choose and does not auto-renew; there are no recurring charges.",
+    id: "Pro dibayar sekali di muka untuk periode yang dipilih dan tidak diperpanjang otomatis; tidak ada tagihan berulang. Minimum pembayaran berbeda untuk tiap aset dan jaringan. Jika checkout menolak jumlahnya, pilih aset pembayaran lain.",
+    en: "Pro is paid once up front for the period you choose and does not auto-renew; there are no recurring charges. Minimum amounts vary by asset and network. If checkout rejects the amount, choose another payment asset.",
   },
   "pricing.subhead": {
     id: "Berhenti menyisir chart berjam-jam. CoinSecret memindai pasar untukmu dan menyerahkan rencana trading yang siap dieksekusi.",

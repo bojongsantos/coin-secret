@@ -20,7 +20,22 @@ export async function POST(request: Request) {
       // delegated handler receives the same JSON values and request context.
       const headers = new Headers(request.headers);
       headers.delete("content-length");
-      request = new Request(request, { headers, body: JSON.stringify(body) });
+      // Framework request wrappers may not carry the native constructor's
+      // private state. Rebuild from public properties after the bounded read.
+      request = new Request(request.url, {
+        method: request.method,
+        headers,
+        body: JSON.stringify(body),
+        signal: request.signal,
+        credentials: request.credentials,
+        cache: request.cache,
+        redirect: request.redirect,
+        mode: request.mode,
+        referrer: request.referrer,
+        referrerPolicy: request.referrerPolicy,
+        integrity: request.integrity,
+        keepalive: request.keepalive,
+      });
     }
   } catch (error) {
     if (!(error instanceof HttpError)) throw error;

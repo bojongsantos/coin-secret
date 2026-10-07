@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MESSAGES, translate, statusMessageKey, domainMessageKey } from "@/shared/i18n/messages";
 import { REASONING_COPY, say } from "@/core/domain/analysis/reasoning-copy";
+import { billingPlan, formatMoney } from "@/core/domain/billing/plans";
 import { buildReasoning } from "@/core/domain/analysis/analysis-engine";
 import { LOCALES, normalizeLocale, oppositeLocale, DEFAULT_LOCALE } from "@/core/domain/i18n/locale";
 import { featureLabel, type FeatureKey } from "@/core/domain/access/gating";
@@ -72,6 +73,19 @@ test("placeholders are filled, and an unknown key is shown rather than thrown", 
     "nope.not.a.key",
     "a missing key is returned as itself",
   );
+});
+
+test("monthly pricing describes one payment for the paid 30-day period", () => {
+  const plan = billingPlan("monthly");
+  assert.equal(plan.totalUsd, 12);
+  assert.equal(plan.days, 30);
+  for (const locale of LOCALES) {
+    const total = formatMoney(plan.totalUsd, "USD", locale);
+    const text = translate(locale, "pricing.billedMonthly", { total });
+    assert.ok(text.includes(total), "the one-time price must be shown");
+    assert.match(text, locale === "en" ? /\bonce\b.*30 days/ : /\bsekali\b.*30 hari/);
+    assert.doesNotMatch(text, /every month|each month|tiap bulan|setiap bulan/i);
+  }
 });
 
 test("every gated feature and every setup status can be said in both languages", () => {

@@ -251,7 +251,7 @@ export const MESSAGES = {
     en: "Every coin and every trading plan.",
   },
   "pricing.perMonth": { id: "/ bulan", en: "/ month" },
-  "pricing.billedMonthly": { id: "Ditagih {total} tiap bulan", en: "Billed {total} every month" },
+  "pricing.billedMonthly": { id: "Bayar {total} sekali untuk 30 hari", en: "Pay {total} once for 30 days" },
   "pricing.billedOnce": {
     id: "Ditagih {total} sekali untuk {months} bulan",
     en: "Billed {total} once for {months} months",

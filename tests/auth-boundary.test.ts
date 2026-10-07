@@ -21,16 +21,48 @@ function load(path: string, dependencies: Record<string, unknown>, extra = {}) {
 const http = load("src/shared/server/http.ts", { "server-only": {}, zod });
 function boundary() {
   const seen: unknown[] = [];
+  const requests: Request[] = [];
   const route = load("src/app/api/auth/[...all]/route.ts", {
-    "better-auth/next-js": { toNextJsHandler: () => ({ GET: () => new Response(), POST: async (request: Request) => { seen.push(await request.json()); return new Response(null, { status: 204 }); } }) },
+    "better-auth/next-js": { toNextJsHandler: () => ({ GET: () => new Response(), POST: async (request: Request) => { requests.push(request); seen.push(await request.json()); return new Response(null, { status: 204 }); } }) },
     "node:crypto": { createHash },
     "@/core/application/rate-limit/fixed-window": { createFixedWindowLimiter },
     "@/infrastructure/auth/auth": { auth: {} },
     "@/shared/server/http": http,
   });
-  return { post: route.POST as (request: Request) => Promise<Response>, seen };
+  return { post: route.POST as (request: Request) => Promise<Response>, seen, requests };
 }
 const request = (path: string, body: string, headers: HeadersInit = {}) => new Request(`http://localhost:3000/api/auth/${path}`, { method: "POST", body, headers: { "content-type": "application/json", ...headers } });
+
+test("auth accepts framework-wrapped requests and preserves security context after its bounded read", async () => {
+  const f = boundary();
+  const controller = new AbortController();
+  const body = { email: "wrapper@example.invalid", password: "unchanged pasted password" };
+  const original = new Request("http://localhost:3000/api/auth/sign-in/email?callback=account", {
+    method: "POST", body: JSON.stringify(body), signal: controller.signal,
+    headers: { "content-type": "application/json", "content-length": "1", cookie: "session=fixture", origin: "https://coinsecret.example.invalid", "x-forwarded-for": "192.0.2.1" },
+    credentials: "include", cache: "no-store", redirect: "manual", mode: "same-origin",
+    referrer: "http://localhost:3000/login", referrerPolicy: "same-origin", integrity: "", keepalive: true,
+  });
+  // A wrapper exposes valid Web Request getters but does not own native
+  // private fields, matching the Next.js development request failure.
+  const wrapped = new Proxy(original, { get(target, property) {
+    const value = Reflect.get(target, property, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+  assert.equal((await f.post(wrapped)).status, 204);
+  assert.deepEqual(f.seen[0], body);
+  const delegated = f.requests[0];
+  for (const property of ["url", "method", "credentials", "cache", "redirect", "mode", "referrer", "referrerPolicy", "integrity", "keepalive"] as const) {
+    assert.equal(delegated[property], original[property]);
+  }
+  for (const header of ["cookie", "origin", "x-forwarded-for", "content-type"]) {
+    assert.equal(delegated.headers.get(header), original.headers.get(header));
+  }
+  assert.equal(delegated.headers.get("content-length"), null);
+  assert.equal(delegated.signal.aborted, false);
+  controller.abort();
+  assert.equal(delegated.signal.aborted, true);
+});
 
 test("auth bounds chunked or dishonest-length JSON before delegation", async () => {
   const f = boundary();

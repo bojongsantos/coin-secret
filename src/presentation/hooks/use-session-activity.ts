@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { notifyAuthStateChanged } from "@/infrastructure/auth/auth-client";
 
 /** Only interactions send a write. Timers, focus and market polling only read. */
-export function useSessionActivity(authenticated: boolean) {
+export function useSessionActivity(authenticated: boolean, onExpired?: () => void, sessionEpoch = 0) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -22,6 +22,7 @@ export function useSessionActivity(authenticated: boolean) {
     function expired() {
       if (stopped) return;
       stopped = true;
+      onExpired?.();
       notifyAuthStateChanged();
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
       router.refresh();
@@ -84,7 +85,8 @@ export function useSessionActivity(authenticated: boolean) {
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("focus", resume);
     const checkTimer = setInterval(() => { void sync(); }, 60_000);
-    void sync();
+    // Fail closed if the initial authoritative session deadline cannot be read.
+    void sync(false, true);
     return () => {
       stopped = true;
       clearTimeout(deadlineTimer);
@@ -94,5 +96,5 @@ export function useSessionActivity(authenticated: boolean) {
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("focus", resume);
     };
-  }, [authenticated, pathname, router]);
+  }, [authenticated, onExpired, pathname, router, sessionEpoch]);
 }

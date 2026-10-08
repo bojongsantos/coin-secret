@@ -18,7 +18,7 @@ type Filter = { id: string; createdAt?: { gt: Date; lte?: Date }; updatedAt?: { 
 
 function load(path: string, dependencies: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   const exports: Record<string, unknown> = {};
-  runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {
+  runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
     exports, Request, Response, Headers, URL, console,
     require(name: string) { if (name in dependencies) return dependencies[name]; throw new Error(`Unexpected import ${name}`); },
     ...extra,
@@ -215,6 +215,7 @@ function clientHook() {
   let cleanup: (() => void) | undefined;
   const requests: string[] = [];
   const redirects: string[] = [];
+  let expirations = 0;
   const listeners = new Map<string, Set<(event: { isTrusted: boolean }) => void>>();
   const timers = new Map<number, { at: number; interval?: number; callback: () => void }>();
   const addEventListener = (name: string, callback: (event: { isTrusted: boolean }) => void) => {
@@ -241,11 +242,12 @@ function clientHook() {
       if (options.method === "POST") deadline = now + 30 * minute;
       return { ok: true, status: 200, json: async () => ({ deadline, serverNow: now }) };
     },
-  }).useSessionActivity as (authenticated: boolean) => void;
-  hook(true);
+  }).useSessionActivity as (authenticated: boolean, onExpired?: () => void) => void;
+  hook(true, () => { expirations++; });
   const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
   return {
     requests, redirects, document, flush,
+    expirations: () => expirations,
     offline: () => { offline = true; },
     event: (name: string, isTrusted = true) => { for (const callback of listeners.get(name) ?? []) callback({ isTrusted }); },
     extendInAnotherTab: (milliseconds: number) => { deadline += milliseconds; },
@@ -299,6 +301,7 @@ test("a known session deadline signs the client out even when revalidation is of
   f.offline();
   await f.advance(30 * minute + 20);
   assert.deepEqual(f.redirects, ["/login?next=%2Faccount"]);
+  assert.equal(f.expirations(), 1);
   assert.equal(f.requests.includes("POST"), false);
   f.stop();
 });
@@ -311,4 +314,110 @@ test("deadline revalidation observes another tab's genuine activity without logg
   assert.equal(f.redirects.length, 0);
   assert.equal(f.requests.includes("POST"), false);
   f.stop();
+});
+
+test("expired private page content is unmounted offline until a new authenticated response", async () => {
+  type View = { type: unknown; props: Record<string, unknown> };
+  function contains(value: unknown, wanted: unknown): boolean {
+    if (value === wanted) return true;
+    if (Array.isArray(value)) return value.some((child) => contains(child, wanted));
+    if (!value || typeof value !== "object" || !("props" in value)) return false;
+    return contains((value as View).props.children, wanted);
+  }
+  const state: unknown[] = [];
+  const effects: Array<() => void> = [];
+  const listeners = new Map<string, () => void>();
+  const refs: Array<{ current: unknown }> = [];
+  let stateCursor = 0;
+  let refCursor = 0;
+  let mounting = true;
+  let pathname = "/account";
+  let offline = false;
+  let authenticated = true;
+  let delayNext = false;
+  let resolveStale: ((response: unknown) => void) | undefined;
+  let onExpired: (() => void) | undefined;
+  const changed = "fixture-auth-state-changed";
+  const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
+  const provider = load("src/presentation/features/access/plan-provider.tsx", {
+    react: {
+      createContext: () => ({ Provider: "provider" }), useContext() {},
+      useCallback: (callback: unknown) => callback, useMemo: (callback: () => unknown) => callback(),
+      useEffect: (effect: () => void) => { if (mounting) effects.push(effect); },
+      useRef: (initial: unknown) => { const index = refCursor++; refs[index] ??= { current: initial }; return refs[index]; },
+      useState: (initial: unknown) => {
+        const index = stateCursor++;
+        if (index === state.length) state.push(initial);
+        return [state[index], (value: unknown) => { state[index] = typeof value === "function" ? (value as (previous: unknown) => unknown)(state[index]) : value; }];
+      },
+    },
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
+    "next/navigation": { usePathname: () => pathname }, "next/link": { default: "link" },
+    "@/core/domain/access/gating": { hasFeature: () => false },
+    "@/infrastructure/auth/auth-client": { AUTH_STATE_CHANGED_EVENT: changed },
+    "@/presentation/hooks/use-session-activity": { useSessionActivity: (_authenticated: boolean, expire: () => void) => { onExpired = expire; } },
+  }, {
+    window: { addEventListener: (name: string, callback: () => void) => listeners.set(name, callback), removeEventListener: (name: string) => listeners.delete(name) },
+    fetch: async () => {
+      if (offline) throw new Error("Offline");
+      if (delayNext) {
+        delayNext = false;
+        return new Promise((resolve) => { resolveStale = resolve; });
+      }
+      return { ok: true, json: async () => ({ authenticated, plan: "free", access: {} }) };
+    },
+  }).PlanProvider as (props: { children: unknown }) => unknown;
+  const secret = { type: "private-account-content", props: { children: "Sensitive profile" } };
+  const render = (children: unknown = secret) => { stateCursor = 0; refCursor = 0; return provider({ children }); };
+  const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+  render();
+  mounting = false;
+  effects.forEach((effect) => effect());
+  await flush();
+  assert.equal(contains(render(), secret), true);
+  offline = true;
+  listeners.get(changed)?.();
+  await flush();
+  assert.equal(((render() as View).props.value as { authenticated: boolean }).authenticated, true,
+    "An offline access read must keep the session deadline monitor alive");
+  offline = false;
+  delayNext = true;
+  listeners.get(changed)?.();
+  await flush();
+  offline = true;
+  assert.ok(onExpired, "Provider gives the hook a local expiry callback");
+  onExpired();
+  resolveStale?.({ ok: true, json: async () => ({ authenticated: true, plan: "free", access: {} }) });
+  await flush();
+  assert.equal(contains(render(), secret), false, "Private children disappear even if navigation cannot finish offline");
+  listeners.get(changed)?.();
+  await flush();
+  assert.equal(contains(render(), secret), false);
+  const login = { type: "public-login-form", props: {} };
+  pathname = "/login";
+  assert.equal(contains(render(login), login), true, "Expiry lock still permits signing in again");
+  pathname = "/account";
+  offline = false;
+  authenticated = false;
+  listeners.get(changed)?.();
+  await flush();
+  assert.equal(contains(render(), secret), false, "An anonymous response cannot clear the expiry lock");
+  authenticated = true;
+  listeners.get(changed)?.();
+  await flush();
+  assert.equal(contains(render(), secret), true, "A new authenticated server response unlocks the private page");
+  delayNext = true;
+  listeners.get(changed)?.();
+  await flush();
+  listeners.get(changed)?.();
+  await flush();
+  assert.equal(((render() as View).props.value as { authenticated: boolean }).authenticated, true);
+  resolveStale?.({ ok: true, json: async () => ({ authenticated: false, plan: "free", access: {} }) });
+  await flush();
+  assert.equal(((render() as View).props.value as { authenticated: boolean }).authenticated, true,
+    "An older anonymous response cannot overwrite the new login or disable its session monitor");
+  authenticated = false;
+  listeners.get(changed)?.();
+  await flush();
+  assert.equal(contains(render(), secret), false, "A current authoritative anonymous response locks an authenticated private page");
 });

@@ -46,7 +46,7 @@ test("an already cancelled exchange read never reaches the provider", async () =
   assert.equal(calls, 0);
 });
 
-function contextService(mode: "fallback" | "timeout" | "errors", failure?: unknown) {
+function contextService(mode: "fallback" | "timeout" | "errors", failure?: unknown, timeoutScale = 100) {
   const requests: string[] = [];
   const budgets: number[] = [];
   const warnings: Array<{ event: string; detail: { provider: string; elapsedMs: number; code: string } }> = [];
@@ -57,7 +57,7 @@ function contextService(mode: "fallback" | "timeout" | "errors", failure?: unkno
       timeout: (ms: number) => {
         budgets.push(ms);
         const controller = new AbortController();
-        setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms / 100);
+        setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms / timeoutScale);
         return controller.signal;
       },
     },
@@ -94,11 +94,22 @@ test("futures fallback reports the answering source and sanitized failure diagno
   assert.equal(requests.length, 5, "cached reads do not re-probe providers");
 });
 
-test("all stalled futures sources finish within the shared budget and never fabricate metrics", async () => {
-  const { api, budgets, warnings } = contextService("timeout");
+test("all stalled futures sources finish within the shared budget and never fabricate metrics", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const { api, budgets, warnings } = contextService("timeout", undefined, 1);
   const started = Date.now();
-  const payload = await api.getMarketContextPayload() as { context: { fundingRate: { warning: boolean; value: string }; openInterest: { warning: boolean } } };
-  assert.ok(Date.now() - started < 400, "scaled deadlines should bound all three attempts");
+  const pending = api.getMarketContextPayload() as Promise<{ context: { fundingRate: { warning: boolean; value: string }; openInterest: { warning: boolean } } }>;
+  // Let promise continuations start each venue before advancing virtual time.
+  // Real compressed timers can exhaust the shared budget under CPU contention.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    assert.equal(budgets.filter((ms) => ms === 2500).length, attempt);
+    t.mock.timers.tick(2500);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  const payload = await pending;
+  assert.equal(Date.now() - started, 7500);
+  assert.ok(Date.now() - started < 8000, "provider deadlines should fit within the shared budget");
   assert.equal(budgets.filter((ms) => ms === 2500).length, 3);
   assert.ok(budgets.includes(8000));
   assert.equal(payload.context.fundingRate.warning, true);
@@ -110,6 +121,16 @@ test("all stalled futures sources finish within the shared budget and never fabr
   assert.ok(diagnostic.providers.every((row) => row.detail === "timeout"));
   assert.equal(warnings.length, 3);
   assert.ok(warnings.every((warning) => warning.detail.code === "TIMEOUT"));
+
+  const expired = contextService("timeout", undefined, 1);
+  const expiredPending = expired.api.getMarketContextPayload() as Promise<unknown>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(8000);
+  await expiredPending;
+  const expiredDiagnostic = expired.api.getDerivativesDiagnostics() as { source: string | null; providers: Array<{ detail: string }> };
+  assert.equal(expiredDiagnostic.source, null);
+  assert.equal(expiredDiagnostic.providers.length, 1, "an exhausted shared budget prevents further provider attempts");
+  assert.equal(expiredDiagnostic.providers[0].detail, "timeout");
 });
 
 test("provider warnings expose only allowlisted failure codes and preserve response diagnostics", async () => {

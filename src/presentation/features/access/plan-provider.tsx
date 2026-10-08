@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { Plan } from "@/core/domain/models";
 import { hasFeature, type FeatureKey } from "@/core/domain/access/gating";
 import { AUTH_STATE_CHANGED_EVENT } from "@/infrastructure/auth/auth-client";
+import { useSessionActivity } from "@/presentation/hooks/use-session-activity";
 
 interface PlanContextValue {
   authenticated: boolean;
@@ -19,6 +20,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [plan, setPlanState] = useState<Plan>("free");
   const [entitlements, setEntitlements] = useState<Partial<Record<FeatureKey, boolean>>>({});
+  useSessionActivity(authenticated);
 
   const sync = useCallback(() => {
     fetch("/api/entitlements", { cache: "no-store" })

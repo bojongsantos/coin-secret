@@ -12,7 +12,7 @@ import {
   normalizeUsdtSymbol,
 } from "@/core/domain/market/symbol";
 import type { CurrentUserDto } from "@/core/domain/identity";
-import { authClient, notifyAuthStateChanged } from "@/infrastructure/auth/auth-client";
+import { authClient, AUTH_STATE_CHANGED_EVENT, notifyAuthStateChanged } from "@/infrastructure/auth/auth-client";
 import { fetchSearchableSymbols } from "@/infrastructure/market-data/symbol-catalog-client";
 import { usePlan } from "@/presentation/features/access/plan-provider";
 import { useT } from "@/presentation/hooks/use-translate";
@@ -48,11 +48,17 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
     void fetchSearchableSymbols()
       .then((all) => setCatalog(mergeSearchableSymbols([], all)))
       .catch(() => setCatalog(DEFAULT_WATCHLIST));
-    fetch("/api/me", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { user?: CurrentUserDto } | null) => setUser(data?.user ?? null))
-      .catch(() => setUser(null))
-      .finally(() => setResolved(true));
+    let active = true;
+    function syncUser() {
+      void fetch("/api/me", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { user?: CurrentUserDto } | null) => { if (active) setUser(data?.user ?? null); })
+        .catch(() => { if (active) setUser(null); })
+        .finally(() => { if (active) setResolved(true); });
+    }
+    syncUser();
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, syncUser);
+    window.addEventListener("focus", syncUser);
 
     function onClick(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
@@ -69,6 +75,9 @@ export function AppTopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onShortcut);
     return () => {
+      active = false;
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, syncUser);
+      window.removeEventListener("focus", syncUser);
       document.removeEventListener("mousedown", onClick);
       document.removeEventListener("keydown", onShortcut);
     };

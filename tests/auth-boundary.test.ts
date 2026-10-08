@@ -6,7 +6,9 @@ import { createHash, randomBytes } from "node:crypto";
 import ts from "typescript";
 import * as zod from "zod";
 import { betterAuth } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
 import { emailOTP } from "better-auth/plugins";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 
 function load(path: string, dependencies: Record<string, unknown>, extra = {}) {
@@ -27,6 +29,7 @@ function boundary() {
     "node:crypto": { createHash },
     "@/core/application/rate-limit/fixed-window": { createFixedWindowLimiter },
     "@/infrastructure/auth/auth": { auth: {} },
+    "@/infrastructure/auth/active-session": { getActiveSession: async () => null },
     "@/shared/server/http": http,
   });
   return { post: route.POST as (request: Request) => Promise<Response>, seen, requests };
@@ -90,17 +93,23 @@ test("production refuses demo authentication and reset while regular accounts re
   assert.equal((await f.post(request("request-password-reset", JSON.stringify({ email: "real@example.invalid" })))).status, 204);
 });
 
-test("actual auth configuration disables unused OTP paths and retains verify-then-login", async () => {
-  const sent: { email: string; html: string }[] = [];
-  const configured = load("src/infrastructure/auth/auth.ts", {
+function configuredAuth(sent: { email: string; html: string }[], throttle: (email: string, action: string) => Promise<number> = async () => 0) {
+  return load("src/infrastructure/auth/auth.ts", {
     "server-only": {}, "better-auth": { betterAuth: (options: unknown) => options },
+    "better-auth/api": { APIError, createAuthMiddleware }, zod,
     "better-auth/adapters/prisma": { prismaAdapter: () => undefined }, "better-auth/plugins": { emailOTP },
     "@/infrastructure/database/prisma": { prisma: {} },
     "@/infrastructure/email/email-service": { sendTransactionalEmail: async (mail: { email: string; html: string }) => sent.push(mail) },
     "@/infrastructure/auth/local-addresses": { localIPv4Addresses: () => [] },
     "@/shared/lib/trusted-origins": { resolveTrustedOrigins: () => ["http://localhost:3000"] },
+    "@/infrastructure/auth/password-reset-throttle": { passwordResetThrottle: throttle },
   }).auth as Parameters<typeof betterAuth>[0];
-  const instance = betterAuth({ ...configured, secret: randomBytes(32).toString("base64"), rateLimit: { enabled: false } });
+}
+
+test("actual auth configuration uses one 6-digit reset email, revokes sessions and retains verify-then-login", async () => {
+  const sent: { email: string; html: string }[] = [];
+  const configured = configuredAuth(sent);
+  const instance = betterAuth({ ...configured, database: memoryAdapter({ user: [], session: [], account: [], verification: [] }), secret: randomBytes(32).toString("base64"), rateLimit: { enabled: false } });
   const email = "verify-flow@example.invalid";
   const password = randomBytes(24).toString("base64");
   const send = (path: string, body: object) => instance.handler(request(path, JSON.stringify(body), { origin: "http://localhost:3000" }));
@@ -120,8 +129,56 @@ test("actual auth configuration disables unused OTP paths and retains verify-the
   assert.equal(login.status, 200);
   assert.ok(login.headers.get("set-cookie"));
   const before = sent.length;
-  assert.equal((await send("request-password-reset", { email, redirectTo: "/reset-password" })).status, 200);
+  assert.equal((await send("email-otp/request-password-reset", { email })).status, 200);
   assert.equal(sent.length, before + 1, "Recovery sends one reset message, not a verification email as well");
+  const resetOtp = sent.at(-1)?.html.match(/<strong>(\d{6})<\/strong>/)?.[1];
+  assert.ok(resetOtp);
+  assert.doesNotMatch(sent.at(-1)!.html, /href=|reset-password\?/);
+  const context = await instance.$context;
+  const stored = await context.internalAdapter.findVerificationValue(`forget-password-otp-${email}`);
+  assert.ok(stored);
+  assert.notEqual(stored.value.split(":")[0], resetOtp, "The database does not store a plain OTP");
+  const nextPassword = randomBytes(24).toString("base64");
+  const cookie = login.headers.get("set-cookie")!.split(",").map((part) => part.split(";")[0]).join(";");
+  assert.ok(await (await instance.handler(new Request("http://localhost:3000/api/auth/get-session", { headers: { cookie } }))).json());
+  assert.equal((await send("email-otp/reset-password", { email, otp, password: nextPassword })).status, 400, "Registration codes cannot reset a password");
+  const resets = await Promise.all([0, 1].map(() => send("email-otp/reset-password", { email, otp: resetOtp, password: nextPassword })));
+  assert.deepEqual(resets.map((response) => response.status).sort(), [200, 400], "A reset OTP is single-use under concurrent submissions");
+  assert.equal(resets.find((response) => response.status === 200)?.headers.get("set-cookie"), null, "Reset never signs the user in");
+  assert.equal(await (await instance.handler(new Request("http://localhost:3000/api/auth/get-session", { headers: { cookie } }))).json(), null, "Reset invalidates the previous session");
+  assert.equal((await send("sign-in/email", { email, password })).status, 401);
+  assert.equal((await send("sign-in/email", { email, password: nextPassword })).status, 200);
+  assert.equal((await send("email-otp/request-password-reset", { email: "missing@example.invalid" })).status, 200);
+  assert.equal(sent.length, before + 1, "Missing accounts get the same response but no email");
+  await send("email-otp/request-password-reset", { email });
+  const expiringOtp = sent.at(-1)!.html.match(/<strong>(\d{6})<\/strong>/)![1];
+  await context.internalAdapter.updateVerificationByIdentifier(`forget-password-otp-${email}`, { expiresAt: new Date(Date.now() - 1_000) });
+  assert.equal((await send("email-otp/reset-password", { email, otp: expiringOtp, password: nextPassword })).status, 400);
+  await send("email-otp/request-password-reset", { email });
+  const lockedOtp = sent.at(-1)!.html.match(/<strong>(\d{6})<\/strong>/)![1];
+  const wrong = lockedOtp === "000000" ? "111111" : "000000";
+  for (let i = 0; i < 5; i++) assert.equal((await send("email-otp/reset-password", { email, otp: wrong, password: nextPassword })).status, 400);
+  assert.equal((await send("email-otp/reset-password", { email, otp: lockedOtp, password: nextPassword })).status, 403, "Five wrong attempts invalidate the code");
+});
+
+test("reset recipient throttling cannot be bypassed by the general OTP sender or malformed inputs", async () => {
+  const sent: { email: string; html: string }[] = [];
+  const checks: { email: string; action: string }[] = [];
+  const configured = configuredAuth(sent, async (email, action) => { checks.push({ email, action }); return 60; });
+  const instance = betterAuth({ ...configured, database: memoryAdapter({ user: [], session: [], account: [], verification: [] }), secret: randomBytes(32).toString("base64"), rateLimit: { enabled: false } });
+  const send = (path: string, body: object) => instance.handler(request(path, JSON.stringify(body), { origin: "http://localhost:3000" }));
+  for (const path of ["email-otp/request-password-reset", "email-otp/send-verification-otp"]) {
+    const response = await send(path, { email: " Account@Example.invalid ", type: "forget-password" });
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), "60");
+  }
+  assert.equal(JSON.stringify(checks), JSON.stringify([{ email: "account@example.invalid", action: "send" }, { email: "account@example.invalid", action: "send" }]));
+  assert.equal((await send("email-otp/request-password-reset", { email: "invalid" })).status, 400);
+  for (const otp of ["12345", "abcdef", 123456]) {
+    assert.equal((await send("email-otp/reset-password", { email: "account@example.invalid", otp, password: "a valid password" })).status, 400);
+  }
+  assert.equal(checks.length, 2, "Malformed input is rejected before touching reset quota");
+  assert.equal(sent.length, 0);
 });
 
 test("unverified login offers verification without sending mail or creating a session", async () => {

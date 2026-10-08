@@ -35,6 +35,11 @@ import { useTheme } from "@/presentation/hooks/use-ui-preference";
 import { useT } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import type { HistoryState } from "@/presentation/hooks/use-live-analysis";
+import styles from "./chart-panel.module.css";
+
+function chartRenderScale(container: HTMLElement): number {
+  return Number(getComputedStyle(container).getPropertyValue("--chart-render-scale")) || 1;
+}
 
 /**
  * Draws a single text label centered inside a zone box on the chart pane.
@@ -46,7 +51,6 @@ class ZoneLabelPrimitive implements IPanePrimitive<Time> {
   private _priceSeries: ISeriesApi<"Candlestick"> | null = null;
   private _text: string;
   private _color: string;
-  private _font = "italic 700 11px Inter, system-ui, sans-serif";
   private _timeFrom: Time;
   private _timeTo: Time;
   private _priceTop: number;
@@ -99,7 +103,7 @@ class ZoneLabelPrimitive implements IPanePrimitive<Time> {
               const bottom = Math.max(yTop, yBottom);
               if (right - left < 4 || bottom - top < 4) return;
 
-              context.font = this._font;
+              context.font = `italic 700 ${this._chart?.options().layout.fontSize ?? 11}px Inter, system-ui, sans-serif`;
               context.textAlign = "center";
               context.textBaseline = "middle";
               const textW = context.measureText(this._text).width;
@@ -269,7 +273,7 @@ export function ChartPanel({
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: CHART_THEME.dark.text,
-        fontSize: 11,
+        fontSize: 11 * chartRenderScale(container),
         attributionLogo: true,
       },
       grid: {
@@ -360,7 +364,22 @@ export function ChartPanel({
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRange);
 
+    // Only the canvas cancels the app's desktop zoom. Keep its density when
+    // crossing that breakpoint, without rebuilding the chart or its series.
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const onRenderScaleChange = () => {
+      const scale = chartRenderScale(container);
+      const range = chart.timeScale().getVisibleLogicalRange();
+      chart.applyOptions({
+        layout: { fontSize: 11 * scale },
+        timeScale: { barSpacing: (chart.options().timeScale.timeVisible ? 7 : 8) * scale },
+      });
+      if (range) chart.timeScale().setVisibleLogicalRange(range);
+    };
+    desktop.addEventListener("change", onRenderScaleChange);
+
     return () => {
+      desktop.removeEventListener("change", onRenderScaleChange);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRange);
       chart.remove();
       chartRef.current = null;
@@ -398,10 +417,11 @@ export function ChartPanel({
   useEffect(() => {
     const chart = chartRef.current;
     const candles = candleSeriesRef.current;
-    if (!chart || !candles) return;
+    const container = containerRef.current;
+    if (!chart || !candles || !container) return;
     chart.timeScale().applyOptions({
       timeVisible: timeframe !== "1D",
-      barSpacing: timeframe === "1D" ? 8 : 7,
+      barSpacing: (timeframe === "1D" ? 8 : 7) * chartRenderScale(container),
       fixLeftEdge: history.reachedStart,
       fixRightEdge: false,
     });
@@ -589,7 +609,7 @@ export function ChartPanel({
     if (pendingFitKeyRef.current) {
       pendingFitKeyRef.current = null;
       const lastIdx = data.candles.length - 1;
-      const visibleLen = Math.round(chart.timeScale().width() / 7);
+      const visibleLen = Math.round(chart.timeScale().width() / chart.options().timeScale.barSpacing);
       const from = Math.max(0, lastIdx - Math.round(visibleLen * 0.82));
       chart.timeScale().setVisibleLogicalRange({ from, to: lastIdx + ZONE_EXTEND_BARS });
     }
@@ -691,7 +711,7 @@ export function ChartPanel({
       </div>
 
       <div className="relative h-[420px] w-full">
-        <div ref={containerRef} className="h-full w-full" />
+        <div ref={containerRef} className={styles.canvas} />
         {truncationNotice && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-surface/90 px-3 py-1 text-[10px] font-medium text-muted-2 shadow-sm backdrop-blur">
             {truncationNotice}

@@ -3,13 +3,13 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import type { CurrentUserDto, SubscriptionPlan, UserRole } from "@/core/domain/identity";
-import { auth } from "@/infrastructure/auth/auth";
+import { getActiveSession } from "@/infrastructure/auth/active-session";
 import { prisma } from "@/infrastructure/database/prisma";
 import { effectivePlan } from "@/core/domain/access/subscription";
 import { HttpError } from "@/shared/server/http";
 
 export const getCurrentUser = cache(async (): Promise<CurrentUserDto | null> => {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getActiveSession(await headers());
   if (!session) return null;
   const record = await prisma.user.findUnique({
     where: { id: session.user.id },

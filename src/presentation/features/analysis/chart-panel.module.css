@@ -1,0 +1,15 @@
+.canvas {
+  --chart-render-scale: 1;
+  height: 100%;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  :global(.cs-app) .canvas {
+    /* Native chart input uses viewport pixels. Cancel the app's 0.8 zoom so
+       those pixels also match the canvas; percentage dimensions still fill
+       the existing viewport, preserving the desktop layout. */
+    zoom: 1.25;
+    --chart-render-scale: 0.8;
+  }
+}

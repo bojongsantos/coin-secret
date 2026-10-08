@@ -2,12 +2,20 @@ import { toNextJsHandler } from "better-auth/next-js";
 import { createHash } from "node:crypto";
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 import { auth } from "@/infrastructure/auth/auth";
+import { getActiveSession } from "@/infrastructure/auth/active-session";
 import { HttpError, readBoundedJson } from "@/shared/server/http";
 
 const handler = toNextJsHandler(auth);
 const signInLimiter = createFixedWindowLimiter({ limit: 8, windowMs: 10 * 60_000 });
 
-export const GET = handler.GET;
+async function expireInactiveSession(request: Request) {
+  if (request.headers.get("cookie")?.includes("coinsecret")) await getActiveSession(request.headers);
+}
+
+export async function GET(request: Request) {
+  await expireInactiveSession(request);
+  return handler.GET(request);
+}
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -57,5 +65,6 @@ export async function POST(request: Request) {
       }
     }
   }
+  await expireInactiveSession(request);
   return handler.POST(request);
 }

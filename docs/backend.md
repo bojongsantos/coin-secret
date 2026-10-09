@@ -115,8 +115,8 @@ Status dihitung oleh satu penelusuran di `core/domain/analysis/setup-lifecycle.t
 
 Tiga fase, berurutan, karena limit order tidak bisa terisi sebelum ia bisa dipasang:
 
-1. **Terbentuk.** Impuls yang membentuk zona menembus entry — itulah yang membuatnya impuls. Entry supply zone berada di sisi bawah zona, jadi harga yang masih di dalam zona sudah berada di atasnya. Tidak ada yang dihitung sampai harga menutup melewati entry.
-2. **Terpasang.** Limit hidup dan terisi ketika harga kembali menyentuhnya. Bila harga justru lari ke target pertama tanpa pernah kembali, setup berstatus Missed.
+1. **Terbentuk.** Candle dasar tidak dihitung sebagai pengisian. Setelah candle dasar, wick yang melewati entry searah impuls mengaktifkan limit: high di atas entry untuk long, low di bawah entry untuk short. Penutupan candle melewati entry tidak diwajibkan.
+2. **Terpasang.** Limit terisi ketika harga kembali menyentuh entry pada candle berikutnya. Bila target pertama tercapai sebelum pengisian, termasuk pada candle aktivasi, setup menjadi Missed dan order dibatalkan. Sentuhan entry setelah pembatalan tidak dapat menghidupkan order kembali.
 3. **Terisi.** Target dan stop berlaku.
 
 Pada bar pengisian hanya stop yang boleh tercatat, dan bar yang menyentuh stop sekaligus target diputus sebagai kerugian. Urutan intrabar tidak diketahui, jadi aturannya sama seperti pada arsip: jangan mengklaim kemenangan yang tak terbukti, jangan menyingkirkan kerugian yang tak bisa disingkirkan.

@@ -5,8 +5,10 @@ import {
   buildRiskTargets,
   computeSetupStatus,
   findSwingStopLoss,
+  readPublishedSetup,
   type SdZone,
 } from "@/core/domain/analysis/supply-demand";
+import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle } from "@/core/domain/models";
 
 function candle(time: number, open: number, high: number, low: number, close: number): Candle {
@@ -69,6 +71,51 @@ test("a target reached on the fill bar itself is not claimed", () => {
   // before the order exists. The claim waits for a bar that can prove it.
   const sameBar = history(candle(4, 101, 121, 99, 119));
   assert.equal(computeSetupStatus(sameBar, zone, true, 100, 90, 110, 120, 119), "Running");
+});
+
+test("a missed limit is cancelled even when price later returns to entry", () => {
+  for (const direction of ["long", "short"] as const) {
+    const long = direction === "long";
+    const plan = {
+      direction,
+      entry: 100,
+      stopLoss: long ? 90 : 110,
+      target1: long ? 110 : 90,
+      target2: long ? 120 : 80,
+    };
+    const bars = long
+      ? [
+          candle(1, 100, 101, 99, 100),
+          candle(2, 100, 105, 100, 104), // armed
+          candle(3, 104, 111, 103, 109), // T1 before entry: cancelled
+          candle(4, 109, 110, 99, 104), // later retest must not fill
+          candle(5, 104, 121, 103, 120), // later profit must not be claimed
+        ]
+      : [
+          candle(1, 100, 101, 99, 100),
+          candle(2, 100, 100, 95, 96), // armed
+          candle(3, 96, 97, 89, 91), // T1 before entry: cancelled
+          candle(4, 91, 101, 90, 96), // later retest must not fill
+          candle(5, 96, 97, 79, 80), // later profit must not be claimed
+        ];
+    const price = bars[bars.length - 1].close;
+    const life = traceSetupLifecycle(bars, plan, 0, price);
+    assert.equal(life.status, "Missed", direction);
+    assert.equal(life.filledIndex, null, direction);
+    assert.equal(life.target2Index, null, direction);
+
+    // The shared reader must release the setup rather than advertise a trade
+    // that could only fill after its limit order had already been cancelled.
+    const reading = readPublishedSetup(bars, {
+      ...plan,
+      confidence: 80,
+      zoneTop: long ? 100 : 105,
+      zoneBottom: long ? 95 : 100,
+      zoneBaseTime: bars[0].time,
+    }, price);
+    assert.equal(reading.status, "Missed", direction);
+    assert.equal(reading.setup, null, direction);
+  }
 });
 
 test("a setup is not filled by the impulse that created it", () => {

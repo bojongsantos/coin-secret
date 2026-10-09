@@ -108,8 +108,8 @@ const OPEN = 1_700_000_000;
 /**
  * A short that was published, filled, and stopped out — long ago.
  *
- * Bars 0-400 sit below the entry, so the plan is armed and waiting. Price
- * climbs into the entry around bar 420, takes the stop by bar 460, and then
+ * Bars 0-400 sit below entry but above T1, so the plan is armed and waiting.
+ * Price climbs into entry around bar 415, takes the stop by bar 460, and then
  * spends the rest of the tape far above every level, never coming back. The
  * last three hundred bars therefore look like a market that has nothing to do
  * with this plan at all.
@@ -118,8 +118,8 @@ function stoppedOutTape(): Candle[] {
   const out: Candle[] = [];
   for (let i = 0; i < 1_000; i++) {
     let close: number;
-    if (i <= 400) close = 100;
-    else if (i <= 460) close = 100 + ((i - 400) / 60) * 5; // 100 → 105
+    if (i <= 400) close = 101;
+    else if (i <= 460) close = 101 + ((i - 400) / 60) * 4; // 101 → 105
     else close = 110;
     const open = out[i - 1]?.close ?? close;
     out.push({

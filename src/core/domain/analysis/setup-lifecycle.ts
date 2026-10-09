@@ -48,7 +48,7 @@ export interface SetupPlan {
 
 export interface SetupLifecycle {
   /**
-   * Bar where price first closed clear of the entry, in the direction the
+   * Bar where price first traded clear of the entry, in the direction the
    * impulse travelled. Null while the setup is still forming.
    */
   armedIndex: number | null;
@@ -73,8 +73,8 @@ export interface SetupLifecycle {
  *     is already past it and `high >= entry` is true on the very first bar.
  *     Counting that as a fill marked every setup filled the instant it was
  *     detected, and any later dip then read as "Target 1 reached" on a trade
- *     nobody could have been in. Nothing counts until price has closed clear
- *     of the entry and the order has somewhere to wait.
+ *     nobody could have been in. Nothing fills until price has traded clear
+ *     of the entry after the base bar and returned on a later candle.
  *
  *  2. **Armed.** The limit is live. It fills when price trades back to it. If
  *     price instead runs to the first target without ever returning, the move
@@ -104,14 +104,21 @@ export function traceSetupLifecycle(
   const stoppedOn = (c: Candle) => (long ? c.low <= plan.stopLoss : c.high >= plan.stopLoss);
   const reached = (c: Candle, level: number) => (long ? c.high >= level : c.low <= level);
 
-  for (let i = Math.max(0, fromIndex); i < candles.length; i++) {
+  const baseIndex = Math.max(0, fromIndex);
+  for (let i = baseIndex; i < candles.length; i++) {
     const candle = candles[i];
 
     if (armedIndex === null) {
-      // A close, not a wick: a single spike through the entry is not the
-      // impulse leaving, and treating it as one re-opens the same hole.
-      const departed = long ? candle.close > plan.entry : candle.close < plan.entry;
-      if (departed) armedIndex = i;
+      // The base and departure bars cannot prove a subsequent entry fill.
+      if (i === baseIndex) continue;
+      const departed = long ? candle.high > plan.entry : candle.low < plan.entry;
+      if (departed) {
+        armedIndex = i;
+        if (reached(candle, plan.target1)) {
+          missed = true;
+          break;
+        }
+      }
       continue;
     }
 
@@ -125,7 +132,11 @@ export function traceSetupLifecycle(
         }
         continue;
       }
-      if (reached(candle, plan.target1)) missed = true;
+      if (reached(candle, plan.target1)) {
+        missed = true;
+        // Reaching T1 cancels the waiting order; a later retest cannot fill it.
+        break;
+      }
       continue;
     }
 

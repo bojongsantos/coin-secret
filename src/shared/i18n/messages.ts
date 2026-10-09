@@ -626,8 +626,8 @@ export const MESSAGES = {
   },
   "landing.tech.lifecycle": { id: "Siklus setup tiga fase", en: "A three-phase setup lifecycle" },
   "landing.tech.lifecycleBody": {
-    id: "Tidak ada yang dihitung sampai harga benar-benar menutup melewati entry, lalu kembali menyentuhnya. Order limit yang langsung tereksekusi bukan setup.",
-    en: "Nothing counts until price closes clear of the entry and comes back to touch it. A limit order that would fill the instant it is placed is not a setup.",
+    id: "Wick yang keluar dari zona melewati entry setelah candle dasar mengaktifkan limit. Pengisian dihitung ketika harga kembali menyentuh entry pada candle berikutnya.",
+    en: "A wick clearing entry after the base candle activates the limit. A return to entry on a later candle counts as a fill.",
   },
   "landing.tech.archive": { id: "Hasilnya diarsipkan", en: "Outcomes are archived" },
   "landing.tech.archiveBody": {

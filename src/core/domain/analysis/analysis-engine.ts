@@ -13,6 +13,7 @@ import {
   readPublishedSetup,
   type PublishedSetup,
 } from "@/core/domain/analysis/supply-demand";
+import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import { formatPrice } from "@/shared/lib/format";
 import { DEFAULT_LOCALE, type Locale } from "@/core/domain/i18n/locale";
 import { say, type ReasoningKey } from "@/core/domain/analysis/reasoning-copy";
@@ -315,30 +316,13 @@ export function buildPerformance(candles: Candle[]): PerformanceStats {
     if (seenZones.has(key)) continue;
     seenZones.add(key);
 
-    let filled = false;
-    let resolved = false;
-    for (const candle of candles.slice(end, end + horizon)) {
-      const isLong = setup.direction === "long";
-      if (!filled && (isLong ? candle.low <= setup.entry : candle.high >= setup.entry)) {
-        filled = true;
-      }
-      if (!filled) continue;
-
-      // When both levels occur in one candle, use the conservative SL result.
-      const stopped = isLong ? candle.low <= setup.stopLoss : candle.high >= setup.stopLoss;
-      const targeted = isLong ? candle.high >= setup.target2 : candle.low <= setup.target2;
-      if (stopped) {
-        outcomes.push({ win: false, returnPct: Math.abs(pct(setup.stopLoss, setup.entry)) });
-        resolved = true;
-        break;
-      }
-      if (targeted) {
-        outcomes.push({ win: true, returnPct: Math.abs(pct(setup.target2, setup.entry)) });
-        resolved = true;
-        break;
-      }
+    const window = candles.slice(0, end + horizon);
+    const life = traceSetupLifecycle(window, setup, setup.zone.baseIndex, window[window.length - 1].close);
+    if (life.stopIndex !== null && life.stopIndex >= end) {
+      outcomes.push({ win: false, returnPct: Math.abs(pct(setup.stopLoss, setup.entry)) });
+    } else if (life.target2Index !== null && life.target2Index >= end) {
+      outcomes.push({ win: true, returnPct: Math.abs(pct(setup.target2, setup.entry)) });
     }
-    if (!resolved) continue;
   }
 
   const wins = outcomes.filter((outcome) => outcome.win);

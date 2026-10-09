@@ -121,7 +121,8 @@ test("a published setup survives the next scan unchanged", async () => {
   // The bug this pins: a refresh re-chose the best zone it could see and
   // swapped out the plan somebody was already trading, so a setup could
   // vanish mid-trade and never reach the result archive.
-  const candles = series(400, 20);
+  // This tape fills before T1; seeds that reached T1 first are cancelled.
+  const candles = series(400, 26);
   const { port } = marketFor({}, candles);
 
   const first = await runSdScan(port, ["BTCUSDT"]);
@@ -188,7 +189,7 @@ test("a setup on a timeframe the scanner dropped is released", async () => {
   // The board is for what can be acted on now. When the scanned set shrinks,
   // setups left behind on the slower charts would otherwise sit there for days
   // with nothing ever refreshing them.
-  const candles = series(400, 20);
+  const candles = series(400, 26);
   const { port } = marketFor({}, candles);
   const held = store([
     {
@@ -250,7 +251,7 @@ test("a finished setup releases the symbol for a new one", async () => {
 });
 
 test("an unchanged status costs no write at all", async () => {
-  const candles = series(400, 24);
+  const candles = series(400, 26);
   const { port } = marketFor({}, candles);
   const first = await runSdScan(port, ["BTCUSDT"]);
   const original = [...first.demand, ...first.supply][0];
@@ -417,7 +418,7 @@ test("a finished setup is never published again, on this pass or any later one",
   // bar back — and a base bar *is* the setup's identity, so publishing it
   // again reopened the very row that had just closed. Across passes the board
   // flip-flopped between released and live.
-  const candles = series(400, 21);
+  const candles = series(400, 26);
   // Only the hourly chart carries a tape. With no second candidate to take the
   // slot, a released symbol stays empty — which is the situation the bug
   // actually needed, and the one a fixture that offers an alternative on every

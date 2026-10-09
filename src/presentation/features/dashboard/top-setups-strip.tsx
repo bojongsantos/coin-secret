@@ -6,6 +6,7 @@ import type { Timeframe } from "@/core/domain/models";
 import { useT } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { formatPrice, priceDecimals } from "@/shared/lib/format";
+import { DataStatus } from "@/presentation/ui/data-status";
 
 /**
  * The day's best setups, as a row of chips.
@@ -19,9 +20,15 @@ export function TopSetupsStrip({
   loading,
   activeSymbol,
   onSelect,
+  error,
+  lastUpdated,
+  onRetry,
 }: {
   setups: TopSetup[];
   loading: boolean;
+  error?: string | null;
+  lastUpdated?: string | null;
+  onRetry?: () => void;
   activeSymbol: string | null;
   onSelect: (symbol: string, timeframe: Timeframe) => void;
 }) {
@@ -34,10 +41,14 @@ export function TopSetupsStrip({
         {t("dashboard.topSetups")}
       </h2>
 
+      <DataStatus error={error} lastUpdated={lastUpdated} loading={loading} onRetry={onRetry} />
+
       {loading && setups.length === 0 ? (
         <div className="mt-5 flex h-20 items-center justify-center text-muted-2">
           <Loader2 className="size-5 animate-spin" />
         </div>
+      ) : error && setups.length === 0 ? (
+        <p className="mt-5 py-6 text-center text-[12px] text-muted-2">{t("data.unavailable")}</p>
       ) : setups.length === 0 ? (
         <p className="mt-5 py-6 text-center text-[12px] text-muted-2">{t("dashboard.noSetups")}</p>
       ) : (

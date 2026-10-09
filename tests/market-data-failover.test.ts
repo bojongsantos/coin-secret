@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createFailoverMarketData } from "@/core/application/market-data/failover";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import type { Candle, MarketTicker } from "@/core/domain/models";
+import { fetchTickers24h } from "@/infrastructure/market-data/binance-client";
+import { fetchBybitTickers24h } from "@/infrastructure/market-data/bybit-client";
 
 function candle(time: number): Candle {
   return { time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 };
@@ -125,4 +127,40 @@ test("the error surfaces when every provider fails", async () => {
 
   await assert.rejects(() => provider.fetchTickers24h(["BTCUSDT"]), /secondary is down/);
   assert.deepEqual(calls, ["primary:tickers", "secondary:tickers"]);
+});
+
+test("batch ticker cancellation reaches the provider and prevents a fallback after the caller deadline", async () => {
+  const controller = new AbortController();
+  const calls: string[] = [];
+  const provider = createFailoverMarketData([
+    {
+      fetchKlines: async () => [],
+      fetchTicker24h: async (symbol) => ticker(symbol, 100),
+      fetchTickers24h: async (_, signal) => {
+        assert.equal(signal, controller.signal);
+        calls.push("primary:tickers");
+        controller.abort(new DOMException("Scan deadline", "TimeoutError"));
+        throw controller.signal.reason;
+      },
+    },
+    stubProvider("secondary", { failing: false }, calls),
+  ]);
+  await assert.rejects(provider.fetchTickers24h(["BTCUSDT"], controller.signal), /Scan deadline/);
+  assert.deepEqual(calls, ["primary:tickers"]);
+});
+
+test("both batch ticker adapters cancel their HTTP read without retries when the scan deadline expires", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", (_input: unknown, init?: RequestInit) => {
+    calls += 1;
+    return new Promise<Response>((_, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), { once: true }));
+  });
+  for (const fetchBatch of [fetchTickers24h, fetchBybitTickers24h]) {
+    const controller = new AbortController();
+    const started = calls;
+    const pending = fetchBatch(["BTCUSDT"], controller.signal);
+    controller.abort(new DOMException("Scan deadline", "TimeoutError"));
+    await assert.rejects(pending, /Scan deadline/);
+    assert.equal(calls - started, 1, "a cancelled scan must not retry its ticker request");
+  }
 });

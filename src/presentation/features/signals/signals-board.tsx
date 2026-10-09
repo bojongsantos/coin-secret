@@ -13,6 +13,7 @@ import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 import { formatCompact } from "@/shared/lib/format";
 import { StatusIcon } from "@/presentation/ui/status-icon";
+import { DataStatus } from "@/presentation/ui/data-status";
 
 /** The chip stays dark so its status icon does not compete with confidence. */
 function StatusPill({ status, t, prominent = false }: { status: string; t: Translate; prominent?: boolean }) {
@@ -160,6 +161,7 @@ function Column({
   hits,
   totalCount,
   loading,
+  unavailable,
   t,
   maxHeight,
   onSelect,
@@ -168,6 +170,7 @@ function Column({
   hits: SdScanHit[];
   totalCount: number;
   loading: boolean;
+  unavailable: boolean;
   t: Translate;
   maxHeight: number;
   onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
@@ -180,7 +183,7 @@ function Column({
     <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <h3 className={`${dashboard ? "text-[17px]" : "text-[15px]"} font-bold tracking-tight`}>{t(title)}</h3>
-        {!showBlurredPreview && !loading && (
+        {!showBlurredPreview && !loading && !unavailable && (
           <span className="text-[11px] text-muted-2">{t("zones.setupCount", { count: totalCount })}</span>
         )}
       </div>
@@ -204,6 +207,8 @@ function Column({
               <div key={row} className="h-12 animate-pulse rounded-lg bg-surface-3/45" />
             ))}
           </div>
+        ) : unavailable && hits.length === 0 ? (
+          <p className="px-3 py-10 text-center text-[12px] text-muted-2">{t("data.unavailable")}</p>
         ) : hits.length === 0 ? (
           <p className="px-3 py-10 text-center text-[12px] text-muted-2">{t("zones.empty")}</p>
         ) : (
@@ -256,6 +261,8 @@ export function SignalsBoard({
   failedCount = 0,
   maxHeight = 600,
   onSelect,
+  stale = false,
+  lastUpdated,
 }: {
   demand: SdScanHit[];
   supply: SdScanHit[];
@@ -263,6 +270,8 @@ export function SignalsBoard({
   supplyTotal?: number;
   loading: boolean;
   error: string | null;
+  stale?: boolean;
+  lastUpdated?: string | null;
   onRefresh: () => void;
   failedCount?: number;
   /** How tall each column may grow before it scrolls on its own. */
@@ -289,15 +298,11 @@ export function SignalsBoard({
         </button>
       </div>
 
-      {(error || failedCount > 0) && (
-        <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12px] text-warning">
-          {error ?? t("scan.partialFailure", { count: failedCount })}
-        </p>
-      )}
+      <DataStatus error={error ?? (failedCount > 0 ? t("scan.partialFailure", { count: failedCount }) : null)} stale={stale} lastUpdated={lastUpdated} loading={loading} onRetry={onRefresh} />
 
       <div className="mt-7 grid gap-3.5 xl:grid-cols-2 [&>*]:min-w-0">
-        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} loading={loading} t={t} maxHeight={maxHeight} onSelect={onSelect} />
-        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} loading={loading} t={t} maxHeight={maxHeight} onSelect={onSelect} />
+        <Column title="signals.longSetup" hits={demand} totalCount={demandTotal} loading={loading} unavailable={Boolean(error || stale || failedCount)} t={t} maxHeight={maxHeight} onSelect={onSelect} />
+        <Column title="signals.shortSetup" hits={supply} totalCount={supplyTotal} loading={loading} unavailable={Boolean(error || stale || failedCount)} t={t} maxHeight={maxHeight} onSelect={onSelect} />
       </div>
     </div>
   );

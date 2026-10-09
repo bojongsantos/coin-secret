@@ -10,15 +10,30 @@ import { canUserAccessFeature } from "@/infrastructure/auth/entitlements";
 import { getRequestIp, tooManyRequests } from "@/shared/server/http";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 /** Same fan-out exposure as the scanner, so the same guard applies. */
 const limiter = createFixedWindowLimiter({ limit: 20, windowMs: 60_000 });
 
 export async function POST(request: Request) {
+  const startedAt = performance.now();
+  let symbolCount = 0;
+  const complete = (response: Response, failureCount = response.ok ? 0 : 1) => {
+    const detail = {
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      symbolCount,
+      failureCount,
+    };
+    if (response.ok && failureCount === 0) console.info("[signals.request]", detail);
+    else console.warn("[signals.request]", detail);
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  };
   try {
     const user = await getCurrentUser();
     const decision = limiter.check(user?.id ?? getRequestIp(request) ?? "anonymous");
-    if (!decision.allowed) return tooManyRequests(decision.retryAfterSeconds);
+    if (!decision.allowed) return complete(tooManyRequests(decision.retryAfterSeconds));
 
     const body = (await request.json()) as { symbols?: unknown; force?: unknown; limit?: unknown };
     const fullAccess = await canUserAccessFeature(user, "signals");
@@ -31,6 +46,7 @@ export async function POST(request: Request) {
     // shares the scan cache. A caller-supplied list is still capped by plan,
     // which is where the fan-out guard actually matters.
     const symbols = requested ? requested.slice(0, fullAccess ? 200 : 20) : DEFAULT_WATCHLIST;
+    symbolCount = symbols.length;
     const limit = typeof body.limit === "number" ? Math.min(20, Math.max(1, Math.trunc(body.limit))) : 5;
 
     // The store is what keeps a published setup on screen until price finishes
@@ -55,14 +71,13 @@ export async function POST(request: Request) {
     // confidence, so a weaker leader states its own weakness.
     const top = rankTopSetups(scanned, limit);
     const result = { ...scanned, ...visible };
-    return Response.json({ result, top }, { headers: { "Cache-Control": "private, no-store" } });
+    return complete(Response.json({ result, top }), scanned.errors.length);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Signals unavailable";
     const badRequest = message.startsWith("symbols");
-    if (!badRequest) console.error(error);
-    return Response.json(
+    return complete(Response.json(
       { error: badRequest ? message : "Signals unavailable" },
       { status: badRequest ? 400 : 503 },
-    );
+    ));
   }
 }

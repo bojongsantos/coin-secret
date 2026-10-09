@@ -14,10 +14,12 @@ import { useMarketContext } from "@/presentation/hooks/use-market-context";
 import { useDashboardSignals } from "@/presentation/hooks/use-scanner";
 import { AppShell } from "@/presentation/layout/app-shell";
 import { Reveal } from "@/presentation/ui/reveal";
+import { useT } from "@/presentation/hooks/use-translate";
 
 export function DashboardClient() {
-  const { top, result, loading: scanLoading, error: scanError, failedCount, refresh } = useDashboardSignals();
-  const { context, sentiment, loading: marketLoading, refresh: refreshMarket } = useMarketContext(true);
+  const { t } = useT();
+  const { top, result, loading: scanLoading, error: scanError, failedCount, refresh, stale: scanStale, lastUpdated: scanUpdated } = useDashboardSignals();
+  const { context, sentiment, loading: marketLoading, refresh: refreshMarket, error: marketError, stale: marketStale, lastUpdated: marketUpdated } = useMarketContext(true);
 
   const [symbol, setSymbol] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
@@ -31,6 +33,7 @@ export function DashboardClient() {
     activeSymbol ?? "BTCUSDT",
     timeframe,
     range,
+    Boolean(activeSymbol),
   );
 
   // Move the chart to the interval the published plan was measured on, unless
@@ -66,6 +69,9 @@ export function DashboardClient() {
             loading={marketLoading}
             onRefresh={refreshMarket}
             refreshing={marketLoading}
+            error={marketError}
+            stale={marketStale}
+            lastUpdated={marketUpdated}
           />
 
           <SignalsBoard
@@ -79,6 +85,8 @@ export function DashboardClient() {
             failedCount={failedCount}
             maxHeight={352}
             onSelect={pick}
+            stale={scanStale}
+            lastUpdated={scanUpdated}
           />
 
         <section className="cs-panel flex flex-col gap-6 p-4 sm:p-5">
@@ -87,6 +95,9 @@ export function DashboardClient() {
             loading={scanLoading}
             activeSymbol={activeSymbol}
             onSelect={pick}
+            error={scanError ?? (failedCount > 0 ? t("scan.partialFailure", { count: failedCount }) : null)}
+            lastUpdated={scanUpdated}
+            onRetry={refresh}
           />
 
         {error && (
@@ -95,10 +106,14 @@ export function DashboardClient() {
           </div>
         )}
 
-        {!analysis && !error && (
+        {activeSymbol && !analysis && !error && (
           <div className="flex h-64 items-center justify-center text-muted-2">
             <Loader2 className="size-6 animate-spin" />
           </div>
+        )}
+
+        {!activeSymbol && scanLoading && (
+          <p className="py-5 text-center text-[12px] text-muted-2">{t("data.waitingForSetup")}</p>
         )}
 
         {analysis && (

@@ -15,5 +15,5 @@ export interface KlineQuery {
 export interface MarketDataPort {
   fetchKlines(query: KlineQuery): Promise<Candle[]>;
   fetchTicker24h(symbol: string, signal?: AbortSignal): Promise<MarketTicker>;
-  fetchTickers24h(symbols: string[]): Promise<MarketTicker[]>;
+  fetchTickers24h(symbols: string[], signal?: AbortSignal): Promise<MarketTicker[]>;
 }

@@ -10,7 +10,7 @@ import { SignalsBoard } from "@/presentation/features/signals/signals-board";
 import { Reveal } from "@/presentation/ui/reveal";
 
 function UnlockedSignals() {
-  const { result, loading, error, failedCount, refresh } = useSdScan();
+  const { result, loading, error, failedCount, refresh, stale, lastUpdated } = useSdScan();
 
   return (
     <>
@@ -29,6 +29,8 @@ function UnlockedSignals() {
             error={error}
             onRefresh={refresh}
             failedCount={failedCount}
+            stale={stale}
+            lastUpdated={lastUpdated}
           />
         </Reveal>
       )}

@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as derivatives from "@/core/domain/market/derivatives";
 import * as format from "@/shared/lib/format";
+import * as readFailures from "@/shared/lib/read-failure";
 
 function load(path: string, globals: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
   const exports: Record<string, (...args: unknown[]) => unknown> = {};
@@ -235,120 +236,307 @@ for (const kind of ["entry", "result"] as const) {
 }
 
 function pollingHook(path: string, hookName: string, payload: unknown) {
-  const state: unknown[] = [];
-  const timers: Array<() => void> = [];
-  const cleanups: Array<() => void> = [];
+  type Cell = { value?: unknown; deps?: unknown[]; cleanup?: () => void };
+  const cells: Cell[] = [];
+  const timers = new Map<number, { callback: () => void; delay: number }>();
   const signals: AbortSignal[] = [];
+  const deadlines: AbortController[] = [];
   const requests: Array<{ url: string; body?: string }> = [];
   const budgets: number[] = [];
-  const mode = { stalled: false };
-  const api = load(path, {
-    console: { error() {} },
-    window: {
-      setTimeout: (callback: () => void) => { timers.push(callback); return timers.length; },
-      setInterval: () => 1, clearTimeout() {}, clearInterval() {},
+  const mode = { stalled: false, failure: null as unknown, status: 200, retryAfter: null as string | null, payload };
+  const access = { authenticated: true, plan: "premium", fullAccess: true, canAccess: () => access.fullAccess };
+  const clock = { now: 1_790_000_000_000 };
+  class ClockDate extends Date {
+    constructor(value?: string | number) { super(value ?? clock.now); }
+    static now() { return clock.now; }
+  }
+  let cursor = 0;
+  let timerId = 0;
+  let revision = 0;
+  let args: unknown[] = [];
+  let effects: Array<() => void> = [];
+  const same = (a: unknown[] | undefined, b: unknown[]) => a?.length === b.length && b.every((value, index) => Object.is(value, a[index]));
+  const react = {
+    useState: (initial: unknown) => {
+      const index = cursor++;
+      cells[index] ??= { value: initial };
+      return [cells[index].value, (value: unknown) => {
+        cells[index].value = typeof value === "function" ? value(cells[index].value) : value;
+        revision++;
+      }];
     },
+    useRef: (initial: unknown) => {
+      const index = cursor++;
+      cells[index] ??= { value: { current: initial } };
+      return cells[index].value;
+    },
+    useCallback: (callback: unknown, deps: unknown[]) => {
+      const index = cursor++;
+      if (!same(cells[index]?.deps, deps)) cells[index] = { value: callback, deps };
+      return cells[index].value;
+    },
+    useEffect: (effect: () => (() => void) | undefined, deps: unknown[]) => {
+      const index = cursor++;
+      if (same(cells[index]?.deps, deps)) return;
+      const previous = cells[index]?.cleanup;
+      cells[index] = { deps };
+      effects.push(() => { previous?.(); cells[index].cleanup = effect(); });
+    },
+  };
+  const browserWindow = Object.assign(new EventTarget(), {
+    setTimeout: (callback: () => void, delay: number) => { timers.set(++timerId, { callback, delay }); return timerId; },
+    clearTimeout: (id: number) => timers.delete(id),
+  });
+  const browserDocument = Object.assign(new EventTarget(), { visibilityState: "visible" });
+  const browserNavigator = { onLine: true };
+  const globals = {
+    Date: ClockDate, window: browserWindow, document: browserDocument, navigator: browserNavigator,
     AbortSignal: {
       any: AbortSignal.any,
-      timeout: (ms: number) => {
-        budgets.push(ms);
-        const controller = new AbortController();
-        setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), 15);
-        return controller.signal;
-      },
+      timeout: (ms: number) => { budgets.push(ms); const deadline = new AbortController(); deadlines.push(deadline); return deadline.signal; },
     },
     fetch: async (url: string, init: { signal: AbortSignal; body?: string }) => {
       signals.push(init.signal);
       requests.push({ url, body: init.body });
       if (mode.stalled) return new Promise<Response>((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
-      return Response.json(payload);
+      if (mode.failure) throw mode.failure;
+      return Response.json(mode.payload, { status: mode.status, headers: mode.retryAfter ? { "Retry-After": mode.retryAfter } : undefined });
     },
-  }, {
-    react: {
-      useState: (initial: unknown) => { const index = state.length; state.push(initial); return [initial, (value: unknown) => { state[index] = value; }]; },
-      useRef: (initial: unknown) => ({ current: initial }),
-      useCallback: (callback: unknown) => callback,
-      useEffect: (effect: () => (() => void)) => { cleanups.push(effect()); },
-    },
+  };
+  const polling = load("src/presentation/hooks/use-polling-read.ts", globals, { react, "@/shared/lib/read-failure": readFailures });
+  const api = load(path, globals, {
+    react, "@/shared/lib/read-failure": readFailures, "@/presentation/hooks/use-polling-read": polling,
+    "@/presentation/features/access/plan-provider": { usePlan: () => access },
+    "@/infrastructure/auth/auth-client": { AUTH_STATE_CHANGED_EVENT: "coinsecret:auth-state-changed" },
   });
-  const hook = api[hookName]() as { refresh(): void };
-  return { hook, state, signals, budgets, requests, mode, kickoff: () => timers[0](), unmount: () => cleanups.forEach((cleanup) => cleanup()) };
+  type View = {
+    context?: unknown; sentiment?: unknown; result?: unknown; top?: unknown[];
+    loading: boolean; error: string | null; lastUpdated: string | null; stale: boolean; refresh(): void;
+  };
+  const render = (...next: unknown[]) => {
+    if (next.length) args = next;
+    cursor = 0;
+    effects = [];
+    const view = api[hookName](...args) as View;
+    effects.forEach((effect) => effect());
+    return view;
+  };
+  const runTimer = () => {
+    const entry = timers.entries().next().value as [number, { callback: () => void }] | undefined;
+    assert.ok(entry, "polling should schedule a read");
+    timers.delete(entry[0]);
+    entry[1].callback();
+  };
+  const initial = render();
+  return {
+    initial, render, signals, budgets, requests, mode, access, clock, window: browserWindow,
+    document: browserDocument, navigator: browserNavigator, runTimer,
+    nextDelay: () => timers.values().next().value?.delay,
+    timeout: () => deadlines.at(-1)?.abort(new DOMException("timed out", "TimeoutError")),
+    revision: () => revision,
+    unmount: () => cells.forEach((cell) => cell.cleanup?.()),
+  };
 }
 
-test("market refresh calls the context endpoint, times out, clears stale metrics and recovers", async () => {
-  const payload = { context: { btc: { value: "80K" } }, sentiment: { score: 71 } };
-  const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", payload);
-  harness.kickoff();
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.ok(harness.state[0]);
+const settlePolling = () => new Promise<void>((resolve) => setImmediate(resolve));
+const marketPayload = { context: { btc: { value: "80K" } }, sentiment: { score: 71 }, fetchedAt: "2026-10-05T00:00:00Z" };
+const signalsPayload = { result: { demand: [{ symbol: "BTCUSDT" }], supply: [], demandTotal: 1, supplyTotal: 0, errors: [], scannedAt: "2026-10-05T00:00:00Z" }, top: [] };
+
+test("market refresh is single-flight, labels a retained snapshot stale after timeout, and recovers", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload);
+  harness.runTimer();
+  await settlePolling();
+  assert.ok(harness.render().context);
   harness.mode.stalled = true;
-  harness.hook.refresh();
-  harness.hook.refresh();
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  harness.render().refresh();
+  harness.render().refresh();
   assert.equal(harness.requests.length, 2, "refresh stays single-flight");
-  assert.equal(harness.state[0], null);
-  assert.equal(harness.state[1], null);
-  assert.equal(harness.state[2], false, "timeout releases the spinner");
+  harness.timeout();
+  await settlePolling();
+  const failed = harness.render();
+  assert.ok(failed.context);
+  assert.ok(failed.sentiment);
+  assert.equal(failed.stale, true);
+  assert.equal(failed.lastUpdated, marketPayload.fetchedAt);
+  assert.match(failed.error!, /timed out/);
+  assert.equal(failed.loading, false);
   harness.mode.stalled = false;
-  harness.hook.refresh();
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.ok(harness.state[0]);
+  failed.refresh();
+  await settlePolling();
+  assert.equal(harness.render().stale, false);
+  assert.equal(harness.render().error, null);
   assert.ok(harness.requests.every((request) => request.url === "/api/market-context"));
   assert.ok(harness.budgets.every((budget) => budget === 45000));
   harness.mode.stalled = true;
-  harness.hook.refresh();
-  const stateAtUnmount = harness.state.slice();
+  harness.render().refresh();
+  const revision = harness.revision();
   harness.unmount();
   assert.equal(harness.signals.at(-1)?.aborted, true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(harness.state, stateAtUnmount, "cancelled work must not write state after unmount");
+  await settlePolling();
+  assert.equal(harness.revision(), revision, "cancelled work must not write state after unmount");
 });
 
-test("signals wait is bounded, returns no stale setup after failure, and cancels on unmount", async () => {
-  const payload = { result: { demand: [], supply: [], errors: [], scannedAt: "2026-10-05" }, top: [] };
-  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", payload);
-  harness.kickoff();
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.ok(harness.state[0]);
+test("signals wait is bounded, clears setups after failure, and cancels on unmount", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);
+  harness.runTimer();
+  await settlePolling();
+  assert.ok(harness.render().result);
   harness.mode.stalled = true;
-  harness.hook.refresh();
-  harness.hook.refresh();
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  harness.render().refresh();
+  harness.render().refresh();
   assert.equal(harness.requests.length, 2);
-  assert.equal(harness.state[0], null);
-  assert.equal(harness.state[1], false);
-  assert.ok(harness.state[2]);
-  harness.hook.refresh();
-  const stateAtUnmount = harness.state.slice();
+  harness.timeout();
+  await settlePolling();
+  const failed = harness.render();
+  assert.equal(failed.result, null);
+  assert.equal(failed.top?.length, 0);
+  assert.equal(failed.stale, false);
+  assert.equal(failed.lastUpdated, signalsPayload.result.scannedAt);
+  assert.equal(failed.loading, false);
+  assert.match(failed.error!, /timed out/);
+  failed.refresh();
+  const revision = harness.revision();
   harness.unmount();
-  assert.equal(harness.signals[2].aborted, true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(harness.state, stateAtUnmount);
+  assert.equal(harness.signals.at(-1)?.aborted, true);
+  await settlePolling();
+  assert.equal(harness.revision(), revision);
   assert.ok(harness.budgets.every((budget) => budget === 90000));
   assert.equal(JSON.parse(harness.requests[0].body!).limit, 5);
 });
 
-test("disabling polling hides a previous busy flag and prevents manual requests", () => {
-  for (const [path, hook] of [
-    ["src/presentation/hooks/use-scanner.ts", "useSdScan"],
-    ["src/presentation/hooks/use-market-context.ts", "useMarketContext"],
-  ]) {
-    let calls = 0;
-    const api = load(path, { fetch: () => { calls++; throw new Error("must stay disabled"); } }, {
-      react: {
-        // Models the stored loading=true value from a request cancelled when
-        // enabled changes to false; it must not leave the disabled view busy.
-        useState: (initial: unknown) => [typeof initial === "boolean" ? true : initial, () => undefined],
-        useRef: (initial: unknown) => ({ current: initial }),
-        useCallback: (callback: unknown) => callback,
-        useEffect() {},
-      },
-    });
-    const view = api[hook](false) as { loading: boolean; refresh(): void };
-    assert.equal(view.loading, false);
-    view.refresh();
-    assert.equal(calls, 0);
+test("polling resumes immediately on visible and online events without piling requests", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload);
+  harness.document.visibilityState = "hidden";
+  harness.runTimer();
+  assert.equal(harness.requests.length, 0);
+  harness.document.visibilityState = "visible";
+  harness.mode.stalled = true;
+  harness.document.dispatchEvent(new Event("visibilitychange"));
+  harness.window.dispatchEvent(new Event("online"));
+  harness.render().refresh();
+  assert.equal(harness.requests.length, 1);
+  harness.timeout();
+  await settlePolling();
+  harness.navigator.onLine = false;
+  harness.runTimer();
+  assert.equal(harness.requests.length, 1);
+  harness.mode.stalled = false;
+  harness.navigator.onLine = true;
+  harness.window.dispatchEvent(new Event("online"));
+  await settlePolling();
+  assert.equal(harness.requests.length, 2);
+  assert.equal(harness.render().error, null);
+  harness.unmount();
+});
+
+test("transient retries back off, stop rapid retries, and never expose raw network errors", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload);
+  harness.mode.failure = new TypeError("Load failed: private-canary");
+  for (const delay of [2000, 4000, 8000, 30000]) {
+    harness.runTimer();
+    await settlePolling();
+    const failed = harness.render();
+    assert.equal(failed.context, null);
+    assert.equal(failed.lastUpdated, null);
+    assert.equal(failed.stale, false);
+    assert.match(failed.error!, /Check your connection/);
+    assert.equal(failed.error!.includes("private-canary"), false);
+    assert.equal(harness.nextDelay(), delay);
   }
+  harness.unmount();
+});
+
+test("Retry-After blocks automatic, manual, and resume reads until its deadline", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload);
+  harness.mode.status = 429;
+  harness.mode.retryAfter = "120";
+  harness.runTimer();
+  await settlePolling();
+  assert.equal(harness.nextDelay(), 120000);
+  harness.render().refresh();
+  harness.window.dispatchEvent(new Event("online"));
+  harness.document.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(harness.requests.length, 1);
+  harness.clock.now += 119000;
+  harness.runTimer();
+  assert.equal(harness.requests.length, 1);
+  assert.equal(harness.nextDelay(), 1000);
+  harness.clock.now += 1000;
+  harness.mode.status = 200;
+  harness.runTimer();
+  await settlePolling();
+  assert.equal(harness.requests.length, 2);
+  assert.equal(harness.render().error, null);
+  harness.unmount();
+});
+
+test("scan access changes hide old data immediately and abort prior access reads", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);
+  harness.runTimer();
+  await settlePolling();
+  assert.ok(harness.render().result);
+  harness.mode.stalled = true;
+  harness.render().refresh();
+  harness.access.plan = "free";
+  harness.access.fullAccess = false;
+  const changed = harness.render();
+  assert.equal(changed.result, null);
+  assert.equal(changed.lastUpdated, null);
+  assert.equal(changed.loading, true);
+  assert.equal(harness.signals.at(-1)?.aborted, true);
+  await settlePolling();
+  harness.mode.stalled = false;
+  harness.mode.payload = { ...signalsPayload, result: { ...signalsPayload.result, demand: [] } };
+  harness.runTimer();
+  await settlePolling();
+  assert.ok(harness.render().result);
+  harness.window.dispatchEvent(new Event("coinsecret:auth-state-changed"));
+  assert.equal(harness.render().result, null, "a same-plan account switch must invalidate the old snapshot");
+  assert.equal(harness.render().lastUpdated, null);
+  harness.unmount();
+});
+
+test("disabling polling hides prior data and busy state and prevents manual requests", async () => {
+  for (const [path, hook, payload] of [
+    ["src/presentation/hooks/use-scanner.ts", "useSdScan", signalsPayload],
+    ["src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload],
+  ] as const) {
+    const harness = pollingHook(path, hook, payload);
+    harness.runTimer();
+    await settlePolling();
+    harness.mode.stalled = true;
+    harness.render().refresh();
+    const calls = harness.requests.length;
+    const disabled = harness.render(false);
+    assert.equal(disabled.loading, false);
+    assert.equal("result" in disabled ? disabled.result : disabled.context, null);
+    disabled.refresh();
+    assert.equal(harness.requests.length, calls);
+    assert.equal(harness.signals.at(-1)?.aborted, true);
+    harness.unmount();
+  }
+});
+
+test("invalid successful response is unavailable and does not fabricate an empty market", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", {});
+  harness.runTimer();
+  await settlePolling();
+  assert.equal(harness.render().context, null);
+  assert.match(harness.render().error!, /unreadable response/);
+  assert.equal(harness.render().lastUpdated, null);
+  harness.unmount();
+});
+
+test("read failure helpers parse HTTP dates and keep permanent access faults out of retries", () => {
+  assert.equal(readFailures.retryAfterMs("2", 1000), 2000);
+  assert.equal(readFailures.retryAfterMs("Thu, 01 Jan 1970 00:00:04 GMT", 1000), 3000);
+  assert.equal(readFailures.retryAfterMs("invalid", 1000), 0);
+  assert.equal(readFailures.retryAfterMs("-2", 1000), 0);
+  assert.equal(readFailures.responseReadFailure(403, "Signals", null).retryable, false);
+  assert.equal(readFailures.responseReadFailure(400, "Signals", null).retryable, false);
+  assert.equal(readFailures.responseReadFailure(503, "Signals", null).retryable, true);
+  assert.equal(readFailures.responseReadFailure(429, "Signals", null).retryAfterMs, 60000);
+  assert.match(readFailures.normalizeReadFailure(new SyntaxError("private-canary"), "Signals").message, /unreadable/);
 });
 
 test("the Overview refresh control uses market data and its own loading state", () => {
@@ -364,6 +552,7 @@ test("the Overview refresh control uses market data and its own loading state", 
     "@/presentation/hooks/use-scanner": { useDashboardSignals: () => ({ top: [], result: null, loading: true, refresh: scanRefresh }) },
     "@/presentation/hooks/use-market-context": { useMarketContext: () => ({ context: null, sentiment: null, loading: false, refresh: marketRefresh }) },
     "@/presentation/hooks/use-live-analysis": { useLiveAnalysis: () => ({ analysis: null, publishedTimeframe: null }) },
+    "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: string) => key }) },
   };
   for (const [module, name] of [
     ["features/analysis/analysis-view", "AnalysisView"], ["features/dashboard/market-overview", "MarketOverview"],

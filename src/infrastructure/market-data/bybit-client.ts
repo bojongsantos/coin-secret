@@ -101,10 +101,10 @@ export async function fetchBybitTicker24h(
   return toTicker(row);
 }
 
-export async function fetchBybitTickers24h(symbols: string[]): Promise<MarketTicker[]> {
+export async function fetchBybitTickers24h(symbols: string[], signal?: AbortSignal): Promise<MarketTicker[]> {
   if (symbols.length === 0) return [];
   // Bybit has no multi-symbol filter, so pull the spot board once and select.
-  const result = await bybitRequest<{ list?: BybitTickerRow[] }>("/v5/market/tickers?category=spot");
+  const result = await bybitRequest<{ list?: BybitTickerRow[] }>("/v5/market/tickers?category=spot", signal);
   const wanted = new Set(symbols);
   const out: MarketTicker[] = [];
   for (const row of result.list ?? []) {

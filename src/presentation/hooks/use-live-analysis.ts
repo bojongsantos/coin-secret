@@ -17,6 +17,7 @@ import { applyRecentCandles, olderThan, upsertLatestCandle } from "@/core/domain
 import type { AnalysisResult, Candle, MarketTicker, Timeframe } from "@/core/domain/models";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 import { useLocale } from "@/presentation/hooks/use-ui-preference";
+import { normalizeReadFailure, readRetryDelay } from "@/shared/lib/read-failure";
 import {
   subscribeBinanceMarket,
   type BinanceStreamStatus,
@@ -74,6 +75,7 @@ export function useLiveAnalysis(
   symbol: string,
   timeframe: Timeframe,
   range: HistoryRange,
+  enabled = true,
 ): LiveAnalysis {
   // The analysis writes prose, so it needs the reader's language. The render
   // loop below closes over it and the effect lists it as a dependency, so a
@@ -106,13 +108,13 @@ export function useLiveAnalysis(
   // Resetting while rendering (React's documented "adjust state when a prop
   // changes" pattern) clears the previous market in the same commit, so the
   // old candles never flash under the new header.
-  const viewKey = `${symbol}|${timeframe}|${range}`;
+  const viewKey = `${symbol}|${timeframe}|${range}|${enabled}`;
   const [renderedKey, setRenderedKey] = useState(viewKey);
   if (viewKey !== renderedKey) {
     setRenderedKey(viewKey);
     setAnalysis(null);
     setError(null);
-    setLoading(true);
+    setLoading(enabled);
     setStreamStatus("connecting");
     setHistory({ loading: true, progress: null, truncated: false, reachedStart: false });
   }
@@ -121,6 +123,7 @@ export function useLiveAnalysis(
   // previous symbol can never be drawn over the new market, then refreshed on
   // the same cadence as the signals table so a status change lands here too.
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     publishedRef.current = null;
 
@@ -150,14 +153,19 @@ export function useLiveAnalysis(
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const controller = new AbortController();
     let pollTimer: ReturnType<typeof setInterval> | undefined;
     let publishTimer: ReturnType<typeof setTimeout> | undefined;
     let unsubscribe: (() => void) | undefined;
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+    let starting = false;
+    let polling = false;
+    let startupFailures = 0;
 
     // The series is kept in two pieces so bulk history never forces a re-sort.
     // `older` holds backfilled stretches, ascending and all older than
@@ -272,7 +280,7 @@ export function useLiveAnalysis(
       if (cancelled || controller.signal.aborted) return;
       if (recent.length === 0) {
         setAnalysis(null);
-        setError(caught instanceof Error ? caught.message : String(caught));
+        setError(normalizeReadFailure(caught, "Chart data").message);
       }
     }
 
@@ -283,7 +291,7 @@ export function useLiveAnalysis(
       const wanted = estimateRangeCandles(range, timeframe);
       const recentLimit = Math.min(HISTORY_PAGE_SIZE, wanted ?? HISTORY_PAGE_SIZE);
       try {
-        const [latestTicker, latestCandles] = await Promise.all([
+        const reads = await Promise.allSettled([
           marketData.fetchTicker24h(symbol, controller.signal),
           marketData.fetchKlines({
             symbol,
@@ -291,7 +299,11 @@ export function useLiveAnalysis(
             limit: recentLimit,
             signal: controller.signal,
           }),
-        ]);
+        ] as const);
+        if (reads[0].status === "rejected") throw reads[0].reason;
+        if (reads[1].status === "rejected") throw reads[1].reason;
+        const latestTicker = reads[0].value;
+        const latestCandles = reads[1].value;
         if (cancelled) return;
         recent = latestCandles;
         invalidate();
@@ -351,11 +363,17 @@ export function useLiveAnalysis(
 
     /** Cheap poll that keeps the last bar fresh when the socket is down. */
     async function pollLatest() {
+      if (polling || cancelled || document.visibilityState === "hidden" || navigator.onLine === false) return;
+      polling = true;
       try {
-        const [latestTicker, latest] = await Promise.all([
+        const reads = await Promise.allSettled([
           marketData.fetchTicker24h(symbol, controller.signal),
           marketData.fetchKlines({ symbol, timeframe, limit: 2, signal: controller.signal }),
-        ]);
+        ] as const);
+        if (reads[0].status === "rejected") throw reads[0].reason;
+        if (reads[1].status === "rejected") throw reads[1].reason;
+        const latestTicker = reads[0].value;
+        const latest = reads[1].value;
         if (cancelled) return;
         ticker = latestTicker;
         recent = applyRecentCandles(recent, latest);
@@ -363,6 +381,8 @@ export function useLiveAnalysis(
         publish();
       } catch (caught) {
         fail(caught);
+      } finally {
+        polling = false;
       }
     }
 
@@ -397,11 +417,19 @@ export function useLiveAnalysis(
       }
     };
 
-    void loadRecent().then(async () => {
+    async function start() {
+      if (starting || cancelled || document.visibilityState === "hidden" || navigator.onLine === false) return;
+      if (recoveryTimer) clearTimeout(recoveryTimer);
+      starting = true;
+      await loadRecent();
+      starting = false;
       // Nothing loaded means the symbol failed outright; clear the history
       // spinner instead of leaving it running behind the error.
       if (cancelled || recent.length === 0) {
-        if (!cancelled) setHistory((prev) => ({ ...prev, loading: false }));
+        if (!cancelled) {
+          setHistory((prev) => ({ ...prev, loading: false }));
+          recoveryTimer = setTimeout(() => void start(), readRetryDelay(++startupFailures, 30_000));
+        }
         return;
       }
       unsubscribe = subscribeBinanceMarket(
@@ -423,7 +451,16 @@ export function useLiveAnalysis(
       pollTimer = setInterval(() => void pollLatest(), FALLBACK_POLL_MS);
       repaintRef.current = () => publish();
       await loadRange();
-    });
+    }
+
+    function resume() {
+      if (document.visibilityState === "hidden" || navigator.onLine === false) return;
+      if (recent.length > 0) void pollLatest();
+      else void start();
+    }
+    void start();
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
 
     return () => {
       cancelled = true;
@@ -432,11 +469,14 @@ export function useLiveAnalysis(
       unsubscribe?.();
       if (pollTimer) clearInterval(pollTimer);
       if (publishTimer) clearTimeout(publishTimer);
+      if (recoveryTimer) clearTimeout(recoveryTimer);
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
       loadMoreRef.current = async () => undefined;
     };
     // `locale` re-runs the effect so the prose is rewritten the moment the
     // language changes, rather than at the next tick.
-  }, [symbol, timeframe, range, locale]);
+  }, [symbol, timeframe, range, locale, enabled]);
 
-  return { analysis, loading, error, streamStatus, history, loadMoreHistory, publishedTimeframe };
+  return { analysis: enabled ? analysis : null, loading: enabled && loading, error: enabled ? error : null, streamStatus, history, loadMoreHistory, publishedTimeframe: enabled ? publishedTimeframe : null };
 }

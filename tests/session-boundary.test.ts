@@ -207,12 +207,19 @@ test("session activity reads do not write and forged origin or payload cannot re
   assert.equal(writes, 1);
 });
 
-function clientHook() {
+type ActivityResponse = "ok" | "offline" | "timeout" | "server-error" | "malformed" | "unauthorized";
+
+function clientHook(initialResponse: ActivityResponse = "ok", initialLatency = 0) {
   let now = initialTime;
   let deadline = now + 30 * minute;
-  let offline = false;
+  let responseMode = initialResponse;
+  let latency = initialLatency;
+  let pathname = "/account";
   let nextId = 1;
   let cleanup: (() => void) | undefined;
+  let effectDependencies: unknown[] | undefined;
+  let expireEvent: (() => void) | undefined;
+  const currentExpireEvent = () => expireEvent?.();
   const requests: string[] = [];
   const redirects: string[] = [];
   let expirations = 0;
@@ -227,28 +234,47 @@ function clientHook() {
     const id = nextId++; timers.set(id, { at: now + delay, callback, interval }); return id;
   };
   const document = { visibilityState: "visible", addEventListener, removeEventListener };
+  const router = { replace: (path: string) => redirects.push(path), refresh() {} };
   const hook = load("src/presentation/hooks/use-session-activity.ts", {
-    react: { useEffect: (effect: () => () => void) => { cleanup = effect(); } },
-    "next/navigation": { usePathname: () => "/account", useRouter: () => ({ replace: (path: string) => redirects.push(path), refresh() {} }) },
+    react: {
+      useEffect: (effect: () => () => void, dependencies: unknown[]) => {
+        if (effectDependencies && dependencies.every((value, index) => value === effectDependencies![index])) return;
+        cleanup?.();
+        effectDependencies = dependencies;
+        cleanup = effect();
+      },
+      useEffectEvent: (callback: () => void) => { expireEvent = callback; return currentExpireEvent; },
+    },
+    "next/navigation": { usePathname: () => pathname, useRouter: () => router },
     "@/infrastructure/auth/auth-client": { notifyAuthStateChanged() {} },
   }, {
-    Date: { now: () => now }, document, window: { addEventListener, removeEventListener },
+    Date: { now: () => now }, performance: { now: () => now - initialTime }, document, window: { addEventListener, removeEventListener },
     AbortSignal: { timeout: () => new AbortController().signal },
     setTimeout: (callback: () => void, delay: number) => timer(callback, delay), clearTimeout: (id: number) => timers.delete(id),
     setInterval: (callback: () => void, delay: number) => timer(callback, delay, delay), clearInterval: (id: number) => timers.delete(id),
     fetch: async (_url: string, options: { method: string }) => {
       requests.push(options.method);
-      if (offline) throw new Error("Network offline");
-      if (options.method === "POST") deadline = now + 30 * minute;
-      return { ok: true, status: 200, json: async () => ({ deadline, serverNow: now }) };
+      const mode = responseMode;
+      if (mode === "ok" && options.method === "POST") deadline = now + 30 * minute;
+      const payload = { deadline, serverNow: now };
+      const delay = mode === "timeout" ? 5_000 : latency;
+      if (delay) await new Promise<void>((resolve) => timer(resolve, delay));
+      if (mode === "offline") throw new Error("Network offline");
+      if (mode === "timeout") throw new DOMException("Timed out", "TimeoutError");
+      const status = mode === "unauthorized" ? 401 : mode === "server-error" ? 503 : 200;
+      return { ok: status === 200, status, json: async () => mode === "malformed" ? { deadline: "unknown" } : payload };
     },
   }).useSessionActivity as (authenticated: boolean, onExpired?: () => void) => void;
-  hook(true, () => { expirations++; });
+  const render = () => hook(true, () => { expirations++; });
+  render();
   const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
   return {
     requests, redirects, document, flush,
     expirations: () => expirations,
-    offline: () => { offline = true; },
+    offline: () => { responseMode = "offline"; },
+    respondWith: (mode: ActivityResponse) => { responseMode = mode; },
+    delayResponse: (milliseconds: number) => { latency = milliseconds; },
+    navigate: (path: string) => { pathname = path; render(); },
     event: (name: string, isTrusted = true) => { for (const callback of listeners.get(name) ?? []) callback({ isTrusted }); },
     extendInAnotherTab: (milliseconds: number) => { deadline += milliseconds; },
     stop: () => cleanup?.(),
@@ -269,6 +295,92 @@ function clientHook() {
     },
   };
 }
+
+test("an unknown initial deadline retries transport and server failures without reporting expiry", async () => {
+  for (const mode of ["offline", "server-error", "malformed"] as const) {
+    const f = clientHook(mode);
+    await f.flush();
+    assert.equal(f.expirations(), 0, mode);
+    assert.equal(f.redirects.length, 0, mode);
+    assert.deepEqual(f.requests, ["GET"]);
+    f.respondWith("ok");
+    await f.advance(2_000);
+    assert.deepEqual(f.requests, ["GET", "GET"]);
+    assert.equal(f.expirations(), 0, mode);
+    f.offline();
+    await f.advance(30 * minute - 2_000 + 20);
+    assert.equal(f.expirations(), 1, "A recovered authoritative deadline remains enforced offline");
+    f.stop();
+  }
+});
+
+test("the initial five-second timeout is unknown and a successful retry keeps the session", async () => {
+  const f = clientHook("timeout");
+  await f.advance(5_000);
+  assert.equal(f.expirations(), 0);
+  assert.equal(f.redirects.length, 0);
+  f.respondWith("ok");
+  await f.advance(2_000);
+  assert.deepEqual(f.requests, ["GET", "GET"]);
+  assert.equal(f.expirations(), 0);
+  f.stop();
+});
+
+test("initial transport retries are bounded, read-only and cancelled on cleanup", async () => {
+  const f = clientHook("offline");
+  await f.advance(59_000);
+  assert.deepEqual(f.requests, ["GET", "GET", "GET"]);
+  assert.equal(f.expirations(), 0);
+  await f.advance(1_000);
+  assert.equal(f.requests.length, 4, "Normal minute polling remains available after bounded retries");
+  f.stop();
+  await f.advance(minute);
+  assert.equal(f.requests.length, 4);
+});
+
+test("a verified 401 expires both initial and established sessions", async () => {
+  for (const initial of [true, false]) {
+    const f = clientHook(initial ? "unauthorized" : "ok");
+    await f.flush();
+    if (!initial) {
+      f.respondWith("unauthorized");
+      f.event("focus");
+      await f.flush();
+    }
+    assert.equal(f.expirations(), 1);
+    assert.deepEqual(f.redirects, ["/login?next=%2Faccount"]);
+    assert.equal(f.requests.includes("POST"), false);
+    f.stop();
+  }
+});
+
+test("a known deadline survives offline navigation and failed focus or polling reads", async () => {
+  for (const mode of ["offline", "server-error", "malformed"] as const) {
+    const f = clientHook();
+    await f.flush();
+    f.respondWith(mode);
+    f.event("focus");
+    await f.advance(29 * minute);
+    assert.equal(f.expirations(), 0);
+    f.navigate("/scanner");
+    await f.advance(minute + 20);
+    assert.equal(f.expirations(), 1, mode);
+    assert.deepEqual(f.redirects, ["/login?next=%2Fscanner"]);
+    assert.equal(f.requests.includes("POST"), false);
+    f.stop();
+  }
+});
+
+test("response latency cannot postpone an authoritative deadline", async () => {
+  const f = clientHook("ok", 5_000);
+  await f.advance(5_000);
+  f.delayResponse(0);
+  f.offline();
+  await f.advance(30 * minute - 5_000 + 20);
+  assert.equal(f.expirations(), 1);
+  assert.deepEqual(f.redirects, ["/login?next=%2Faccount"]);
+  f.stop();
+});
 
 test("background timers, focus and synthetic input never POST human session activity", async () => {
   const f = clientHook();

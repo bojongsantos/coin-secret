@@ -27,6 +27,10 @@ export const MESSAGES = {
   "common.unlockPro": { id: "Buka Pro", en: "Unlock Pro" },
   "common.refresh": { id: "Muat ulang", en: "Refresh" },
   "common.notAvailable": { id: "Tidak tersedia", en: "Not available" },
+  "data.unavailable": { id: "Data sementara tidak tersedia.", en: "Data temporarily unavailable." },
+  "data.stale": { id: "Menampilkan data terakhir; belum diperbarui.", en: "Showing the last available data; not yet updated." },
+  "data.lastUpdated": { id: "Terakhir berhasil diperbarui:", en: "Last successful update:" },
+  "data.waitingForSetup": { id: "Menunggu setup untuk membuka chart.", en: "Waiting for a setup to open the chart." },
 
   // --------------------------------------------------------------------- nav
   "nav.dashboard": { id: "Dashboard", en: "Dashboard" },

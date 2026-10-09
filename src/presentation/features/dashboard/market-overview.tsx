@@ -9,6 +9,7 @@ import { ConvictionScoreCard } from "@/presentation/widgets/right-rail/convictio
 import { MarketContextCard } from "@/presentation/widgets/right-rail/market-context-card";
 import { MarketSentimentCard } from "@/presentation/widgets/right-rail/market-sentiment-card";
 import { marketFallback, sentimentFallback } from "@/config/market-fallbacks";
+import { DataStatus } from "@/presentation/ui/data-status";
 
 const WAITING: ConvictionScore = { score: 0, grade: "F", interpretation: "", components: [] };
 
@@ -47,6 +48,9 @@ export function MarketOverview({
   loading = false,
   onRefresh,
   refreshing,
+  error,
+  stale = false,
+  lastUpdated,
 }: {
   context: MarketContext | null;
   sentiment: SentimentData | null;
@@ -54,6 +58,9 @@ export function MarketOverview({
   loading?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  error?: string | null;
+  stale?: boolean;
+  lastUpdated?: string | null;
 }) {
   const { t } = useT();
   return (
@@ -63,12 +70,15 @@ export function MarketOverview({
       onRefresh={onRefresh}
       refreshing={refreshing}
     >
+      <DataStatus error={error} stale={stale} lastUpdated={lastUpdated} loading={loading} onRetry={onRefresh} />
       {loading && !context && !sentiment ? (
         <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading market data">
           {[0, 1, 2].map((item) => (
             <div key={item} className="h-72 animate-pulse rounded-2xl border border-border bg-surface" />
           ))}
         </div>
+      ) : error && !context && !sentiment ? (
+        <p className="py-10 text-center text-[13px] text-muted-2">{t("data.unavailable")}</p>
       ) : (
         <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
           <MarketSentimentCard data={sentiment ?? sentimentFallback} />

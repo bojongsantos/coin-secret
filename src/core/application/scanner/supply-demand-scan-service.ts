@@ -3,6 +3,7 @@ import type {
   ActiveSetupPort,
 } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
+import { createScanCache } from "@/core/application/scanner/scan-cache";
 import {
   ACTIVE_SETUP_STATUSES,
   detectSupplyDemand,
@@ -16,6 +17,7 @@ import { mapConcurrent } from "@/shared/lib/async";
 
 /** The timeframe a symbol's sparkline and 24h figures are drawn from. */
 export const SD_SCAN_TIMEFRAME: Timeframe = "15m";
+const SD_SCAN_BUDGET_MS = 40_000;
 
 /**
  * Timeframes the scanner looks for setups on.
@@ -139,38 +141,56 @@ export async function runSdScan(
   options: SdScanOptions = {},
 ): Promise<SdScanResult> {
   const errors: string[] = [];
-  const tickers = await marketData.fetchTickers24h(symbols).catch(() => []);
+  const deadline = AbortSignal.timeout(SD_SCAN_BUDGET_MS);
+  const stage = (name: "metadata" | "market" | "persist") => {
+    const startedAt = performance.now();
+    console.info("[signals.scan]", { stage: name, status: "started", symbolCount: symbols.length });
+    return () => console.info("[signals.scan]", {
+      stage: name,
+      status: "completed",
+      elapsedMs: Math.round(performance.now() - startedAt),
+      symbolCount: symbols.length,
+      failureCount: errors.length,
+    });
+  };
+  const metadataComplete = stage("metadata");
+  const [tickers, stored, retiredZones] = await Promise.all([
+    marketData.fetchTickers24h(symbols, deadline).catch(() => {
+      errors.push("Market tickers unavailable");
+      return [];
+    }),
+    options.activeSetups?.loadActive(symbols) ?? Promise.resolve([]),
+    options.activeSetups?.loadRetiredZones(symbols) ?? Promise.resolve([]),
+  ]);
+  metadataComplete();
   const tickerMap = new Map(tickers.map((ticker) => [ticker.symbol, ticker]));
   const sparklineMap = new Map<string, number[]>();
   const demand: SdScanHit[] = [];
   const supply: SdScanHit[] = [];
   const changed: ActiveSetup[] = [];
 
-  const stored = options.activeSetups
-    ? await options.activeSetups.loadActive(symbols)
-    : [];
   const active = new Map(stored.map((entry) => [entry.symbol, entry]));
   // Zones these symbols have already finished. The detector keeps offering
   // them back — it re-measures the same base bar on every pass — and a base
   // bar is a setup's identity, so publishing one again is not a new setup but
   // the old one reopened.
-  const retiredZones = options.activeSetups
-    ? await options.activeSetups.loadRetiredZones(symbols)
-    : [];
   const retired = new Set(
     retiredZones.map((zone) => zoneKey(zone.symbol, zone.timeframe, zone.direction, zone.zoneBaseTime)),
   );
 
+  const marketComplete = stage("market");
   await mapConcurrent(
     symbols,
     async (symbol) => {
       try {
+        deadline.throwIfAborted();
         // The sparkline and the 24h figures always come from the fast chart,
         // whatever timeframe the setup itself lives on.
         const fast = await marketData.fetchKlines({
           symbol,
           timeframe: SD_SCAN_TIMEFRAME,
           limit: ZONE_SCAN_WINDOW,
+          signal: deadline,
         });
         sparklineMap.set(symbol, fast.slice(-96).map((candle) => candle.close));
 
@@ -192,6 +212,7 @@ export async function runSdScan(
                   symbol,
                   timeframe: held.timeframe,
                   limit,
+                  signal: deadline,
                 });
           const price = candles[candles.length - 1]?.close ?? held.entry;
           const reading = readPublishedSetup(candles, held, price);
@@ -248,8 +269,12 @@ export async function runSdScan(
             timeframe === SD_SCAN_TIMEFRAME
               ? fast
               : await marketData
-                  .fetchKlines({ symbol, timeframe, limit: ZONE_SCAN_WINDOW })
-                  .catch(() => [] as Candle[]);
+                  .fetchKlines({ symbol, timeframe, limit: ZONE_SCAN_WINDOW, signal: deadline })
+                  .catch((error) => {
+                    if (deadline.aborted) throw error;
+                    errors.push(`${symbol}: ${timeframe} candles unavailable`);
+                    return [] as Candle[];
+                  });
           if (candles.length === 0) continue;
 
           const sd: SdResult = detectSupplyDemand(candles);
@@ -301,15 +326,18 @@ export async function runSdScan(
         if (signalBucket(best) === "demand") demand.push(best);
         else supply.push(best);
       } catch (error) {
-        errors.push(`${symbol}: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(deadline.aborted ? `${symbol}: Scan deadline exceeded` : `${symbol}: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
-    8,
+    16,
   );
+  marketComplete();
 
+  const persistComplete = stage("persist");
   if (options.activeSetups && changed.length > 0) {
     await options.activeSetups.persist(changed);
   }
+  persistComplete();
 
   const byVolume = (a: SdScanHit, b: SdScanHit) => b.volume24h - a.volume24h;
   demand.sort(byVolume);
@@ -376,9 +404,7 @@ function zoneKey(
   return `${symbol}|${timeframe}|${direction}|${zoneBaseTime}`;
 }
 
-const SD_CACHE_TTL_MS = 60_000;
-let sdCache: { key: string; timestamp: number; result: SdScanResult } | null = null;
-let sdInFlight: { key: string; promise: Promise<SdScanResult> } | null = null;
+const cachedScan = createScanCache<SdScanResult>(60_000);
 
 export function runSdScanCached(
   marketData: MarketDataPort,
@@ -386,20 +412,5 @@ export function runSdScanCached(
   force = false,
   options: SdScanOptions = {},
 ): Promise<SdScanResult> {
-  const key = symbols.join(",");
-  if (!force && sdCache?.key === key && Date.now() - sdCache.timestamp < SD_CACHE_TTL_MS) {
-    return Promise.resolve(sdCache.result);
-  }
-  if (!force && sdInFlight?.key === key) return sdInFlight.promise;
-
-  const promise = runSdScan(marketData, symbols, options)
-    .then((result) => {
-      sdCache = { key, timestamp: Date.now(), result };
-      return result;
-    })
-    .finally(() => {
-      if (sdInFlight?.promise === promise) sdInFlight = null;
-    });
-  sdInFlight = { key, promise };
-  return promise;
+  return cachedScan(marketData, symbols, force, options.activeSetups, () => runSdScan(marketData, symbols, options));
 }

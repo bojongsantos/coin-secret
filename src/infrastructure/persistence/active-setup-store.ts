@@ -11,6 +11,7 @@ import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
 import { prisma } from "@/infrastructure/database/prisma";
+import { mapConcurrent } from "@/shared/lib/async";
 
 /**
  * Published setups, kept in the same table the result archive reads.
@@ -93,64 +94,84 @@ export const activeSetupStore: ActiveSetupPort = {
   },
 
   async persist(setups: ActiveSetup[]): Promise<void> {
+    const bySymbol = new Map<string, ActiveSetup[]>();
     for (const setup of setups) {
-      const signature = setupSignature({
-        symbol: setup.symbol,
-        timeframe: setup.timeframe,
-        direction: setup.direction,
-        zoneBaseTime: setup.zoneBaseTime,
-      });
-      // A finished setup stays finished. Written as a conditional update
-      // rather than an upsert because that is the whole guarantee: the
-      // detector re-measures a zone on every pass and keeps offering the same
-      // base bar back, and since the base bar *is* the identity, a plain
-      // upsert landed on the row that had just closed and reopened it.
-      // WALUSDT flip-flopped between released and live on alternating scans
-      // for exactly this reason — its stop had gone at 04:00 and the board
-      // kept advertising it anyway.
-      const revived = await prisma.trackedSetup.updateMany({
-        where: { signature, status: { notIn: TERMINAL } },
-        // Levels are never rewritten: they are the plan the reader was given,
-        // and the archive's snapshots are photographs of it. The base time is
-        // written because it is part of the signature and therefore cannot
-        // differ — rows created before the column existed need it filled in.
-        data: { status: setup.status, zoneBaseTime: setup.zoneBaseTime },
-      });
-      if (revived.count > 0) continue;
-
-      // Nothing was updated: either this zone has never been published, or it
-      // has already had its life. `create` settles which — the signature is
-      // unique, so a row that exists rejects it, and that row is a finished
-      // one we must leave alone.
+      const changes = bySymbol.get(setup.symbol) ?? [];
+      changes.push(setup);
+      bySymbol.set(setup.symbol, changes);
+    }
+    // Symbols are independent; each symbol still closes its old setup before
+    // publishing its replacement, and every write completes before we respond.
+    let failure: { error: unknown } | undefined;
+    await mapConcurrent([...bySymbol.values()], async (changes) => {
       try {
-        await prisma.trackedSetup.create({
-          data: {
-            signature,
+        for (const setup of changes) {
+          if (failure) return;
+          const signature = setupSignature({
             symbol: setup.symbol,
             timeframe: setup.timeframe,
             direction: setup.direction,
-            entry: setup.entry,
-            target1: setup.target1,
-            target2: setup.target2,
-            stopLoss: setup.stopLoss,
-            riskReward: 2,
-            confidence: Math.round(setup.confidence),
-            zoneTop: setup.zoneTop,
-            zoneBottom: setup.zoneBottom,
             zoneBaseTime: setup.zoneBaseTime,
-            status: setup.status,
-            // Recorded once, on the row's first write. The archive needs to
-            // know whether a setup was published before it filled, and no
-            // later observation can recover that.
-            firstStatus: setup.status,
-          },
-        });
+          });
+          // A finished setup stays finished. Written as a conditional update
+          // rather than an upsert because that is the whole guarantee: the
+          // detector re-measures a zone on every pass and keeps offering the same
+          // base bar back, and since the base bar *is* the identity, a plain
+          // upsert landed on the row that had just closed and reopened it.
+          // WALUSDT flip-flopped between released and live on alternating scans
+          // for exactly this reason — its stop had gone at 04:00 and the board
+          // kept advertising it anyway.
+          const revived = await prisma.trackedSetup.updateMany({
+            where: { signature, status: { notIn: TERMINAL } },
+            // Levels are never rewritten: they are the plan the reader was given,
+            // and the archive's snapshots are photographs of it. The base time is
+            // written because it is part of the signature and therefore cannot
+            // differ — rows created before the column existed need it filled in.
+            data: { status: setup.status, zoneBaseTime: setup.zoneBaseTime },
+          });
+          if (revived.count > 0) continue;
+          if (failure) return;
+
+          // Nothing was updated: either this zone has never been published, or it
+          // has already had its life. `create` settles which — the signature is
+          // unique, so a row that exists rejects it, and that row is a finished
+          // one we must leave alone.
+          try {
+            await prisma.trackedSetup.create({
+              data: {
+                signature,
+                symbol: setup.symbol,
+                timeframe: setup.timeframe,
+                direction: setup.direction,
+                entry: setup.entry,
+                target1: setup.target1,
+                target2: setup.target2,
+                stopLoss: setup.stopLoss,
+                riskReward: 2,
+                confidence: Math.round(setup.confidence),
+                zoneTop: setup.zoneTop,
+                zoneBottom: setup.zoneBottom,
+                zoneBaseTime: setup.zoneBaseTime,
+                status: setup.status,
+                // Recorded once, on the row's first write. The archive needs to
+                // know whether a setup was published before it filled, and no
+                // later observation can recover that.
+                firstStatus: setup.status,
+              },
+            });
+          } catch (error) {
+            // Concurrent scans may both observe a missing signature. One wins the
+            // create; the other may ignore only that unique-key race.
+            if (!isPrismaErrorCode(error, "P2002")) throw error;
+          }
+        }
       } catch (error) {
-        // Concurrent scans may both observe a missing signature. One wins the
-        // create; the other may ignore only that unique-key race.
-        if (!isPrismaErrorCode(error, "P2002")) throw error;
+        // Stop queued writes, but drain the other workers before rejecting so
+        // the scan remains in flight until its last database write settles.
+        failure ??= { error };
       }
-    }
+    }, 4);
+    if (failure) throw failure.error;
   },
 };
 

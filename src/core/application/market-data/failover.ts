@@ -76,6 +76,6 @@ export function createFailoverMarketData(
     fetchKlines: (query) => run((provider) => provider.fetchKlines(query), query.signal),
     fetchTicker24h: (symbol, signal) =>
       run((provider) => provider.fetchTicker24h(symbol, signal), signal),
-    fetchTickers24h: (symbols) => run((provider) => provider.fetchTickers24h(symbols)),
+    fetchTickers24h: (symbols, signal) => run((provider) => provider.fetchTickers24h(symbols, signal), signal),
   };
 }

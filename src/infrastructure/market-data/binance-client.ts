@@ -71,7 +71,7 @@ export async function fetchTicker24h(symbol: string, signal?: AbortSignal): Prom
   };
 }
 
-export async function fetchTickers24h(symbols: string[]): Promise<MarketTicker[]> {
+export async function fetchTickers24h(symbols: string[], signal?: AbortSignal): Promise<MarketTicker[]> {
   if (symbols.length === 0) return [];
   // Binance caps the number of symbols per request; chunk large lists.
   const chunk = 80;
@@ -79,7 +79,7 @@ export async function fetchTickers24h(symbols: string[]): Promise<MarketTicker[]
   for (let i = 0; i < symbols.length; i += chunk) {
     const slice = symbols.slice(i, i + chunk);
     const symbolParam = slice.map((s) => `"${s}"`).join(",");
-    const list = await request<Record<string, string>[]>(`/api/v3/ticker/24hr?symbols=[${symbolParam}]`);
+    const list = await request<Record<string, string>[]>(`/api/v3/ticker/24hr?symbols=[${symbolParam}]`, signal);
     out.push(
       ...list.map((t) => ({
         symbol: t.symbol,

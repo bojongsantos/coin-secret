@@ -135,7 +135,9 @@ Pemindai membaca 15m, 1H, 4H, dan 1D, lalu mengambil bacaan terbaik per simbol â
 
 Rentang histori ditentukan interval, bukan dipilih pembaca. Tiga bulan pada chart harian hanya sembilan puluh candle sedangkan deteksi membaca tiga ratus, sehingga grafik akan membaca pasar yang lebih pendek daripada tabel yang membukanya. `rangeForTimeframe` menjamin setiap interval melewati ambang itu, dan satu tes menjaganya.
 
-Daftar di peramban menyegarkan diri tiap 60 detik, sama dengan umur cache pemindaian di server, jadi penyegaran otomatis hampir tidak berbiaya. Tombol refresh manual hanya memaksa lewat cache dan tidak diperlukan untuk melihat perubahan status.
+Daftar di peramban menyegarkan diri tiap 60 detik, sama dengan umur cache pemindaian di server. Refresh manual melewati hasil cache yang sudah selesai, tetapi tetap bergabung dengan scan identik yang sedang berjalan. Kunci cache mencakup daftar simbol, provider, dan store setup. Kegagalan refresh tidak mengembalikan hasil cache lama sebagai data live.
+
+Polling berhenti menambah request saat tab tersembunyi atau offline dan memuat ulang ketika tab aktif atau koneksi kembali. Kegagalan Signals ditampilkan sebagai data tidak tersedia, bukan hasil valid dengan nol setup. Market Overview boleh mempertahankan snapshot publik terakhir dengan label belum diperbarui dan waktu pembaruan terakhir. Batas sesi tetap ditegakkan server; kegagalan transport pemeriksaan sesi bukan bukti kedaluwarsa.
 
 ## Wilayah eksekusi
 

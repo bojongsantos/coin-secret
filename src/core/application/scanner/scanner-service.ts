@@ -1,5 +1,6 @@
 import type { ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
+import { createScanCache } from "@/core/application/scanner/scan-cache";
 import { emaSeries, rsiSeries } from "@/core/domain/analysis/analysis-engine";
 import {
   detectSupplyDemand,
@@ -171,9 +172,7 @@ export async function runScanner(
   };
 }
 
-const SCANNER_CACHE_TTL_MS = 60_000;
-let scannerCache: { key: string; timestamp: number; result: ScanResult } | null = null;
-let scannerInFlight: { key: string; promise: Promise<ScanResult> } | null = null;
+const cachedScan = createScanCache<ScanResult>(60_000);
 
 export function runScannerCached(
   marketData: MarketDataPort,
@@ -181,24 +180,5 @@ export function runScannerCached(
   force = false,
   options: ScannerOptions = {},
 ): Promise<ScanResult> {
-  const key = symbols.join(",");
-  if (
-    !force &&
-    scannerCache?.key === key &&
-    Date.now() - scannerCache.timestamp < SCANNER_CACHE_TTL_MS
-  ) {
-    return Promise.resolve(scannerCache.result);
-  }
-  if (!force && scannerInFlight?.key === key) return scannerInFlight.promise;
-
-  const promise = runScanner(marketData, symbols, options)
-    .then((result) => {
-      scannerCache = { key, timestamp: Date.now(), result };
-      return result;
-    })
-    .finally(() => {
-      if (scannerInFlight?.promise === promise) scannerInFlight = null;
-    });
-  scannerInFlight = { key, promise };
-  return promise;
+  return cachedScan(marketData, symbols, force, options.activeSetups, () => runScanner(marketData, symbols, options));
 }

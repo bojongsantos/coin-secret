@@ -5,6 +5,7 @@ import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service
 import { publishedBaseIndex, publishedScanLimit } from "@/core/domain/analysis/supply-demand";
 import { fetchPublishedCandles } from "@/core/application/market-data/source-selection";
 import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
+import { isMarketExchange } from "@/core/domain/market/exchange";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { isFilledStatus } from "@/core/domain/promo/capture-trigger";
 import { proofWindow, type ProofInput } from "@/core/domain/promo/proof-image";
@@ -142,6 +143,8 @@ const MAX_ENTRY_CANDIDATES = 24;
 async function captureEntries(now: Date, report: SetupCaptureReport): Promise<number> {
   const candidates = await prisma.trackedSetup.findMany({
     where: {
+      archivedAt: null,
+      exchange: { in: ["binance", "bybit"] },
       firstStatus: "Limit Order",
       snapshots: { none: { kind: "ENTRY" } },
       OR: eligibleCheck(now),
@@ -153,6 +156,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
 
   let captured = 0;
   for (const setup of candidates) {
+    if (setup.archivedAt || !isMarketExchange(setup.exchange)) continue;
     if (captured >= MAX_CAPTURES_PER_RUN) break;
 
     // Deep enough to hold the bar the zone formed on, however long ago the
@@ -262,6 +266,8 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
 async function resolveResults(now: Date): Promise<number> {
   const pending = await prisma.trackedSetup.findMany({
     where: {
+      archivedAt: null,
+      exchange: { in: ["binance", "bybit"] },
       resultAt: null,
       // Only the losing outcomes are excluded. A setup the live scan has
       // already marked "Target 2 reached" still owes the archive its result
@@ -279,6 +285,7 @@ async function resolveResults(now: Date): Promise<number> {
 
   let captured = 0;
   for (const setup of pending) {
+    if (setup.archivedAt || !isMarketExchange(setup.exchange)) continue;
     // Enough history to hold the zone, the fill and the target in one window.
     const history = await fetchPublishedCandles(marketDataSources, setup.exchange,
       { symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: PROOF_HISTORY_BARS })

@@ -26,7 +26,7 @@ export const activeSetupStore: ActiveSetupPort = {
   async loadActive(symbols: string[]): Promise<ActiveSetup[]> {
     if (symbols.length === 0) return [];
     const rows = await prisma.trackedSetup.findMany({
-      where: { symbol: { in: symbols }, status: { notIn: TERMINAL } },
+      where: { symbol: { in: symbols }, archivedAt: null, status: { notIn: TERMINAL } },
       // Newest first, so the de-duplication below keeps the current one when a
       // symbol somehow carries more than one live row.
       orderBy: { updatedAt: "desc" },
@@ -85,7 +85,11 @@ export const activeSetupStore: ActiveSetupPort = {
     // remembering here.
     const oldest = Math.floor(Date.now() / 1000) - ZONE_SCAN_WINDOW * TIMEFRAME_SECONDS["1H"];
     const rows = await prisma.trackedSetup.findMany({
-      where: { symbol: { in: symbols }, status: { in: TERMINAL }, zoneBaseTime: { gte: oldest } },
+      where: {
+        symbol: { in: symbols },
+        zoneBaseTime: { gte: oldest },
+        OR: [{ status: { in: TERMINAL } }, { archivedAt: { not: null } }],
+      },
       select: { symbol: true, timeframe: true, direction: true, zoneBaseTime: true },
     });
     return rows.map((row) => ({
@@ -125,7 +129,7 @@ export const activeSetupStore: ActiveSetupPort = {
           // for exactly this reason — its stop had gone at 04:00 and the board
           // kept advertising it anyway.
           const revived = await prisma.trackedSetup.updateMany({
-            where: { signature, exchange: setup.exchange ?? null, status: { notIn: TERMINAL } },
+            where: { signature, exchange: setup.exchange ?? null, archivedAt: null, status: { notIn: TERMINAL } },
             // Levels are never rewritten: they are the plan the reader was given,
             // and the archive's snapshots are photographs of it. The base time is
             // written because it is part of the signature and therefore cannot
@@ -167,7 +171,8 @@ export const activeSetupStore: ActiveSetupPort = {
             // Concurrent scans may both observe a missing signature. One wins the
             // create; the other may ignore only that unique-key race.
             if (!isPrismaErrorCode(error, "P2002")) throw error;
-            const winner = await prisma.trackedSetup.findUnique({ where: { signature }, select: { exchange: true, status: true } });
+            const winner = await prisma.trackedSetup.findUnique({ where: { signature }, select: { exchange: true, status: true, archivedAt: true } });
+            if (winner?.archivedAt) throw new Error("Published setup archived; refresh required");
             if (winner && !TERMINAL.includes(winner.status) && winner.exchange !== (setup.exchange ?? null)) {
               throw new Error("Published setup exchange conflict; refresh required");
             }

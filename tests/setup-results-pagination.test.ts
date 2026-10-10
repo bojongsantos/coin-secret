@@ -25,7 +25,7 @@ const boundary = load("src/shared/server/admin-request.ts", {
   "@/shared/lib/trusted-origins": { resolveTrustedOrigins: () => [] },
 });
 
-type Query = { skip: number; take: number; orderBy: unknown; where: unknown };
+type Query = { skip: number; take: number; orderBy: unknown; where: { archivedAt?: null } };
 type Payload = { results: { id: string }[]; page: number; hasMore: boolean };
 
 function fixture(unauthorized = false) {
@@ -37,7 +37,9 @@ function fixture(unauthorized = false) {
     entry: 100, target2: 120,
     resultAt: new Date("2026-10-05T00:00:00Z"),
     firstSeenAt: new Date("2026-10-04T00:00:00Z"),
+    archivedAt: null as Date | null,
   }));
+  rows.unshift({ ...rows[0], id: "archived-result", archivedAt: new Date("2026-10-10T00:00:00Z") });
   const route = load("src/app/api/admin/setup-results/route.ts", {
     "@/infrastructure/auth/current-user": { async requireAdmin() {
       authCalls++;
@@ -46,7 +48,8 @@ function fixture(unauthorized = false) {
     } },
     "@/infrastructure/database/prisma": { prisma: { trackedSetup: { async findMany(query: Query) {
       queries.push(query);
-      return rows.slice(query.skip, query.skip + query.take);
+      const visible = query.where.archivedAt === null ? rows.filter((row) => row.archivedAt === null) : rows;
+      return visible.slice(query.skip, query.skip + query.take);
     } } } },
     "@/shared/server/http": http,
     "@/shared/server/admin-request": boundary,
@@ -67,7 +70,7 @@ test("setup results page two queries offset 50 and 51 rows with stable newest or
   assert.equal(f.queries[0].skip, 50);
   assert.equal(f.queries[0].take, 51);
   assert.equal(JSON.stringify(f.queries[0].orderBy), JSON.stringify([{ resultAt: "desc" }, { id: "desc" }]));
-  assert.equal(JSON.stringify(f.queries[0].where), JSON.stringify({ resultAt: { not: null } }));
+  assert.equal(JSON.stringify(f.queries[0].where), JSON.stringify({ resultAt: { not: null }, archivedAt: null }));
   const body = await response.json() as Payload;
   assert.equal(body.page, 2);
   assert.equal(body.results.length, 50);
@@ -89,6 +92,26 @@ test("pagination exposes older results beyond the former hundred-row limit", asy
   assert.equal(ids.length, 121);
   assert.equal(new Set(ids).size, 121);
   assert.equal(ids.at(-1), "result-001");
+  assert.equal(ids.includes("archived-result"), false);
+});
+
+test("an archived setup cannot be rendered as a result proof by its direct id", async () => {
+  let composed = false;
+  const route = load("src/app/api/admin/setup-results/[id]/route.ts", {
+    "@/core/domain/promo/proof-image": { composeProofImage() { composed = true; return "<svg/>"; } },
+    "@/infrastructure/auth/current-user": { async requireAdmin() { return { id: "admin" }; } },
+    "@/infrastructure/promo/brand-asset": { async wordmarkDataUri() { return null; } },
+    "@/infrastructure/database/prisma": { prisma: { trackedSetup: { async findUnique(query: { where: { id: string; archivedAt?: null } }) {
+      assert.equal(query.where.id, "archived-result");
+      if (query.where.archivedAt === null) return null;
+      return { symbol: "BTCUSDT", snapshots: [{ kind: "RESULT", payload: { entryFilledTime: 1, candles: [{}] } }] };
+    } } } },
+    "@/shared/server/http": http,
+  });
+  const get = route.GET as (request: Request, context: { params: Promise<{ id: string }> }) => Promise<Response>;
+  const response = await get(new Request("https://coinsecret.example/api/admin/setup-results/archived-result"), { params: Promise.resolve({ id: "archived-result" }) });
+  assert.equal(response.status, 404);
+  assert.equal(composed, false);
 });
 
 test("invalid pagination is rejected before any setup-results database query", async () => {

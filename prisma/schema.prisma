@@ -189,6 +189,9 @@ model TrackedSetup {
   id         String   @id @default(cuid())
   /// Original spot price feed. Null on legacy rows; never inferred or backfilled.
   exchange   String?
+  /// Operational retirement, separate from a trade's last observed outcome.
+  archivedAt DateTime?
+  archiveReason String?
   symbol     String
   timeframe  String
   direction  String

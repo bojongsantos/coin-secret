@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     await requireAdmin();
     const { page, skip, take } = adminPage(request);
     const results = await prisma.trackedSetup.findMany({
-      where: { resultAt: { not: null } },
+      where: { resultAt: { not: null }, archivedAt: null },
       orderBy: [{ resultAt: "desc" }, { id: "desc" }],
       skip,
       take: take + 1,

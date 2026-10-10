@@ -16,7 +16,12 @@ function setup(symbol: string, zoneBaseTime = 1000, status = "Running"): ActiveS
     confidence: 75, zoneTop: 100, zoneBottom: 95, zoneBaseTime, status };
 }
 
-function fixture(initial: ActiveSetup[] = [], failure?: Error, wait?: (signature: string, operation: string) => Promise<void>) {
+interface StoredSetup extends ActiveSetup {
+  archivedAt?: Date | null;
+  archiveReason?: string | null;
+}
+
+function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature: string, operation: string) => Promise<void>) {
   const rows = new Map(initial.map((row) => [setupSignature(row), { ...row }]));
   const events: Array<{ signature: string; operation: string }> = [];
   let active = 0;
@@ -45,15 +50,22 @@ function fixture(initial: ActiveSetup[] = [], failure?: Error, wait?: (signature
     "@/core/domain/analysis/setup-signature": { setupSignature },
     "@/shared/lib/async": { mapConcurrent },
     "@/infrastructure/database/prisma": { prisma: { trackedSetup: {
-      updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; status: { notIn: string[] } }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
+      findMany: async ({ where }: { where: { symbol: { in: string[] }; archivedAt?: null; status?: { notIn: string[] };
+        zoneBaseTime?: { gte: number }; OR?: Array<{ status?: { in: string[] }; archivedAt?: { not: null } }> } }) =>
+        [...rows.values()].filter((row) => where.symbol.in.includes(row.symbol)
+          && (where.archivedAt !== null || !row.archivedAt)
+          && (!where.status || !where.status.notIn.includes(row.status))
+          && (!where.zoneBaseTime || row.zoneBaseTime >= where.zoneBaseTime.gte)
+          && (!where.OR || where.OR.some((condition) => condition.status?.in.includes(row.status) || condition.archivedAt && row.archivedAt))),
+      updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; archivedAt: null; status: { notIn: string[] } }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
         const row = rows.get(where.signature);
-        if (!row || where.status.notIn.includes(row.status) || (row.exchange ?? null) !== where.exchange) return { count: 0 };
+        if (!row || row.archivedAt || where.status.notIn.includes(row.status) || (row.exchange ?? null) !== where.exchange) return { count: 0 };
         Object.assign(row, data);
         return { count: 1 };
       }),
       findUnique: async ({ where }: { where: { signature: string } }) => {
         const row = rows.get(where.signature);
-        return row ? { status: row.status, exchange: row.exchange ?? null } : null;
+        return row ? { status: row.status, exchange: row.exchange ?? null, archivedAt: row.archivedAt ?? null } : null;
       },
       create: ({ data }: { data: ActiveSetup & { signature: string } }) => query(data.signature, "create", () => {
         if (rows.has(data.signature)) throw Object.assign(new Error("duplicate"), { code: "P2002" });
@@ -86,6 +98,53 @@ test("published writes run four symbols together while closing each old setup be
     assert.equal(fixtureData.rows.get(oldSignature)?.status, "Target 2 reached");
     assert.equal(fixtureData.rows.get(replacementSignature)?.status, "Running");
   }
+});
+
+test("archived legacy plans leave the active board and retire their zone without changing historical trade fields", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const archived: StoredSetup = { ...setup("BTCUSDT", recent, "Running"), exchange: null,
+    archivedAt: new Date(), archiveReason: "legacy_exchange_unverified" };
+  const active = { ...setup("BTCUSDT", recent + 900, "Limit Order"), exchange: "binance" as const, archivedAt: null };
+  const terminal = setup("ETHUSDT", recent, "Target 2 reached");
+  const tooOld = { ...archived, symbol: "OLDUSDT", zoneBaseTime: recent - 2_000_000 };
+  const fixtureData = fixture([archived, active, terminal, tooOld]);
+  const symbols = ["BTCUSDT", "ETHUSDT", "OLDUSDT"];
+  const board = await fixtureData.store.loadActive(symbols);
+  assert.equal(board.length, 1);
+  assert.equal(board[0].zoneBaseTime, active.zoneBaseTime);
+  assert.equal(board[0].exchange, "binance");
+  const retired = await fixtureData.store.loadRetiredZones(symbols);
+  assert.deepEqual(retired.map((row) => row.zoneBaseTime), [archived.zoneBaseTime, terminal.zoneBaseTime]);
+  assert.deepEqual(fixtureData.rows.get(setupSignature(archived)), archived);
+  assert.deepEqual(fixtureData.rows.get(setupSignature(terminal)), terminal);
+});
+
+test("a stale scan cannot reactivate or assign a new outcome to an archived signature", async () => {
+  const archived: StoredSetup = { ...setup("BTCUSDT"), exchange: null, archivedAt: new Date(), archiveReason: "legacy_exchange_unverified" };
+  const fixtureData = fixture([archived]);
+  await assert.rejects(fixtureData.store.persist([{ ...archived, exchange: "binance", status: "Target 2 reached", entry: 105 }]), /setup archived; refresh required/);
+  assert.deepEqual(fixtureData.rows.get(setupSignature(archived)), archived);
+  const replacement = { ...setup("BTCUSDT", 2000, "Limit Order"), exchange: "binance" as const };
+  await fixtureData.store.persist([replacement]);
+  assert.equal(fixtureData.rows.get(setupSignature(replacement))?.status, "Limit Order");
+  assert.equal(fixtureData.rows.get(setupSignature(replacement))?.exchange, "binance");
+  assert.equal(fixtureData.rows.get(setupSignature(archived))?.status, "Running");
+});
+
+test("archival committed while a stale update waits prevents that update from recording a lifecycle result", async () => {
+  let resume!: () => void;
+  const waiting = new Promise<void>((resolve) => { resume = resolve; });
+  const legacy: StoredSetup = { ...setup("BTCUSDT"), exchange: null, archivedAt: null };
+  const fixtureData = fixture([legacy], undefined, (_signature, operation) => operation === "update" ? waiting : Promise.resolve());
+  const pending = fixtureData.store.persist([{ ...legacy, status: "Target 2 reached" }]);
+  const retained = fixtureData.rows.get(setupSignature(legacy))!;
+  retained.archivedAt = new Date();
+  retained.archiveReason = "legacy_exchange_unverified";
+  resume();
+  await assert.rejects(pending, /setup archived; refresh required/);
+  assert.equal(retained.status, "Running");
+  assert.equal(retained.entry, 100);
+  assert.equal(retained.exchange, null);
 });
 
 test("parallel persistence preserves terminal rows and published levels, and only ignores duplicate-key races", async () => {

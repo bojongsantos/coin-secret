@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as sourceSelection from "@/core/application/market-data/source-selection";
+import * as marketExchanges from "@/core/domain/market/exchange";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
@@ -174,7 +175,8 @@ function captureQueue(kind: "entry" | "result") {
     firstStatus: kind === "entry" ? "Limit Order" : "Filled", status: "Running",
     resultCheckedAt: null as Date | null, resultAt: null as Date | null,
     snapshots: new Set<string>(kind === "result" ? ["ENTRY"] : []),
-    timeframe: "15m", direction: "long", zoneBaseTime: 1000, exchange: "binance",
+    timeframe: "15m", direction: "long", zoneBaseTime: 1000, exchange: "binance" as string | null,
+    archivedAt: null as Date | null,
     entry: 100, stopLoss: 90, target1: 110, target2: 120, confidence: 75,
     riskReward: 2, zoneTop: 100, zoneBottom: 95,
   }));
@@ -189,6 +191,7 @@ function captureQueue(kind: "entry" | "result") {
     "@/config/default-watchlist": { DEFAULT_WATCHLIST: [] },
     "@/core/application/scanner/supply-demand-scan-service": { runSdScan: async () => ({ demand: [], supply: [], errors: [] }) },
     "@/core/application/market-data/source-selection": sourceSelection,
+    "@/core/domain/market/exchange": marketExchanges,
     "@/core/domain/analysis/supply-demand": { publishedBaseIndex: () => 0, publishedScanLimit: () => 1000 },
     "@/core/domain/analysis/setup-lifecycle": { traceSetupLifecycle: () => ({ status: "Target 2 reached", filledIndex: 1, target2Index: 2, stopIndex: null }) },
     "@/core/domain/promo/capture-trigger": { isFilledStatus: () => true },
@@ -197,10 +200,13 @@ function captureQueue(kind: "entry" | "result") {
     "@/infrastructure/market-data/market-data-provider": { marketData: captureMarket, marketDataSources: [{ exchange: "binance", marketData: captureMarket }] },
     "@/infrastructure/database/prisma": { prisma: {
       trackedSetup: {
-        findMany: async (query: { where: { firstStatus?: string; OR: Array<{ resultCheckedAt: null | { lte: Date } }> }; take: number }) => {
+        findMany: async (query: { where: { archivedAt: null; exchange: { in: string[] }; firstStatus?: string; OR: Array<{ resultCheckedAt: null | { lte: Date } }> }; take: number }) => {
+          assert.equal(query.where.archivedAt, null, "archived setups must stay out of both proof queues");
+          assert.deepEqual(Array.from(query.where.exchange.in), ["binance", "bybit"], "proofs require a recorded exchange");
           assert.equal(query.where.OR.length, 2, "capture reads must honor the backoff window");
           const cutoff = query.where.OR[1].resultCheckedAt?.lte.getTime() ?? -Infinity;
-          return rows.filter((row) => (!row.resultCheckedAt || row.resultCheckedAt.getTime() <= cutoff) &&
+          return rows.filter((row) => row.archivedAt === null && query.where.exchange.in.includes(row.exchange ?? "") &&
+            (!row.resultCheckedAt || row.resultCheckedAt.getTime() <= cutoff) &&
             (query.where.firstStatus ? row.firstStatus === "Limit Order" && !row.snapshots.has("ENTRY") :
               row.resultAt === null && row.snapshots.has("ENTRY")))
             .sort((a, b) => (a.resultCheckedAt?.getTime() ?? 0) - (b.resultCheckedAt?.getTime() ?? 0) || a.id.localeCompare(b.id))
@@ -221,6 +227,26 @@ function captureQueue(kind: "entry" | "result") {
 }
 
 for (const kind of ["entry", "result"] as const) {
+  test(`archived setups and setups with an unknown exchange never enter the ${kind} proof queue`, async () => {
+    const { api, rows, reads, writes, clock } = captureQueue(kind);
+    const archived = rows[24];
+    const unknown = rows[25];
+    archived.archivedAt = new Date(clock.now);
+    unknown.exchange = null;
+    await api.runSetupCapture();
+    clock.now += 5 * 60_000;
+    await api.runSetupCapture();
+    assert.ok(!reads.includes(archived.symbol) && !reads.includes(unknown.symbol));
+    assert.ok(writes.every((write) => write.id !== archived.id && write.id !== unknown.id));
+    for (const row of [archived, unknown]) {
+      assert.equal(row.resultCheckedAt, null);
+      assert.equal(row.resultAt, null);
+      assert.equal(row.status, "Running");
+      assert.equal(row.snapshots.has("RESULT"), false);
+      assert.equal(row.snapshots.has("ENTRY"), kind === "result");
+    }
+  });
+
   test(`failed ${kind} reads advance the queue, back off, and let valid terminal setups publish`, async () => {
     const { api, rows, reads, writes, clock } = captureQueue(kind);
     await api.runSetupCapture();

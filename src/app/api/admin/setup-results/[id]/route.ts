@@ -17,7 +17,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     await requireAdmin();
     const { id } = await context.params;
     const setup = await prisma.trackedSetup.findUnique({
-      where: { id },
+      where: { id, archivedAt: null },
       select: { symbol: true, snapshots: { select: { kind: true, payload: true } } },
     });
     if (!setup) throw new HttpError(404, "Hasil setup tidak ditemukan.", "NOT_FOUND");

@@ -100,7 +100,8 @@ export const activeSetupStore: ActiveSetupPort = {
     }));
   },
 
-  async persist(setups: ActiveSetup[]): Promise<void> {
+  async persist(setups: ActiveSetup[], signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const bySymbol = new Map<string, ActiveSetup[]>();
     for (const setup of setups) {
       const changes = bySymbol.get(setup.symbol) ?? [];
@@ -114,6 +115,7 @@ export const activeSetupStore: ActiveSetupPort = {
       try {
         for (const setup of changes) {
           if (failure) return;
+          signal?.throwIfAborted();
           const signature = setupSignature({
             symbol: setup.symbol,
             timeframe: setup.timeframe,
@@ -138,6 +140,7 @@ export const activeSetupStore: ActiveSetupPort = {
           });
           if (revived.count > 0) continue;
           if (failure) return;
+          signal?.throwIfAborted();
 
           // Nothing was updated: either this zone has never been published, or it
           // has already had its life. `create` settles which — the signature is
@@ -171,6 +174,7 @@ export const activeSetupStore: ActiveSetupPort = {
             // Concurrent scans may both observe a missing signature. One wins the
             // create; the other may ignore only that unique-key race.
             if (!isPrismaErrorCode(error, "P2002")) throw error;
+            signal?.throwIfAborted();
             const winner = await prisma.trackedSetup.findUnique({ where: { signature }, select: { exchange: true, status: true, archivedAt: true } });
             if (winner?.archivedAt) throw new Error("Published setup archived; refresh required");
             if (winner && !TERMINAL.includes(winner.status) && winner.exchange !== (setup.exchange ?? null)) {
@@ -185,6 +189,7 @@ export const activeSetupStore: ActiveSetupPort = {
       }
     }, 4);
     if (failure) throw failure.error;
+    signal?.throwIfAborted();
   },
 };
 

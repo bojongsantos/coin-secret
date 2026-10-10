@@ -371,6 +371,97 @@ const settlePolling = () => new Promise<void>((resolve) => setImmediate(resolve)
 const marketPayload = { context: { btc: { value: "80K" } }, sentiment: { score: 71 }, fetchedAt: "2026-10-05T00:00:00Z" };
 const signalsPayload = { result: { demand: [{ symbol: "BTCUSDT" }], supply: [], demandTotal: 1, supplyTotal: 0, errors: [], scannedAt: "2026-10-05T00:00:00Z" }, top: [] };
 
+test("initial offline Signals stops the skeleton and resumes immediately when online", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);
+  harness.navigator.onLine = false;
+  harness.runTimer();
+  const offline = harness.render();
+  assert.equal(harness.requests.length, 0);
+  assert.equal(offline.loading, false);
+  assert.match(offline.error!, /offline.*Reconnect/);
+  assert.equal(offline.result, null);
+  offline.refresh();
+  assert.equal(harness.requests.length, 0);
+  harness.navigator.onLine = true;
+  harness.window.dispatchEvent(new Event("online"));
+  assert.equal(harness.requests.length, 1);
+  await settlePolling();
+  const recovered = harness.render();
+  assert.ok(recovered.result);
+  assert.equal(recovered.error, null);
+  assert.equal(recovered.loading, false);
+  harness.unmount();
+});
+
+test("hidden initial polling does not falsely report offline, but visible offline polling does", () => {
+  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);
+  harness.document.visibilityState = "hidden";
+  harness.navigator.onLine = false;
+  harness.runTimer();
+  assert.equal(harness.requests.length, 0);
+  assert.equal(harness.render().error, null);
+  harness.document.visibilityState = "visible";
+  harness.document.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(harness.render().loading, false);
+  assert.match(harness.render().error!, /offline/);
+  harness.unmount();
+});
+
+test("offline cancellation drains one in-flight read before reconnect and retains only allowed snapshots", async () => {
+  for (const [path, hook, payload, retain] of [
+    ["src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload, false],
+    ["src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload, true],
+  ] as const) {
+    const harness = pollingHook(path, hook, payload);
+    harness.runTimer(); await settlePolling();
+    const updated = harness.render().lastUpdated;
+    harness.mode.stalled = true;
+    harness.render().refresh();
+    assert.equal(harness.requests.length, 2);
+    harness.navigator.onLine = false;
+    harness.window.dispatchEvent(new Event("offline"));
+    assert.equal(harness.signals.at(-1)?.aborted, true);
+    const offline = harness.render();
+    assert.equal(offline.loading, false);
+    assert.match(offline.error!, /offline/);
+    assert.equal(offline.lastUpdated, updated);
+    assert.equal(offline.stale, retain);
+    assert.equal(Boolean(offline.context ?? offline.result), retain);
+    harness.mode.stalled = false;
+    harness.navigator.onLine = true;
+    harness.window.dispatchEvent(new Event("online"));
+    offline.refresh();
+    assert.equal(harness.requests.length, 2, "reconnect cannot overlap the aborted request's cleanup");
+    await settlePolling();
+    assert.equal(harness.nextDelay(), 0);
+    harness.runTimer(); await settlePolling();
+    assert.equal(harness.requests.length, 3);
+    assert.equal(harness.render().error, null);
+    assert.equal(harness.render().stale, false);
+    harness.unmount();
+    const revision = harness.revision();
+    harness.window.dispatchEvent(new Event("offline"));
+    assert.equal(harness.revision(), revision, "unmount removes the offline listener");
+  }
+});
+
+test("offline access changes cannot reuse data from the prior plan", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);
+  harness.runTimer(); await settlePolling();
+  assert.ok(harness.render().result);
+  harness.navigator.onLine = false;
+  harness.access.plan = "free";
+  harness.access.fullAccess = false;
+  assert.equal(harness.render().result, null);
+  harness.window.dispatchEvent(new Event("offline"));
+  const offline = harness.render();
+  assert.equal(offline.result, null);
+  assert.equal(offline.lastUpdated, null);
+  assert.equal(offline.loading, false);
+  assert.match(offline.error!, /offline/);
+  harness.unmount();
+});
+
 test("market refresh is single-flight, labels a retained snapshot stale after timeout, and recovers", async () => {
   const harness = pollingHook("src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload);
   harness.runTimer();

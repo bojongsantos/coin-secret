@@ -54,6 +54,7 @@ export interface ActiveSetupPort {
    *
    * Only what actually changed is handed over, so a steady market costs no
    * writes at all.
+   * A deadline stops queued writes; already-started database work must drain.
    */
-  persist(setups: ActiveSetup[]): Promise<void>;
+  persist(setups: ActiveSetup[], signal?: AbortSignal): Promise<void>;
 }

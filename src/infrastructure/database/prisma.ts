@@ -12,7 +12,14 @@ function createPrismaClient(): PrismaClient {
   }
 
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
+    // Native driver/server limits end the actual wait. A promise-only timeout
+    // would let queries keep running after callers release their scan guard.
+    adapter: new PrismaPg({
+      connectionString,
+      connectionTimeoutMillis: 10_000,
+      statement_timeout: 15_000,
+      lock_timeout: 5_000,
+    }),
   });
 }
 

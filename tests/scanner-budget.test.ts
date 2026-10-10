@@ -83,13 +83,14 @@ test("all 193 default symbols retain their rankings and access filtering within 
   assert.deepEqual(visibleSignalsFor(result, false), visibleSignalsFor(expected, false));
 });
 
-test("the shared market deadline cancels stalled reads, skips queued work and persists only completed setups", async (t) => {
+test("the shared deadline cancels stalled reads and cannot begin publishing completed market candidates after expiry", async (t) => {
   const controller = new AbortController();
   t.mock.method(AbortSignal, "timeout", (ms: number) => { assert.equal(ms, 40_000); return controller.signal; });
   const tape = candles();
   const symbols = ["GOODUSDT", ...Array.from({ length: 19 }, (_, index) => `STALL${index}USDT`)];
   const queried: string[] = [];
   let persisted: string[] = [];
+  let persistenceCandidates: string[] = [];
   const market: MarketDataPort = {
     fetchTickers24h: async (input, signal) => { assert.equal(signal, controller.signal); return input.map(ticker); },
     fetchTicker24h: async (symbol) => ticker(symbol),
@@ -102,15 +103,18 @@ test("the shared market deadline cancels stalled reads, skips queued work and pe
   };
   const store: ActiveSetupPort = {
     loadActive: async () => [], loadRetiredZones: async () => [],
-    persist: async (setups) => { persisted = setups.map((setup) => setup.symbol); },
+    persist: async (setups, signal) => {
+      assert.equal(signal, controller.signal, "persistence must inherit the scan deadline");
+      persistenceCandidates = setups.map((setup) => setup.symbol);
+      signal!.throwIfAborted();
+      persisted = persistenceCandidates;
+    },
   };
   const pending = runSdScan(market, symbols, { activeSetups: store });
   await new Promise<void>((resolve) => setImmediate(resolve));
   controller.abort(new DOMException("Timed out", "TimeoutError"));
-  const result = await pending;
-  assert.deepEqual([...result.demand, ...result.supply].map((hit) => hit.symbol), ["GOODUSDT"]);
-  assert.deepEqual(persisted, ["GOODUSDT"]);
-  assert.equal(result.errors.length, 19);
-  assert.ok(result.errors.every((error) => error.endsWith("Scan deadline exceeded")));
+  await assert.rejects(pending, (error) => error === controller.signal.reason);
+  assert.deepEqual(persistenceCandidates, ["GOODUSDT"], "only completed market candidates can reach the writer");
+  assert.deepEqual(persisted, [], "the deadline prevents even valid candidates from starting new database writes after expiry");
   assert.ok(queried.length < 21, "queued symbols do not dispatch more exchange calls after cancellation");
 });

@@ -216,3 +216,35 @@ test("a failed persistence group stops queued writes and rejects only after ever
   assert.equal(fixtureData.rows.has(setupSignature({ ...firstSlow, zoneBaseTime: 2000 })), false);
   assert.equal(fixtureData.rows.has(setupSignature(missingSlow)), false);
 });
+
+test("an expired scan deadline stops queued writes and replacements while draining the database work already started", async () => {
+  const controller = new AbortController();
+  let finishFirst!: () => void;
+  let finishOthers!: () => void;
+  const first = new Promise<void>((resolve) => { finishFirst = resolve; });
+  const others = new Promise<void>((resolve) => { finishOthers = resolve; });
+  const existing = Array.from({ length: 9 }, (_, index) => setup(`DEADLINE${index}USDT`));
+  const fixtureData = fixture(existing, undefined, (signature, operation) => {
+    assert.equal(operation, "update", "the deadline must prevent both new creates and replacement writes");
+    return signature === setupSignature(existing[0]) ? first : others;
+  });
+  const changes = existing.flatMap((row) => [{ ...row, status: "Target 2 reached" }, setup(row.symbol, 2000)]);
+  const pending = fixtureData.store.persist(changes, controller.signal);
+  let settled = false;
+  pending.then(() => { settled = true; }, () => { settled = true; });
+  assert.equal(fixtureData.events.length, 4);
+  const reason = new DOMException("Scan deadline exceeded", "TimeoutError");
+  controller.abort(reason);
+  finishFirst();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "the cache's guard must stay held until every in-flight database write settles");
+  assert.equal(fixtureData.events.filter((event) => event.operation.endsWith(".start")).length, 4);
+  finishOthers();
+  await assert.rejects(pending, (error) => error === reason);
+  assert.equal(fixtureData.events.filter((event) => event.operation.endsWith(".start")).length, 4);
+  assert.equal(fixtureData.rows.size, existing.length);
+  assert.ok(existing.every((row) => !fixtureData.rows.has(setupSignature({ ...row, zoneBaseTime: 2000 }))));
+  const alreadyExpired = fixture(existing);
+  await assert.rejects(alreadyExpired.store.persist(changes, controller.signal), (error) => error === reason);
+  assert.deepEqual(alreadyExpired.events, []);
+});

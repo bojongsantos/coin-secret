@@ -355,7 +355,7 @@ export async function runSdScan(
 
   const persistComplete = stage("persist");
   if (options.activeSetups && changed.length > 0) {
-    await options.activeSetups.persist(changed);
+    await options.activeSetups.persist(changed, deadline);
   }
   persistComplete();
 

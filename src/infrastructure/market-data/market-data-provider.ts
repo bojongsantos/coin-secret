@@ -1,16 +1,30 @@
 import { createFailoverMarketData } from "@/core/application/market-data/failover";
+import { pinnedMarketData } from "@/core/application/market-data/source-selection";
+import type { MarketDataSource } from "@/core/application/ports/market-data-port";
+import type { MarketExchange } from "@/core/domain/market/exchange";
 import { binanceMarketData, fetchSpotUsdtSymbols } from "@/infrastructure/market-data/binance-client";
 import { bybitMarketData, fetchBybitSpotUsdtSymbols } from "@/infrastructure/market-data/bybit-client";
 
 /**
- * The single market-data entry point for the whole app.
+ * Named spot sources for charts, scanners and published setup lifecycle.
  *
- * Binance stays primary because it is the only source with a public realtime
- * websocket the client can consume directly. Bybit covers the case where
- * Binance is unreachable — rate limiting, an outage, or a region that blocks
- * it — so charts and scans keep working instead of showing an error.
+ * New reads prefer Binance and can choose a complete Bybit snapshot. Once a
+ * chart or setup has selected a source, later reads must use that named
+ * adapter. The compatibility gateway below is never used for lifecycle reads.
  */
-export const marketData = createFailoverMarketData([binanceMarketData, bybitMarketData]);
+export const marketDataSources: readonly MarketDataSource[] = [
+  { exchange: "binance", marketData: binanceMarketData },
+  { exchange: "bybit", marketData: bybitMarketData },
+];
+
+export const marketData = {
+  ...createFailoverMarketData([binanceMarketData, bybitMarketData]),
+  sources: marketDataSources,
+};
+
+export function getMarketDataSource(exchange: MarketExchange) {
+  return pinnedMarketData(marketDataSources, exchange);
+}
 
 /**
  * Tradable USDT spot symbols. Falls back to Bybit's board when Binance's

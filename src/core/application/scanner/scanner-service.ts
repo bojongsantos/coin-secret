@@ -1,5 +1,6 @@
 import type { ActiveSetupPort } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
+import { createTickerBatches, loadMarketSnapshot, sourcesForMarketData } from "@/core/application/market-data/source-selection";
 import { createScanCache } from "@/core/application/scanner/scan-cache";
 import { emaSeries, rsiSeries } from "@/core/domain/analysis/analysis-engine";
 import {
@@ -50,35 +51,16 @@ export async function runScanner(
   options: ScannerOptions = {},
 ): Promise<ScanResult> {
   const errors: string[] = [];
+  const sources = sourcesForMarketData(marketData);
   const stored = options.activeSetups
     ? await options.activeSetups.loadActive(symbols)
     : [];
   const active = new Map(stored.map((entry) => [entry.symbol, entry]));
-  let tickers;
-  try {
-    tickers = await marketData.fetchTickers24h(symbols);
-  } catch {
-    const individual = await Promise.allSettled(
-      symbols.map((symbol) => marketData.fetchTicker24h(symbol)),
-    );
-    tickers = individual
-      .filter(
-        (
-          result,
-        ): result is PromiseFulfilledResult<
-          Awaited<ReturnType<MarketDataPort["fetchTicker24h"]>>
-        > => result.status === "fulfilled",
-      )
-      .map((result) => result.value);
-  }
-
-  const tickerMap = new Map(tickers.map((ticker) => [ticker.symbol, ticker]));
+  const tickersBySource = createTickerBatches(sources, symbols);
   const results = await mapConcurrent(
     symbols,
     async (symbol, idx) => {
       try {
-        const ticker = tickerMap.get(symbol);
-        if (!ticker) throw new Error(`No ticker for ${symbol}`);
         // A published setup is read on its own chart, so this page cannot
         // disagree with the board about which trade a symbol is carrying.
         const held = active.get(symbol);
@@ -87,12 +69,14 @@ export async function runScanner(
         // window has to reach that far back; without it this page read the
         // same setup differently from the board.
         const limit = held ? publishedScanLimit(held.zoneBaseTime, timeframe) : ZONE_SCAN_WINDOW;
-        const candles = await marketData.fetchKlines({ symbol, timeframe, limit });
+        const { candles, ticker } = await loadMarketSnapshot(sources, { symbol, timeframe, limit }, held?.exchange ?? undefined, tickersBySource);
         const sd = detectSupplyDemand(candles);
         const published = held
-          ? readPublishedSetup(candles, held, candles[candles.length - 1]?.close ?? held.entry).setup
+          ? readPublishedSetup(candles, held, candles[candles.length - 1]?.close ?? held.entry, { evaluateLifecycle: held.exchange !== null }).setup
           : null;
-        const setup = published ?? sd.setup;
+        // A missing/finished held plan is not permission to substitute a newly
+        // detected trade on this board before the publisher commits it.
+        const setup = held ? published : sd.setup;
         if (!setup) return null;
 
         const price = ticker.lastPrice;

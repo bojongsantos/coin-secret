@@ -3,13 +3,14 @@ import "server-only";
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service";
 import { publishedBaseIndex, publishedScanLimit } from "@/core/domain/analysis/supply-demand";
+import { fetchPublishedCandles } from "@/core/application/market-data/source-selection";
 import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { isFilledStatus } from "@/core/domain/promo/capture-trigger";
 import { proofWindow, type ProofInput } from "@/core/domain/promo/proof-image";
 import { prisma } from "@/infrastructure/database/prisma";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
-import { marketData } from "@/infrastructure/market-data/market-data-provider";
+import { marketData, marketDataSources } from "@/infrastructure/market-data/market-data-provider";
 
 export interface SetupCaptureReport {
   scanned: number;
@@ -158,8 +159,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
     // setup was published. Three hundred bars covered three days of the
     // fifteen-minute chart, and a setup older than that was replayed from the
     // middle of its own trade — a wrong status written straight to the row.
-    const history = await marketData
-      .fetchKlines({
+    const history = await fetchPublishedCandles(marketDataSources, setup.exchange, {
         symbol: setup.symbol,
         timeframe: setup.timeframe as Timeframe,
         limit: publishedScanLimit(setup.zoneBaseTime, setup.timeframe as Timeframe),
@@ -280,8 +280,8 @@ async function resolveResults(now: Date): Promise<number> {
   let captured = 0;
   for (const setup of pending) {
     // Enough history to hold the zone, the fill and the target in one window.
-    const history = await marketData
-      .fetchKlines({ symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: PROOF_HISTORY_BARS })
+    const history = await fetchPublishedCandles(marketDataSources, setup.exchange,
+      { symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: PROOF_HISTORY_BARS })
       .catch(() => [] as Candle[]);
     if (history.length === 0) {
       await prisma.trackedSetup.update({ where: { id: setup.id }, data: { resultCheckedAt: now } });

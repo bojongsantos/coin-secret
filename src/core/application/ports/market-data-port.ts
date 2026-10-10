@@ -1,4 +1,5 @@
 import type { Candle, MarketTicker, Timeframe } from "@/core/domain/models";
+import type { MarketExchange } from "@/core/domain/market/exchange";
 
 export interface KlineQuery {
   symbol: string;
@@ -13,7 +14,14 @@ export interface KlineQuery {
 }
 
 export interface MarketDataPort {
+  /** Named alternatives, used to choose one complete snapshot rather than mix requests. */
+  sources?: readonly MarketDataSource[];
   fetchKlines(query: KlineQuery): Promise<Candle[]>;
   fetchTicker24h(symbol: string, signal?: AbortSignal): Promise<MarketTicker>;
   fetchTickers24h(symbols: string[], signal?: AbortSignal): Promise<MarketTicker[]>;
+}
+
+export interface MarketDataSource {
+  exchange: MarketExchange | null;
+  marketData: MarketDataPort;
 }

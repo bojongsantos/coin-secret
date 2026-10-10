@@ -71,7 +71,7 @@ test("all 193 default symbols retain their rankings and access filtering within 
   }
   assert.equal(completed, true, "the full board must complete before the 40-second market deadline");
   const result = await pending;
-  assert.equal(Date.now() - started, 27_000, "metadata runs together and 16 symbols share each market wave");
+  assert.equal(Date.now() - started, 28_000, "metadata runs together, then a lazy batch and 16 symbols share each market wave");
   assert.equal(peak, 16);
   assert.equal(klineCalls, 386);
   assert.equal(signals.size, 1, "tickers and every candle read share the scan deadline");

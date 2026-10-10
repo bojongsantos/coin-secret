@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const rawSymbol = url.searchParams.get("symbol");
-    if (!rawSymbol) return Response.json({ setup: null });
+    if (!rawSymbol) return Response.json({ setup: null }, { headers: { "Cache-Control": "no-store" } });
     const symbol = normalizeUsdtSymbol(rawSymbol);
 
     // Returned whatever timeframe the caller happens to be showing. A setup
@@ -31,13 +31,15 @@ export async function GET(request: Request) {
     // lived on 1H, and the page said "No Zone Setup" about a symbol the board
     // was listing. The client reads `timeframe` and moves the chart to it.
     const [published] = await activeSetupStore.loadActive([symbol]);
-    if (!published) return Response.json({ setup: null });
+    if (!published) return Response.json({ setup: null }, { headers: { "Cache-Control": "no-store" } });
 
     return Response.json(
       { setup: published },
-      { headers: { "Cache-Control": "private, max-age=15" } },
+      { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return apiError(error);
+    const response = apiError(error);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
 }

@@ -85,8 +85,9 @@ function SetupRowContent({ hit, max, t, prominent = false }: { hit: SdScanHit; m
         {Math.round(hit.confidence)}%
       </span>
 
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center justify-center gap-1">
         <StatusPill status={hit.status} t={t} prominent={prominent} />
+        {hit.exchange === null && <span className="text-[9px] text-warning">{t("chart.sourceUnverified")}</span>}
       </div>
     </>
   );

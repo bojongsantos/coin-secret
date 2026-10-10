@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import type { Timeframe } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
+import { ChartDataStatus } from "@/presentation/features/analysis/chart-data-status";
 import { useLiveAnalysis } from "@/presentation/hooks/use-live-analysis";
 import { useT } from "@/presentation/hooks/use-translate";
 import { AppShell } from "@/presentation/layout/app-shell";
@@ -27,8 +28,15 @@ export function AnalysisClient({
 }) {
   const { t } = useT();
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  const [viewSymbol, setViewSymbol] = useState(initialSymbol);
+  const [chosen, setChosen] = useState(false);
+  if (viewSymbol !== initialSymbol) {
+    setViewSymbol(initialSymbol);
+    setTimeframe(initialTimeframe);
+    setChosen(false);
+  }
   const range = rangeForTimeframe(timeframe);
-  const { analysis, error, history, loadMoreHistory, publishedTimeframe } = useLiveAnalysis(
+  const { analysis, error, history, loadMoreHistory, publishedTimeframe, connectionState, exchange, lastUpdated, setupState, setupError, retry } = useLiveAnalysis(
     initialSymbol,
     timeframe,
     range,
@@ -38,7 +46,6 @@ export function AnalysisClient({
   // the reader has picked one themselves. Adjusting during render is React's
   // own pattern for state derived from a changing input; an effect would paint
   // the wrong chart first and then correct it.
-  const [chosen, setChosen] = useState(false);
   if (publishedTimeframe && publishedTimeframe !== timeframe && !chosen) {
     setTimeframe(publishedTimeframe);
   }
@@ -46,6 +53,7 @@ export function AnalysisClient({
   return (
     <AppShell>
       <div className="flex flex-col gap-4 sm:gap-5">
+        <ChartDataStatus connectionState={connectionState} exchange={exchange} lastUpdated={lastUpdated} setupState={setupState} setupError={setupError} retry={retry} />
         {error && (
           <div className="rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-[12.5px] text-negative">
             {error}

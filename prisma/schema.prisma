@@ -187,6 +187,8 @@ model UserFeatureGrant {
 /// already photographed a hundred times.
 model TrackedSetup {
   id         String   @id @default(cuid())
+  /// Original spot price feed. Null on legacy rows; never inferred or backfilled.
+  exchange   String?
   symbol     String
   timeframe  String
   direction  String

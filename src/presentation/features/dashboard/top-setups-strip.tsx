@@ -42,6 +42,7 @@ export function TopSetupsStrip({
       </h2>
 
       <DataStatus error={error} lastUpdated={lastUpdated} loading={loading} onRetry={onRetry} />
+      {setups.some(({ hit }) => hit.exchange === null) && <p className="mt-2 text-[11px] text-warning">{t("chart.legacySetups")}</p>}
 
       {loading && setups.length === 0 ? (
         <div className="mt-5 flex h-20 items-center justify-center text-muted-2">
@@ -65,6 +66,7 @@ export function TopSetupsStrip({
               <button
                 key={`${hit.symbol}-${hit.timeframe}-${index}`}
                 type="button"
+                title={hit.exchange === null ? t("chart.sourceUnverified") : undefined}
                 onClick={() => onSelect(hit.symbol, hit.timeframe)}
                 aria-hidden={index >= setups.length}
                 tabIndex={index >= setups.length ? -1 : 0}

@@ -213,6 +213,12 @@ Hal ini pernah terjadi pada `CRON_SECRET`: endpoint produksi menerima secret yan
 
 Binance menjadi provider utama karena menyediakan websocket publik untuk data realtime. Bybit menjadi cadangan melalui `MarketDataPort` yang sama. Provider yang gagal dijeda selama enam puluh detik lalu dicoba kembali. Keduanya publik dan tidak memerlukan API key.
 
+Chart dan scanner memilih satu sumber bernama untuk satu snapshot: ticker, candle, dan timeframe lanjutan tidak dicampur antar-bursa. Batch ticker dibaca sekali per sumber, hanya ketika sumber tersebut diperlukan. Chart Bybit memakai polling berkala; streaming Binance hanya diterapkan pada histori Binance. Pemulihan koneksi mengisi semua interval candle yang terlewat sebelum evaluasi lifecycle dilanjutkan.
+
+Setup baru menyimpan `TrackedSetup.exchange`. Setup terbit dan bukti hasilnya dibaca dari sumber tersebut; sumber yang tidak tersedia tidak diganti diam-diam. Kolom nullable sengaja mempertahankan sumber setup lama sebagai belum terverifikasi. Level dan status tersimpan tidak ditulis ulang dari tebakan sumber lain, dan UI menandai evaluasi hasil live yang ditangguhkan. Batas umur histori yang sudah ada tetap berlaku.
+
+Chart menampilkan kondisi koneksi dan waktu pembaruan data terakhir. Kegagalan membaca rencana terbit menyembunyikan level sampai verifikasi berhasil, sedangkan analisis tanpa rencana terbit diberi label belum diterbitkan. Pergantian coin membersihkan metadata timeframe lama. Jalur live tidak menghitung backtest historis yang tidak ditampilkan; aturan wick, entry, target, dan stop loss tetap memakai lifecycle domain yang sama.
+
 Funding rate dan open interest memakai rantai cadangannya sendiri: Binance futures, lalu Bybit, lalu OKX. Ketiganya dicoba berurutan, bukan bersamaan, sehingga pada jalur normal hanya yang pertama dipanggil. Parser tiap bursa berada di `core/domain/market/derivatives.ts` agar bentuk jawaban masing-masing dapat diuji langsung.
 
 Sebuah sumber yang hanya menjawab separuh diperlakukan sebagai tidak menjawab. Satu angka nyata di sebelah tanda hubung terbaca sebagai "pasar tidak punya open interest", bukan sebagai "sumber ini tidak menjawab". Angka di luar rentang wajar juga ditolak, karena sumber yang mengirim persen ketika yang diharapkan pecahan terlihat lebih meyakinkan daripada sumber yang diam.

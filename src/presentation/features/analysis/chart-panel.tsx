@@ -35,6 +35,7 @@ import { useTheme } from "@/presentation/hooks/use-ui-preference";
 import { useT } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import type { HistoryState } from "@/presentation/hooks/use-live-analysis";
+import { chartCandleUpdates } from "./chart-updates";
 import styles from "./chart-panel.module.css";
 
 function chartRenderScale(container: HTMLElement): number {
@@ -213,7 +214,7 @@ export function ChartPanel({
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const liveCandlesRef = useRef<Candle[]>([]);
   /** Shape of the series currently uploaded to the chart. */
-  const renderedRef = useRef<{ first: number; length: number } | null>(null);
+  const renderedRef = useRef<Candle[] | null>(null);
   const patternSeriesRef = useRef<ISeriesApi<"Line" | "Baseline">[]>([]);
   const zoneLabelPrimitiveRef = useRef<IPanePrimitive<Time> | null>(null);
   const patternMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
@@ -242,24 +243,13 @@ export function ChartPanel({
       close: c.close,
     });
 
-    // setData re-uploads the whole series, which is ruinous once the chart
-    // holds hundreds of thousands of bars. When only the tail moved — a live
-    // tick refreshing the forming bar, or one new bar opening — update that
-    // single bar instead. A full upload is reserved for the cases that really
-    // changed the series: history prepended, or a new symbol/timeframe/range.
-    const previous = renderedRef.current;
-    const first = candles[0].time;
-    const grewByOne = previous !== null && candles.length === previous.length + 1;
-    const sameLength = previous !== null && candles.length === previous.length;
-
-    if (previous !== null && previous.first === first && (sameLength || grewByOne)) {
-      cs.update(bar(candles[candles.length - 1]));
-      renderedRef.current = { first, length: candles.length };
-      return;
-    }
-
-    cs.setData(candles.map(bar));
-    renderedRef.current = { first, length: candles.length };
+    // REST recovery can correct a closed candle without changing series length.
+    // Patch those existing bars too; a tail-only shortcut would leave a false
+    // wick on screen even though the lifecycle has already read the correction.
+    const updates = chartCandleUpdates(renderedRef.current, candles);
+    if (updates === null) cs.setData(candles.map(bar));
+    else for (const update of updates) cs.update(bar(update.candle), update.historical);
+    renderedRef.current = candles;
   }, []);
 
   const { theme } = useTheme();

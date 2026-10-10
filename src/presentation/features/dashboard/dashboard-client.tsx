@@ -6,6 +6,7 @@ import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import type { Timeframe } from "@/core/domain/models";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
+import { ChartDataStatus } from "@/presentation/features/analysis/chart-data-status";
 import { MarketOverview } from "@/presentation/features/dashboard/market-overview";
 import { TopSetupsStrip } from "@/presentation/features/dashboard/top-setups-strip";
 import { SignalsBoard } from "@/presentation/features/signals/signals-board";
@@ -29,7 +30,7 @@ export function DashboardClient() {
   // day's leader rather than on an arbitrary default.
   const activeSymbol = symbol ?? top[0]?.hit.symbol ?? null;
 
-  const { analysis, error, history, loadMoreHistory, publishedTimeframe } = useLiveAnalysis(
+  const { analysis, error, history, loadMoreHistory, publishedTimeframe, connectionState, exchange, lastUpdated, setupState, setupError, retry } = useLiveAnalysis(
     activeSymbol ?? "BTCUSDT",
     timeframe,
     range,
@@ -52,6 +53,7 @@ export function DashboardClient() {
   const pick = (value: string, setupTimeframe?: Timeframe) => {
     const normalized = normalizeUsdtSymbol(value);
     if (!isValidBinanceSymbol(normalized)) return;
+    if (normalized !== activeSymbol || setupTimeframe) setChosenFor(null);
     setSymbol(normalized);
     // The scan reports which interval it found the setup on. Landing on a
     // different one shows an empty plan for a symbol the strip just called a
@@ -99,6 +101,10 @@ export function DashboardClient() {
             lastUpdated={scanUpdated}
             onRetry={refresh}
           />
+
+        {activeSymbol && (
+          <ChartDataStatus connectionState={connectionState} exchange={exchange} lastUpdated={lastUpdated} setupState={setupState} setupError={setupError} retry={retry} />
+        )}
 
         {error && (
           <div className="rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-[12.5px] text-negative">

@@ -348,6 +348,15 @@ export function buildPerformance(candles: Candle[]): PerformanceStats {
   };
 }
 
+export interface AnalysisOptions {
+  /** Hide local substitutes while a published trading plan is being verified. */
+  publishedOnly?: boolean;
+  /** Preserve recorded status until the plan's own complete tape is available. */
+  evaluateLifecycle?: boolean;
+  /** Live charts do not display the historical backtest probability. */
+  computePerformance?: boolean;
+}
+
 export function buildAnalysisResult(
   symbol: string,
   base: string,
@@ -366,18 +375,21 @@ export function buildAnalysisResult(
   published?: PublishedSetup | null,
   /** Language the analysis prose is written in. Indonesian when unstated. */
   locale: Locale = DEFAULT_LOCALE,
+  options: AnalysisOptions = {},
 ): AnalysisResult {
   const price = ticker.lastPrice;
   const now = new Date();
   const analyzedAt = now.toISOString();
 
   const detected = detectSupplyDemand(candles);
-  const reading = published ? readPublishedSetup(candles, published, price) : null;
-  // A published setup that price has finished falls back to the detector, so
-  // the chart moves on at the same moment the board does.
-  const sd = reading?.setup ? { ...detected, setup: reading.setup } : detected;
+  const reading = published ? readPublishedSetup(candles, published, price, options) : null;
+  // A missing or finished published plan never silently becomes a different
+  // detector-generated plan while the client is waiting for the server.
+  const sd = reading?.setup
+    ? { ...detected, setup: reading.setup }
+    : options.publishedOnly ? { ...detected, setup: null } : detected;
   const setup = sd.setup;
-  const performance = buildPerformance(candles);
+  const performance = options.computePerformance === false ? null : buildPerformance(candles);
 
   const zoneShape = sd.zones
     .slice(0, 8)
@@ -511,7 +523,7 @@ export function buildAnalysisResult(
     confidence: setup.confidence,
     trend: bullish ? "bullish" : "bearish",
     status,
-    probability: performance.totalTrades >= 3 ? performance.successRate : 0,
+    probability: performance && performance.totalTrades >= 3 ? performance.successRate : 0,
     riskLevel: setup.riskReward >= 2.2 ? "low" : setup.riskReward >= 1.3 ? "medium" : "high",
     timeframe,
     exchange,

@@ -3,6 +3,8 @@ import type {
   ActiveSetupPort,
 } from "@/core/application/ports/active-setup-port";
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
+import { createTickerBatches, loadMarketSnapshot, sourcesForMarketData } from "@/core/application/market-data/source-selection";
+import type { MarketExchange } from "@/core/domain/market/exchange";
 import { createScanCache } from "@/core/application/scanner/scan-cache";
 import {
   ACTIVE_SETUP_STATUSES,
@@ -12,7 +14,7 @@ import {
   ZONE_SCAN_WINDOW,
   type SdResult,
 } from "@/core/domain/analysis/supply-demand";
-import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
+import type { Candle, MarketTicker, SetupDirection, Timeframe } from "@/core/domain/models";
 import { mapConcurrent } from "@/shared/lib/async";
 
 /** The timeframe a symbol's sparkline and 24h figures are drawn from. */
@@ -45,6 +47,7 @@ function betterCandidate(a: SdScanHit, b: SdScanHit): SdScanHit {
 }
 
 export interface SdScanHit {
+  exchange?: MarketExchange | null;
   symbol: string;
   base: string;
   timeframe: Timeframe;
@@ -67,6 +70,7 @@ export interface SdScanHit {
 }
 
 export interface SdMarketSnapshot {
+  exchange?: MarketExchange | null;
   symbol: string;
   price: number;
   change24h: number;
@@ -91,6 +95,7 @@ export function signalBucket(hit: Pick<SdScanHit, "direction">): "demand" | "sup
 /** Turns a detected or stored setup into a table row. */
 function toHit(
   input: {
+    exchange?: MarketExchange | null;
     symbol: string;
     timeframe: Timeframe;
     zoneType: "supply" | "demand";
@@ -142,6 +147,7 @@ export async function runSdScan(
 ): Promise<SdScanResult> {
   const errors: string[] = [];
   const deadline = AbortSignal.timeout(SD_SCAN_BUDGET_MS);
+  const sources = sourcesForMarketData(marketData);
   const stage = (name: "metadata" | "market" | "persist") => {
     const startedAt = performance.now();
     console.info("[signals.scan]", { stage: name, status: "started", symbolCount: symbols.length });
@@ -154,16 +160,13 @@ export async function runSdScan(
     });
   };
   const metadataComplete = stage("metadata");
-  const [tickers, stored, retiredZones] = await Promise.all([
-    marketData.fetchTickers24h(symbols, deadline).catch(() => {
-      errors.push("Market tickers unavailable");
-      return [];
-    }),
+  const [stored, retiredZones] = await Promise.all([
     options.activeSetups?.loadActive(symbols) ?? Promise.resolve([]),
     options.activeSetups?.loadRetiredZones(symbols) ?? Promise.resolve([]),
   ]);
   metadataComplete();
-  const tickerMap = new Map(tickers.map((ticker) => [ticker.symbol, ticker]));
+  const tickersBySource = createTickerBatches(sources, symbols, deadline);
+  const tickerMap = new Map<string, MarketTicker & { exchange: MarketExchange | null }>();
   const sparklineMap = new Map<string, number[]>();
   const demand: SdScanHit[] = [];
   const supply: SdScanHit[] = [];
@@ -184,17 +187,27 @@ export async function runSdScan(
     async (symbol) => {
       try {
         deadline.throwIfAborted();
+        const held = active.get(symbol);
         // The sparkline and the 24h figures always come from the fast chart,
         // whatever timeframe the setup itself lives on.
-        const fast = await marketData.fetchKlines({
+        const snapshot = await loadMarketSnapshot(sources, {
           symbol,
           timeframe: SD_SCAN_TIMEFRAME,
           limit: ZONE_SCAN_WINDOW,
           signal: deadline,
-        });
+        }, held?.exchange ?? undefined, tickersBySource);
+        const { candles: fast, marketData: pinnedData, exchange, ticker } = snapshot;
+        tickerMap.set(symbol, { ...ticker, exchange });
         sparklineMap.set(symbol, fast.slice(-96).map((candle) => candle.close));
 
-        const held = active.get(symbol);
+        // Old rows did not record an exchange. Keep the committed plan and
+        // status, but never manufacture a new outcome using another feed.
+        if (held?.exchange === null) {
+          const hit = toHit({ ...held, exchange: null, zoneType: held.direction === "long" ? "demand" : "supply", strength: "tested", zones: 1 }, ticker);
+          if (signalBucket(hit) === "demand") demand.push(hit);
+          else supply.push(hit);
+          return;
+        }
         // A setup on a timeframe the scanner no longer reads is let go rather
         // than nursed to its conclusion: the board exists to show what can be
         // acted on now, and nothing else would ever refresh those symbols.
@@ -208,7 +221,7 @@ export async function runSdScan(
           const candles =
             held.timeframe === SD_SCAN_TIMEFRAME && limit <= ZONE_SCAN_WINDOW
               ? fast
-              : await marketData.fetchKlines({
+              : await pinnedData.fetchKlines({
                   symbol,
                   timeframe: held.timeframe,
                   limit,
@@ -218,6 +231,10 @@ export async function runSdScan(
           const reading = readPublishedSetup(candles, held, price);
           // No reading means the setup outran the deepest window we can fetch.
           // Its stored status stands rather than being overwritten by a guess.
+          if (reading.status === null) {
+            errors.push(`${symbol}: Published setup history incomplete`);
+            return;
+          }
           if (reading.status && reading.status !== held.status) {
             changed.push({ ...held, status: reading.status });
           }
@@ -227,6 +244,7 @@ export async function runSdScan(
             const hit = toHit(
               {
                 symbol,
+                exchange,
                 timeframe: held.timeframe,
                 zoneType: setup.zone.type,
                 strength: setup.zone.strength,
@@ -242,7 +260,7 @@ export async function runSdScan(
                 zones: 1,
                 status: setup.status,
               },
-              tickerMap.get(symbol),
+              ticker,
             );
             if (signalBucket(hit) === "demand") demand.push(hit);
             else supply.push(hit);
@@ -268,7 +286,7 @@ export async function runSdScan(
           const candles =
             timeframe === SD_SCAN_TIMEFRAME
               ? fast
-              : await marketData
+              : await pinnedData
                   .fetchKlines({ symbol, timeframe, limit: ZONE_SCAN_WINDOW, signal: deadline })
                   .catch((error) => {
                     if (deadline.aborted) throw error;
@@ -288,6 +306,7 @@ export async function runSdScan(
           const candidate = toHit(
             {
               symbol,
+              exchange,
               timeframe,
               zoneType: setup.zone.type,
               strength: setup.zone.strength,
@@ -303,7 +322,7 @@ export async function runSdScan(
               zones: sd.zones.length,
               status: setup.status,
             },
-            tickerMap.get(symbol),
+            ticker,
           );
           best = best === null ? candidate : betterCandidate(best, candidate);
         }
@@ -311,6 +330,7 @@ export async function runSdScan(
         if (!best) return;
         changed.push({
           symbol: best.symbol,
+          exchange: best.exchange,
           timeframe: best.timeframe,
           direction: best.direction,
           entry: best.entry,
@@ -346,13 +366,17 @@ export async function runSdScan(
   return {
     demand,
     supply,
-    market: tickers.map((ticker) => ({
+    market: symbols.flatMap((symbol) => {
+      const ticker = tickerMap.get(symbol);
+      return ticker ? [{
       symbol: ticker.symbol,
+      exchange: ticker.exchange,
       price: ticker.lastPrice,
       change24h: ticker.priceChangePercent,
       volume24h: ticker.quoteVolume,
       sparkline: sparklineMap.get(ticker.symbol) ?? [],
-    })),
+      }] : [];
+    }),
     demandTotal: demand.length,
     supplyTotal: supply.length,
     scannedAt: new Date().toISOString(),

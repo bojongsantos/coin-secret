@@ -1,7 +1,10 @@
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
+import type { MarketExchange } from "@/core/domain/market/exchange";
 import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import {
+  ACTIVE_SETUP_STATUSES,
   isTerminalSetupStatus,
+  TERMINAL_SETUP_STATUSES,
   traceSetupLifecycle,
   type SetupStatus as Status,
 } from "@/core/domain/analysis/setup-lifecycle";
@@ -382,6 +385,10 @@ export function computeSetupStatus(
  * that these numbers stop changing once they are published.
  */
 export interface PublishedSetup {
+  /** Null on old plans: their original feed cannot be recovered honestly. */
+  exchange?: MarketExchange | null;
+  /** Preserved when exchange provenance is unknown and lifecycle cannot be replayed. */
+  status?: string;
   direction: SetupDirection;
   entry: number;
   target1: number;
@@ -484,6 +491,7 @@ export function readPublishedSetup(
   candles: Candle[],
   published: PublishedSetup,
   price: number,
+  options: { evaluateLifecycle?: boolean } = {},
 ): PublishedReading {
   const baseIndex = publishedBaseIndex(candles, published.zoneBaseTime);
   // Without the bar the zone formed on, the tape that made this plan is not
@@ -492,19 +500,27 @@ export function readPublishedSetup(
   // when it happens the answer is that there is no answer.
   if (baseIndex < 0) return { status: null, setup: null };
 
-  const life = traceSetupLifecycle(
-    candles,
-    {
-      direction: published.direction,
-      entry: published.entry,
-      stopLoss: published.stopLoss,
-      target1: published.target1,
-      target2: published.target2,
-    },
-    baseIndex,
-    price,
-  );
-  if (isTerminalSetupStatus(life.status)) return { status: life.status, setup: null };
+  // A replay is only meaningful on contiguous candles from the plan's feed.
+  // Unknown legacy provenance or a recovering gap keeps the last recorded
+  // status instead of inventing an outcome from a different tape.
+  const status = options.evaluateLifecycle === false
+    ? published.status
+    : traceSetupLifecycle(
+        candles,
+        {
+          direction: published.direction,
+          entry: published.entry,
+          stopLoss: published.stopLoss,
+          target1: published.target1,
+          target2: published.target2,
+        },
+        baseIndex,
+        price,
+      ).status;
+  if (!status || ![...ACTIVE_SETUP_STATUSES, ...TERMINAL_SETUP_STATUSES].includes(status as Status)) {
+    return { status: null, setup: null };
+  }
+  if (isTerminalSetupStatus(status)) return { status: status as Status, setup: null };
 
   const isLong = published.direction === "long";
   const zone: SdZone = {
@@ -531,14 +547,14 @@ export function readPublishedSetup(
     stopLoss: published.stopLoss,
     riskReward: Number(Math.min(9, Math.max(0.3, reward / Math.max(1e-9, risk))).toFixed(2)),
     confidence: published.confidence,
-    status: life.status,
+    status,
     reasoning: [
       `Zona ${isLong ? "demand" : "supply"} berada di rentang ${formatPrice(published.zoneBottom)} hingga ${formatPrice(published.zoneTop)}, dan rencana ini sudah terbit sehingga levelnya tidak lagi dihitung ulang.`,
       `Entry ${isLong ? "beli" : "jual"} di ${formatPrice(published.entry)} dengan invalidation di ${formatPrice(published.stopLoss)}.`,
       `Target pertama ${formatPrice(published.target1)} memakai rasio 1:1 dan target kedua ${formatPrice(published.target2)} memakai rasio 1:2.`,
     ],
   };
-  return { status: life.status, setup };
+  return { status: status as Status, setup };
 }
 
 /** Build a single-lookback quick scan result for the scanner. */

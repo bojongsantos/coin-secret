@@ -8,6 +8,7 @@ import * as lifecycle from "@/core/domain/analysis/setup-lifecycle";
 import * as supplyDemand from "@/core/domain/analysis/supply-demand";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import * as timeframe from "@/core/domain/market/timeframe";
+import * as exchange from "@/core/domain/market/exchange";
 import { mapConcurrent } from "@/shared/lib/async";
 
 function setup(symbol: string, zoneBaseTime = 1000, status = "Running"): ActiveSetup {
@@ -40,15 +41,20 @@ function fixture(initial: ActiveSetup[] = [], failure?: Error, wait?: (signature
     "@/core/domain/analysis/setup-lifecycle": lifecycle,
     "@/core/domain/analysis/supply-demand": supplyDemand,
     "@/core/domain/market/timeframe": timeframe,
+    "@/core/domain/market/exchange": exchange,
     "@/core/domain/analysis/setup-signature": { setupSignature },
     "@/shared/lib/async": { mapConcurrent },
     "@/infrastructure/database/prisma": { prisma: { trackedSetup: {
-      updateMany: ({ where, data }: { where: { signature: string; status: { notIn: string[] } }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
+      updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; status: { notIn: string[] } }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
         const row = rows.get(where.signature);
-        if (!row || where.status.notIn.includes(row.status)) return { count: 0 };
+        if (!row || where.status.notIn.includes(row.status) || (row.exchange ?? null) !== where.exchange) return { count: 0 };
         Object.assign(row, data);
         return { count: 1 };
       }),
+      findUnique: async ({ where }: { where: { signature: string } }) => {
+        const row = rows.get(where.signature);
+        return row ? { status: row.status, exchange: row.exchange ?? null } : null;
+      },
       create: ({ data }: { data: ActiveSetup & { signature: string } }) => query(data.signature, "create", () => {
         if (rows.has(data.signature)) throw Object.assign(new Error("duplicate"), { code: "P2002" });
         rows.set(data.signature, { ...data });
@@ -96,6 +102,19 @@ test("parallel persistence preserves terminal rows and published levels, and onl
   const unavailable = fixture([], Object.assign(new Error("database unavailable"), { code: "P1001" }));
   await assert.rejects(unavailable.store.persist([setup("BTCUSDT")]), /database unavailable/);
   assert.equal(unavailable.rows.size, 0);
+});
+
+test("published feed is recorded once and cannot be silently adopted by another exchange", async () => {
+  const original = { ...setup("BTCUSDT"), exchange: "binance" as const };
+  const fixtureData = fixture([original]);
+  await fixtureData.store.persist([{ ...original, status: "Filled" }]);
+  assert.equal(fixtureData.rows.get(setupSignature(original))?.exchange, "binance");
+  await assert.rejects(fixtureData.store.persist([{ ...original, exchange: "bybit", status: "Target 1 reached" }]), /exchange conflict/);
+  assert.equal(fixtureData.rows.get(setupSignature(original))?.status, "Filled");
+  const legacy = { ...setup("LEGACYUSDT"), exchange: null };
+  const unknown = fixture([legacy]);
+  await assert.rejects(unknown.store.persist([{ ...legacy, exchange: "binance", status: "Running" }]), /exchange conflict/);
+  assert.equal(unknown.rows.get(setupSignature(legacy))?.exchange, null);
 });
 
 test("a failed persistence group stops queued writes and rejects only after every started write settles", async () => {

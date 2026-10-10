@@ -8,6 +8,7 @@ import type {
 import { isTerminalSetupStatus } from "@/core/domain/analysis/setup-lifecycle";
 import { isBeyondScanReach, ZONE_SCAN_WINDOW } from "@/core/domain/analysis/supply-demand";
 import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
+import { isMarketExchange } from "@/core/domain/market/exchange";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -30,6 +31,7 @@ export const activeSetupStore: ActiveSetupPort = {
       // symbol somehow carries more than one live row.
       orderBy: { updatedAt: "desc" },
       select: {
+        exchange: true,
         symbol: true,
         timeframe: true,
         direction: true,
@@ -57,6 +59,7 @@ export const activeSetupStore: ActiveSetupPort = {
       // unjudgeable, so never terminal, so never released.
       if (isBeyondScanReach(row.zoneBaseTime, row.timeframe as Timeframe)) continue;
       bySymbol.set(row.symbol, {
+        exchange: isMarketExchange(row.exchange) ? row.exchange : null,
         symbol: row.symbol,
         timeframe: row.timeframe as Timeframe,
         direction: row.direction as SetupDirection,
@@ -122,7 +125,7 @@ export const activeSetupStore: ActiveSetupPort = {
           // for exactly this reason — its stop had gone at 04:00 and the board
           // kept advertising it anyway.
           const revived = await prisma.trackedSetup.updateMany({
-            where: { signature, status: { notIn: TERMINAL } },
+            where: { signature, exchange: setup.exchange ?? null, status: { notIn: TERMINAL } },
             // Levels are never rewritten: they are the plan the reader was given,
             // and the archive's snapshots are photographs of it. The base time is
             // written because it is part of the signature and therefore cannot
@@ -140,6 +143,7 @@ export const activeSetupStore: ActiveSetupPort = {
             await prisma.trackedSetup.create({
               data: {
                 signature,
+                exchange: setup.exchange ?? null,
                 symbol: setup.symbol,
                 timeframe: setup.timeframe,
                 direction: setup.direction,
@@ -163,6 +167,10 @@ export const activeSetupStore: ActiveSetupPort = {
             // Concurrent scans may both observe a missing signature. One wins the
             // create; the other may ignore only that unique-key race.
             if (!isPrismaErrorCode(error, "P2002")) throw error;
+            const winner = await prisma.trackedSetup.findUnique({ where: { signature }, select: { exchange: true, status: true } });
+            if (winner && !TERMINAL.includes(winner.status) && winner.exchange !== (setup.exchange ?? null)) {
+              throw new Error("Published setup exchange conflict; refresh required");
+            }
           }
         }
       } catch (error) {

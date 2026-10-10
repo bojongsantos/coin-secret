@@ -1,4 +1,5 @@
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
+import type { MarketExchange } from "@/core/domain/market/exchange";
 
 /**
  * A setup the product has already committed to showing.
@@ -10,6 +11,8 @@ import type { SetupDirection, Timeframe } from "@/core/domain/models";
  * belongs to the reader until price finishes it.
  */
 export interface ActiveSetup {
+  /** Null means a legacy setup whose original price feed was never recorded. */
+  exchange?: MarketExchange | null;
   symbol: string;
   timeframe: Timeframe;
   direction: SetupDirection;

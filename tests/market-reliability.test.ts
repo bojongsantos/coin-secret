@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as sourceSelection from "@/core/application/market-data/source-selection";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
@@ -173,25 +174,27 @@ function captureQueue(kind: "entry" | "result") {
     firstStatus: kind === "entry" ? "Limit Order" : "Filled", status: "Running",
     resultCheckedAt: null as Date | null, resultAt: null as Date | null,
     snapshots: new Set<string>(kind === "result" ? ["ENTRY"] : []),
-    timeframe: "15m", direction: "long", zoneBaseTime: 1000,
+    timeframe: "15m", direction: "long", zoneBaseTime: 1000, exchange: "binance",
     entry: 100, stopLoss: 90, target1: 110, target2: 120, confidence: 75,
     riskReward: 2, zoneTop: 100, zoneBottom: 95,
   }));
   const reads: string[] = [];
   const writes: Array<{ id: string; data: Record<string, unknown> }> = [];
+  const captureMarket = { fetchKlines: async ({ symbol }: { symbol: string }) => {
+    reads.push(symbol);
+    if (symbol.startsWith("BAD")) throw new Error("delisted");
+    return [1000, 1900, 2800].map((time) => ({ time, open: 100, high: 120, low: 95, close: 110, volume: 1 }));
+  } };
   const api = load("src/infrastructure/monitoring/setup-capture-service.ts", { Date: ClockDate }, {
     "@/config/default-watchlist": { DEFAULT_WATCHLIST: [] },
     "@/core/application/scanner/supply-demand-scan-service": { runSdScan: async () => ({ demand: [], supply: [], errors: [] }) },
+    "@/core/application/market-data/source-selection": sourceSelection,
     "@/core/domain/analysis/supply-demand": { publishedBaseIndex: () => 0, publishedScanLimit: () => 1000 },
     "@/core/domain/analysis/setup-lifecycle": { traceSetupLifecycle: () => ({ status: "Target 2 reached", filledIndex: 1, target2Index: 2, stopIndex: null }) },
     "@/core/domain/promo/capture-trigger": { isFilledStatus: () => true },
     "@/core/domain/promo/proof-image": { proofWindow: () => ({ from: 0, to: 3 }) },
     "@/infrastructure/persistence/active-setup-store": { activeSetupStore: {} },
-    "@/infrastructure/market-data/market-data-provider": { marketData: { fetchKlines: async ({ symbol }: { symbol: string }) => {
-      reads.push(symbol);
-      if (symbol.startsWith("BAD")) throw new Error("delisted");
-      return [1000, 1900, 2800].map((time) => ({ time, open: 100, high: 120, low: 95, close: 110, volume: 1 }));
-    } } },
+    "@/infrastructure/market-data/market-data-provider": { marketData: captureMarket, marketDataSources: [{ exchange: "binance", marketData: captureMarket }] },
     "@/infrastructure/database/prisma": { prisma: {
       trackedSetup: {
         findMany: async (query: { where: { firstStatus?: string; OR: Array<{ resultCheckedAt: null | { lte: Date } }> }; take: number }) => {
@@ -556,6 +559,7 @@ test("the Overview refresh control uses market data and its own loading state", 
   };
   for (const [module, name] of [
     ["features/analysis/analysis-view", "AnalysisView"], ["features/dashboard/market-overview", "MarketOverview"],
+    ["features/analysis/chart-data-status", "ChartDataStatus"],
     ["features/dashboard/top-setups-strip", "TopSetupsStrip"], ["features/signals/signals-board", "SignalsBoard"],
     ["layout/app-shell", "AppShell"], ["ui/reveal", "Reveal"],
   ]) dependencies[`@/presentation/${module}`] = { [name]: name };

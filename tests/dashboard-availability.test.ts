@@ -5,6 +5,9 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { translate } from "@/shared/i18n/messages";
 import * as failures from "@/shared/lib/read-failure";
+import * as sourceSelection from "@/core/application/market-data/source-selection";
+import * as exchanges from "@/core/domain/market/exchange";
+import * as timeframes from "@/core/domain/market/timeframe";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 function jsx(type: unknown, props: Record<string, unknown>): unknown {
@@ -105,7 +108,14 @@ function chartHarness(options: { available?: boolean; deferKlines?: boolean } = 
     "@/core/application/market-data/history-plan": { estimateRangeCandles: () => 100 },
     "@/core/domain/analysis/analysis-engine": { buildAnalysisResult: () => ({ chartData: {} }) },
     "@/core/domain/market/candles": { applyRecentCandles: (_prior: unknown, latest: unknown) => latest, olderThan: () => [], upsertLatestCandle: (prior: unknown) => prior },
-    "@/infrastructure/market-data/market-data-provider": { marketData: {
+    "@/core/domain/market/exchange": exchanges,
+    "@/core/domain/market/timeframe": timeframes,
+    "@/core/application/market-data/source-selection": sourceSelection,
+    "@/core/application/market-data/live-recovery": {
+      hasCandleGap: () => false,
+      recoverRecentCandles: (provider: { fetchKlines: (query: unknown) => Promise<unknown> }, symbol: string, timeframe: string, _last: number, _now: number, signal: AbortSignal) => provider.fetchKlines({ symbol, timeframe, limit: 2, signal }),
+    },
+    "@/infrastructure/market-data/market-data-provider": { marketDataSources: [{ exchange: "binance", marketData: {
       fetchTicker24h: async () => {
         tickerReads++;
         if (failTicker) { failTicker = false; throw new TypeError("Load failed"); }
@@ -121,7 +131,7 @@ function chartHarness(options: { available?: boolean; deferKlines?: boolean } = 
         if (!available) throw new TypeError("Load failed");
         return candles;
       },
-    } },
+    } }] },
     "@/infrastructure/market-data/binance-stream-client": { subscribeBinanceMarket: () => { subscriptions++; return () => undefined; } },
   }, {
     fetch: async () => Response.json({ setup: null }),

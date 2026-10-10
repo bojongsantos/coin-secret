@@ -419,11 +419,10 @@ test("a finished setup is never published again, on this pass or any later one",
   // again reopened the very row that had just closed. Across passes the board
   // flip-flopped between released and live.
   const candles = series(400, 26);
-  // Only the hourly chart carries a tape. With no second candidate to take the
-  // slot, a released symbol stays empty — which is the situation the bug
-  // actually needed, and the one a fixture that offers an alternative on every
-  // pass quietly papers over.
-  const { port: market } = marketFor({ "1H": candles }, []);
+  // Only the hourly chart carries a setup. A flat fast tape is still valid
+  // market data, but offers no alternative zone after this plan is released.
+  const flat = candles.map((bar) => ({ ...bar, open: 100, high: 100, low: 100, close: 100 }));
+  const { port: market } = marketFor({ "1H": candles }, flat);
 
   // Calibrate on the fixture rather than guessing: whatever this tape
   // publishes with nothing held is exactly what must not come back.

@@ -30,6 +30,10 @@ const noindexPaths = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The hosting scheduler runs this script from the standalone deployment.
+  outputFileTracingIncludes: {
+    "/api/cron/setup-capture": ["./scripts/setup-capture-cron.mjs"],
+  },
   // Coin Secret keeps a concise discovery stub and the full rules under docs/.
   agentRules: false,
   turbopack: {

@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
 
 /** Existing hosting env supplies the URL and bearer secret; never print either. */
 export async function runCaptureCron(env = process.env, request = fetch) {
@@ -29,7 +30,10 @@ export async function runCaptureCron(env = process.env, request = fetch) {
     scannedAt: publication.scannedAt, ageSeconds: age };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+let entryUrl;
+try { if (process.argv[1]) entryUrl = pathToFileURL(realpathSync(process.argv[1])).href; }
+catch { /* An importing process can supply a non-file argument instead of an entrypoint. */ }
+if (import.meta.url === entryUrl) {
   const started = performance.now();
   runCaptureCron().then((result) => console.log(JSON.stringify(result))).catch((error) => {
     const allowed = ["CRON_CONFIGURATION_INVALID", "CRON_RESPONSE_INVALID", "CRON_REQUEST_FAILED", "CRON_PUBLICATION_UNVERIFIED"];

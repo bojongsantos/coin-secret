@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { runCaptureCron } from "../scripts/setup-capture-cron.mjs";
@@ -8,6 +12,42 @@ import { runCaptureCron } from "../scripts/setup-capture-cron.mjs";
 const NOW = 1_790_000_000_000;
 const publication = (ageSeconds = 0) => ({ status: ageSeconds < 60 ? "fresh" : "stale", durable: true, verified: true,
   ageSeconds, scannedAt: new Date(Date.now() - ageSeconds * 1000).toISOString() });
+
+test("cron CLI runs through a deployment directory symlink and imports remain side-effect free", () => {
+  const root = mkdtempSync(join(tmpdir(), "coinsecret-cron-entry-"));
+  const deployed = join(root, "version");
+  const current = join(root, "current");
+  // Next declares NODE_ENV required, but this isolated child deliberately inherits no environment.
+  const emptyEnv = {} as NodeJS.ProcessEnv;
+  try {
+    mkdirSync(deployed);
+    copyFileSync("scripts/setup-capture-cron.mjs", join(deployed, "setup-capture-cron.mjs"));
+    symlinkSync(deployed, current, process.platform === "win32" ? "junction" : "dir");
+    for (const directory of [deployed, current]) {
+      const result = spawnSync(process.execPath, [join(directory, "setup-capture-cron.mjs")], {
+        env: emptyEnv, encoding: "utf8", timeout: 5000,
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 1, "empty configuration must fail visibly even through current's symlink");
+      assert.equal(result.stdout, "");
+      assert.equal(JSON.parse(result.stderr).code, "CRON_CONFIGURATION_INVALID");
+    }
+    for (const extraArgs of [[], ["not-a-file"]]) {
+      const imported = spawnSync(process.execPath, ["--input-type=module", "--eval",
+        `const imported = await import(${JSON.stringify(pathToFileURL(join(current, "setup-capture-cron.mjs")).href)}); if (typeof imported.runCaptureCron !== "function") process.exit(2);`, ...extraArgs], {
+        env: emptyEnv, encoding: "utf8", timeout: 5000,
+      });
+      assert.equal(imported.error, undefined);
+      assert.equal(imported.status, 0);
+      assert.equal(imported.stdout, "");
+      assert.equal(imported.stderr, "", "importing the runner must not execute a request");
+    }
+  } finally {
+    assert.equal(dirname(resolve(root)), resolve(tmpdir()));
+    assert.ok(basename(root).startsWith("coinsecret-cron-entry-"));
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("native/GitHub cron runner requires durable publication and never accepts a bare HTTP200", async () => {
   const env = { NODE_ENV: "production" as const, BETTER_AUTH_URL: "https://coinsecret.invalid", CRON_SECRET: "private-bearer-canary" };

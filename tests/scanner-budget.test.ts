@@ -102,7 +102,8 @@ test("the shared deadline cancels stalled reads and cannot begin publishing comp
     },
   };
   const store: ActiveSetupPort = {
-    loadActive: async () => [], loadRetiredZones: async () => [],
+    loadActive: async (_symbols, signal) => { assert.equal(signal, controller.signal); return []; },
+    loadRetiredZones: async (_symbols, signal) => { assert.equal(signal, controller.signal); return []; },
     persist: async (setups, signal) => {
       assert.equal(signal, controller.signal, "persistence must inherit the scan deadline");
       persistenceCandidates = setups.map((setup) => setup.symbol);

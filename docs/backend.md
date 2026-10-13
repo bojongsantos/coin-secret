@@ -163,14 +163,13 @@ GET https://DOMAIN/api/cron/setup-capture
 
 Handler memerlukan header `Authorization: Bearer $CRON_SECRET`. Tanpa `CRON_SECRET` endpoint menolak seluruh permintaan dengan status 503, bukan terbuka.
 
-Penjadwalan memakai dua sumber karena paket Vercel Hobby hanya mengizinkan satu eksekusi cron per hari:
+Pada Hostinger, jadwal utama memakai Cron Job Node.js hPanel setiap tiga puluh menit (menit 0 dan 30, UTC). Suffix command adalah `scripts/setup-capture-cron.mjs`; prefix Node.js dan file environment disediakan hPanel. Runner memakai `BETTER_AUTH_URL` dan `CRON_SECRET` yang sudah ada, tidak menulis token ke log, membatasi HTTP call 120 detik, dan memverifikasi JSON publication serta timestamp hasil penyimpanan. Jadwal baru dianggap aktif setelah disimpan di hPanel dan output eksekusinya diperiksa.
 
-- `vercel.json` menjadwalkan satu sweep harian sebagai jaring pengaman.
-- `.github/workflows/setup-capture.yml` memanggil endpoint yang sama setiap tiga puluh menit. Interval itu menjaga penggunaan tetap berada dalam kuota GitHub Actions gratis, dan cukup rapat untuk menangkap setup pada saat ia terisi.
+`.github/workflows/setup-capture.yml` menjadi cadangan pada menit 15 dan 45. Jadwal GitHub bersifat best effort dan dapat tertunda berjam-jam, sehingga tidak menjamin interval tiga puluh menit. Workflow memakai runner yang sama, dengan repository secret `PRODUCTION_URL` dan `CRON_SECRET`; konfigurasi kosong atau publication tidak terverifikasi membuat run gagal. Sweep arsip tetap dijalankan meskipun dashboard publik sering memperbarui board. `vercel.json` hanya berlaku jika aplikasi benar-benar berjalan di Vercel.
 
-Workflow memerlukan dua repository secret, yaitu `PRODUCTION_URL` dan `CRON_SECRET`. Bila salah satu belum diisi, workflow berhenti bersih disertai peringatan, karena kondisi belum terkonfigurasi merupakan langkah persiapan yang belum dijalankan dan bukan kerusakan.
+Respons cron 200 memerlukan snapshot board lengkap yang benar-benar terbaca dari penyimpanan, setidaknya sebaru scan yang selesai. Penulisan snapshot gagal atau scan parsial menghasilkan 503. Refresh yang sudah dikerjakan worker lain mengembalikan 202 `in-progress` sebelum penulisan proof, bukan mengaku telah menerbitkan board. `GET /api/cron/setup-capture?check=1` memakai autentikasi bearer yang sama dan hanya memeriksa umur snapshot tanpa mengubah setup.
 
-Setelah proyek berpindah ke Vercel Pro, workflow tersebut dapat dihapus dan jadwal dikembalikan ke `vercel.json`.
+Admin `GET /api/health` menampilkan waktu scan durable dan umur snapshot; di atas 45 menit ditandai overdue, di atas satu jam expired. Diagnostik ini tidak dimuat atau dikirim bagi pengunjung maupun user biasa. Entry/result capture memakai update bersyarat terhadap status yang dibaca sebelum fetch eksternal serta `archivedAt: null`; proof hanya disimpan setelah guard dalam transaksi berhasil. Worker lama tidak dapat menimpa status terbaru atau menerbitkan proof setelah archival.
 
 ## Penangkapan bukti hasil setup
 
@@ -221,7 +220,11 @@ Pengarsipan menggunakan `TrackedSetup.archivedAt` dan `archiveReason`, terpisah 
 
 Koneksi dan checkout pool PostgreSQL dibatasi 10 detik, statement server 15 detik, dan penantian lock 5 detik. Deadline scan diteruskan ke persistence untuk menghentikan write yang belum dimulai; write yang sedang berjalan ditunggu hingga selesai sebelum guard scan dilepas. Batas ini bukan jaminan seluruh request selesai dalam 40 detik. UI menghentikan skeleton ketika offline dan melanjutkan pembacaan setelah koneksi kembali.
 
-Chart menampilkan kondisi koneksi dan waktu pembaruan data terakhir. Kegagalan membaca rencana terbit menyembunyikan level sampai verifikasi berhasil, sedangkan analisis tanpa rencana terbit diberi label belum diterbitkan. Pergantian coin membersihkan metadata timeframe lama. Jalur live tidak menghitung backtest historis yang tidak ditampilkan; aturan wick, entry, target, dan stop loss tetap memakai lifecycle domain yang sama.
+Pembacaan mandiri setup aktif, zona selesai, dan snapshot board mencoba ulang SELECT satu kali setelah 200 ms hanya untuk kegagalan koneksi yang dikenali. Deadline menghentikan retry dan operasi yang sudah dimulai tetap ditunggu. Penulisan, transaksi, autentikasi, dan pembayaran tidak diulang. Kegagalan pembacaan akhir membalas 503; endpoint setup/signals memberi `Retry-After: 5`. Log `[database.setup-read]` hanya berisi nama operasi, kategori aman, nomor percobaan, dan keputusan retry, tanpa pesan Prisma, query, atau nilai.
+
+Board default menyimpan hasil scan lengkap tanpa entitlement pada `AppSetting` dengan key `market.signals.default-board.v1`. Snapshot memuat versi, urutan watchlist, nama sumber, dan waktu scan asli. Sebelum dikirim, setup dicocokkan dengan identitas, sumber, level, dan status aktif database; setup archived/terminal/replaced tidak dapat muncul kembali. Akses Free/Pro dihitung ulang setiap request dan respons tetap `private, no-store`. Snapshot di bawah 60 detik dianggap segar; hasil hingga satu jam dapat ditampilkan dengan label belum diperbarui sementara `after()` menjalankan scan baru. UI memeriksa hasilnya setiap lima detik selama pembaruan berlangsung. Snapshot terlalu lama, tidak valid, atau belum ada memerlukan scan penuh yang dibatasi deadline. Refresh parsial/gagal tidak menggantikan snapshot lengkap dan dijeda 15 detik sebelum dicoba kembali. Sweep capture terjadwal yang sudah ada juga menerbitkan snapshot dari scan yang sama, tanpa scan kedua. Jadwal eksternal tetap memerlukan konfigurasi repository secret yang benar; tidak ada timer server tambahan.
+
+Chart, Market Overview, Signals, dan Today's Top Setups tidak menampilkan waktu pembaruan terakhir atau label pembaruan rutin. Chart juga tidak menampilkan label provider di atas grafik. Kondisi gagal, offline, atau data tertunda tetap ditampilkan ketika membutuhkan perhatian; pembaruan otomatis tetap berjalan. Kegagalan membaca rencana terbit menyembunyikan level sampai verifikasi berhasil, sedangkan analisis tanpa rencana terbit diberi label belum diterbitkan. Pergantian coin membersihkan metadata timeframe lama. Jalur live tidak menghitung backtest historis yang tidak ditampilkan; aturan wick, entry, target, dan stop loss tetap memakai lifecycle domain yang sama.
 
 Funding rate dan open interest memakai rantai cadangannya sendiri: Binance futures, lalu Bybit, lalu OKX. Ketiganya dicoba berurutan, bukan bersamaan, sehingga pada jalur normal hanya yang pertama dipanggil. Parser tiap bursa berada di `core/domain/market/derivatives.ts` agar bentuk jawaban masing-masing dapat diuji langsung.
 
@@ -261,6 +264,11 @@ Untuk Midtrans, kesiapan pembayaran juga menuntut `PREMIUM_PRICE_IDR`, karena ka
 
 ## Operasional
 
+- Hostinger Node cron menjalankan `scripts/setup-capture-cron.mjs` setiap 30 menit sebagai jadwal utama. Konfigurasi job harus dibuat di hPanel terhadap path script deployment aktif; commit workflow saja tidak mengaktifkannya. Prefix `node --env-file` pada job memuat environment hosting yang sudah ada. Script memakai `APP_URL` atau `BETTER_AUTH_URL` dan `CRON_SECRET`, tanpa menampilkan nilainya. URL wajib HTTPS, redirect ditolak, dan request dibatasi 120 detik.
+- GitHub Actions `setup-capture.yml` menjadi cadangan pada menit 15 dan 45. Scheduler GitHub bersifat best-effort dan dapat terlambat; keberhasilan job tidak menjamin interval 30 menit. Kedua scheduler memakai runner yang sama dan hanya menerima HTTP 200 ketika hasil lengkap benar-benar terbaca kembali dari snapshot durable.
+- Endpoint capture mengembalikan 202 jika refresh terkoordinasi masih berlangsung dan belum membuka antrean proof. Snapshot yang gagal tersimpan, scan parsial, atau readback yang tidak membuktikan scan terbaru mengembalikan 503. Kegagalan transport/publication membuat runner keluar dengan kode 1 dan kategori log aman; tidak ada raw exception atau bearer secret di output.
+- `GET /api/cron/setup-capture?check=1` memeriksa snapshot tanpa memindai atau menulis proof dan tetap mewajibkan bearer secret. Data di atas 45 menit dinyatakan overdue; di atas satu jam expired. Panel health admin membaca status durable yang sama, tanpa membuka detail tersebut kepada user biasa atau pengunjung anonim.
+- Penulis proof mencocokkan status yang sebelumnya dibaca setelah pengambilan candle. Pembuatan snapshot ENTRY/RESULT berada dalam transaksi dengan update bersyarat terhadap baris yang belum diarsipkan, sehingga status yang lebih baru dan arsip konkuren tidak ditimpa.
 - Audit log merekam perubahan admin dan billing.
 - Feature gate global berada di tabel `FeatureGate`.
 - Grant per pengguna tersedia melalui `UserFeatureGrant`.

@@ -9,8 +9,10 @@ async function healthWithDerivatives(
   mode: "normal" | "partial" | "error" = "normal",
   userRole?: string,
   dbReachable = true,
+  publicationStatus: "fresh" | "overdue" = "fresh",
 ) {
   let databaseQueries = 0;
+  let publicationReads = 0;
   const exports: Record<string, () => Promise<Response>> = {};
   const code = ts.transpileModule(readFileSync("src/app/api/health/route.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -22,6 +24,10 @@ async function healthWithDerivatives(
       if (name.endsWith("/readiness")) return { assessReadiness: () => [] };
       if (name.endsWith("/gateway-factory")) return { selectedPaymentProvider: () => "nowpayments" };
       if (name.endsWith("/current-user")) return { getCurrentUser: async () => (userRole ? { role: userRole } : null) };
+      if (name.endsWith("/signals-publication")) return { readSignalsPublication: async () => {
+        publicationReads++;
+        return { status: publicationStatus, verified: publicationStatus === "fresh", scannedAt: "2026-10-12T00:00:00.000Z", ageSeconds: 0 };
+      } };
       if (name.endsWith("/prisma")) return {
         prisma: {
           $queryRaw: async () => {
@@ -52,13 +58,27 @@ async function healthWithDerivatives(
   return {
     results: (await response.json()).results as Array<{ id: string; status: string; detail: string }>,
     databaseQueries,
+    publicationReads,
   };
 }
 
 test("anonymous visitors never trigger database pings", async () => {
-  const { results, databaseQueries } = await healthWithDerivatives(true, "normal", undefined, false);
+  const { results, databaseQueries, publicationReads } = await healthWithDerivatives(true, "normal", undefined, false);
   assert.equal(results.some((r) => r.id === "database-live"), false);
   assert.equal(databaseQueries, 0);
+  assert.equal(publicationReads, 0);
+  assert.equal(results.some((r) => r.id === "signals-publication"), false);
+});
+
+test("Signals publication diagnostics are admin-only and report overdue durable data", async () => {
+  const ordinary = await healthWithDerivatives(true, "normal", "USER");
+  assert.equal(ordinary.publicationReads, 0);
+  assert.equal(ordinary.results.some((r) => r.id === "signals-publication"), false);
+  const admin = await healthWithDerivatives(true, "normal", "ADMIN", true, "overdue");
+  assert.equal(admin.publicationReads, 1);
+  const result = admin.results.find((r) => r.id === "signals-publication");
+  assert.equal(result?.status, "down");
+  assert.match(result?.detail ?? "", /overdue.*Last scan/);
 });
 
 test("admins receive database live health status without raw connection strings leaking", async () => {

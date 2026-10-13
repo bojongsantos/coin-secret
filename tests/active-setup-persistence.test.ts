@@ -19,6 +19,7 @@ function setup(symbol: string, zoneBaseTime = 1000, status = "Running"): ActiveS
 interface StoredSetup extends ActiveSetup {
   archivedAt?: Date | null;
   archiveReason?: string | null;
+  updatedAt?: Date;
 }
 
 function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature: string, operation: string) => Promise<void>) {
@@ -40,7 +41,8 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
       active -= 1;
     }
   }
-  const exports: { activeSetupStore?: ActiveSetupPort } = {};
+  const exports: { activeSetupStore?: ActiveSetupPort;
+    createActiveSetupStore?: (database: unknown, transactional: boolean) => ActiveSetupPort } = {};
   const dependencies: Record<string, unknown> = {
     "server-only": {},
     "@/core/domain/analysis/setup-lifecycle": lifecycle,
@@ -56,23 +58,32 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
           && (where.archivedAt !== null || !row.archivedAt)
           && (!where.status || !where.status.notIn.includes(row.status))
           && (!where.zoneBaseTime || row.zoneBaseTime >= where.zoneBaseTime.gte)
-          && (!where.OR || where.OR.some((condition) => condition.status?.in.includes(row.status) || condition.archivedAt && row.archivedAt))),
-      updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; archivedAt: null; status: { notIn: string[] } }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
+          && (!where.OR || where.OR.some((condition) => condition.status?.in.includes(row.status) || condition.archivedAt && row.archivedAt)))
+          .map((row) => ({ ...row, signature: setupSignature(row), updatedAt: row.updatedAt ?? new Date(0) })),
+      updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; archivedAt: null; status: string | { notIn: string[] }; updatedAt?: Date }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
         const row = rows.get(where.signature);
-        if (!row || row.archivedAt || where.status.notIn.includes(row.status) || (row.exchange ?? null) !== where.exchange) return { count: 0 };
+        if (!row || row.archivedAt || (row.exchange ?? null) !== where.exchange
+          || (typeof where.status === "string" ? row.status !== where.status : where.status.notIn.includes(row.status))
+          || (where.updatedAt && (row.updatedAt?.getTime() ?? 0) !== where.updatedAt.getTime())) return { count: 0 };
         Object.assign(row, data);
+        row.updatedAt = new Date((row.updatedAt?.getTime() ?? 0) + 1);
         return { count: 1 };
       }),
       findUnique: async ({ where }: { where: { signature: string } }) => {
         const row = rows.get(where.signature);
         return row ? { status: row.status, exchange: row.exchange ?? null, archivedAt: row.archivedAt ?? null } : null;
       },
-      create: ({ data }: { data: ActiveSetup & { signature: string } }) => query(data.signature, "create", () => {
-        if (rows.has(data.signature)) throw Object.assign(new Error("duplicate"), { code: "P2002" });
+      createMany: ({ data: [data], skipDuplicates }: { data: Array<ActiveSetup & { signature: string }>; skipDuplicates: boolean }) => query(data.signature, "create", () => {
+        assert.equal(skipDuplicates, true, "a duplicate must not poison a fenced transaction");
+        if (rows.has(data.signature)) return { count: 0 };
         rows.set(data.signature, { ...data });
-        return data;
+        return { count: 1 };
       }),
     } } },
+    "@/infrastructure/database/setup-read": { readSetupRows: async (_read: string, work: () => Promise<unknown>, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
+      return work();
+    } },
   };
   runInNewContext(ts.transpileModule(readFileSync("src/infrastructure/persistence/active-setup-store.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -80,8 +91,130 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
     exports, Error, Date,
     require: (name: string) => dependencies[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
   });
-  return { store: exports.activeSetupStore!, rows, events, peak: () => peak };
+  const database = (dependencies["@/infrastructure/database/prisma"] as { prisma: unknown }).prisma;
+  return { store: exports.activeSetupStore!, factory: exports.createActiveSetupStore!,
+    transaction: () => exports.createActiveSetupStore!(database, true), rows, events, peak: () => peak };
 }
+
+test("a capture advancing a scanned Running setup to Target 1 cannot be overwritten by the fenced scan", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const initial = { ...setup("BTCUSDT", recent), exchange: "binance" as const, updatedAt: new Date(1000) };
+  const f = fixture([initial]);
+  const store = f.transaction();
+  const [observed] = await store.loadActive([initial.symbol]);
+  const current = f.rows.get(setupSignature(initial))!;
+  current.status = "Target 1 reached";
+  current.updatedAt = new Date(2000);
+  await store.persist([{ ...observed, status: "Running" }]);
+  assert.equal(current.status, "Target 1 reached");
+  assert.equal(current.updatedAt.getTime(), 2000);
+  assert.equal(f.rows.size, 1, "a lost compare-and-set cannot insert a second copy");
+  assert.equal((await store.loadActive([initial.symbol]))[0].status, "Target 1 reached");
+});
+
+test("matching status after a concurrent status cycle is insufficient without the observed row version", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const initial = { ...setup("BTCUSDT", recent, "Filled"), exchange: "binance" as const, updatedAt: new Date(1000) };
+  const f = fixture([initial]);
+  const store = f.transaction();
+  const [observed] = await store.loadActive([initial.symbol]);
+  const current = f.rows.get(setupSignature(initial))!;
+  current.status = "Running";
+  current.updatedAt = new Date(2000);
+  current.status = "Filled";
+  current.updatedAt = new Date(3000);
+  await store.persist([{ ...observed, status: "Target 1 reached" }]);
+  assert.equal(current.status, "Filled");
+  assert.equal(current.updatedAt.getTime(), 3000);
+});
+
+test("an unchanged observed setup can change dynamic status without imposing a lifecycle rank", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const initial = { ...setup("BTCUSDT", recent), exchange: "binance" as const, updatedAt: new Date(1000) };
+  const f = fixture([initial]);
+  const store = f.transaction();
+  const [observed] = await store.loadActive([initial.symbol]);
+  await store.persist([{ ...observed, status: "Filled" }]);
+  assert.equal(f.rows.get(setupSignature(initial))?.status, "Filled");
+  assert.equal(f.events.filter((event) => event.operation === "create.start").length, 0);
+});
+
+test("a fenced scan cannot overwrite a concurrently published row that was absent from its initial read", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const row = { ...setup("BTCUSDT", recent, "Target 1 reached"), exchange: "binance" as const, updatedAt: new Date(2000) };
+  const f = fixture();
+  const store = f.transaction();
+  assert.equal((await store.loadActive([row.symbol])).length, 0);
+  f.rows.set(setupSignature(row), row);
+  await store.persist([{ ...row, status: "Running" }]);
+  assert.equal(row.status, "Target 1 reached");
+  assert.equal(row.updatedAt.getTime(), 2000);
+  assert.equal(f.events.filter((event) => event.operation === "update.start").length, 0);
+  assert.equal(f.rows.size, 1);
+});
+
+test("a lost fenced terminal update cannot publish a replacement while capture's current plan is still active", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const initial = { ...setup("BTCUSDT", recent), exchange: "binance" as const, updatedAt: new Date(1000) };
+  const replacement = { ...setup(initial.symbol, recent + 900, "Limit Order"), exchange: "binance" as const };
+  const f = fixture([initial]);
+  const store = f.transaction();
+  const [observed] = await store.loadActive([initial.symbol]);
+  const current = f.rows.get(setupSignature(initial))!;
+  current.status = "Target 1 reached";
+  current.updatedAt = new Date(2000);
+  await store.persist([{ ...observed, status: "Target 2 reached" }, replacement]);
+  assert.equal(current.status, "Target 1 reached");
+  assert.equal(f.rows.has(setupSignature(replacement)), false);
+  assert.equal(f.rows.size, 1);
+});
+
+test("a replacement may publish after a lost fenced update when capture has actually finished the old plan", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const initial = { ...setup("BTCUSDT", recent), exchange: "binance" as const, updatedAt: new Date(1000) };
+  const replacement = { ...setup(initial.symbol, recent + 900, "Limit Order"), exchange: "binance" as const };
+  const f = fixture([initial]);
+  const store = f.transaction();
+  const [observed] = await store.loadActive([initial.symbol]);
+  const current = f.rows.get(setupSignature(initial))!;
+  current.status = "Invalidated (SL hit)";
+  current.updatedAt = new Date(2000);
+  await store.persist([{ ...observed, status: "Target 2 reached" }, replacement]);
+  assert.equal(current.status, "Invalidated (SL hit)");
+  assert.equal(current.updatedAt.getTime(), 2000);
+  assert.equal(f.rows.get(setupSignature(replacement))?.status, "Limit Order");
+  assert.equal(f.rows.size, 2);
+});
+
+test("fenced stores never retry a lost transaction or fall back to global reads and writes", async () => {
+  const f = fixture();
+  const closed = new Error("Connection terminated unexpectedly");
+  let reads = 0;
+  let writes = 0;
+  const transaction = { trackedSetup: {
+    findMany: async () => { reads += 1; throw closed; },
+    updateMany: async () => { writes += 1; throw closed; },
+    createMany: async () => { writes += 1; throw closed; },
+  } };
+  const store = f.factory(transaction, true);
+  await assert.rejects(store.loadActive(["BTCUSDT"]), (error) => error === closed);
+  assert.equal(reads, 1, "a failed transaction must not retry on another connection");
+  await assert.rejects(store.persist([setup("BTCUSDT")]), (error) => error === closed);
+  assert.equal(writes, 1);
+  assert.equal(f.rows.size, 0, "a rejected fenced write cannot leak to the global store");
+  assert.equal(f.events.length, 0);
+});
+
+test("a skipped insert is accepted only when its published signature actually exists", async () => {
+  const f = fixture();
+  const store = f.factory({ trackedSetup: {
+    updateMany: async () => ({ count: 0 }),
+    createMany: async () => ({ count: 0 }),
+    findUnique: async () => null,
+  } }, true);
+  await assert.rejects(store.persist([setup("BTCUSDT")]), /insert conflict; refresh required/);
+  assert.equal(f.rows.size, 0);
+});
 
 test("published writes run four symbols together while closing each old setup before its replacement", async () => {
   const existing = Array.from({ length: 9 }, (_, index) => setup(`COIN${index}USDT`));

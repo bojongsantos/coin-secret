@@ -3,6 +3,7 @@ import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factor
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { getDerivativesDiagnostics, getMarketContextPayload } from "@/infrastructure/market-data/market-context-service";
 import { prisma } from "@/infrastructure/database/prisma";
+import { readSignalsPublication } from "@/infrastructure/monitoring/signals-publication";
 
 /** Names of the variables that currently hold a non-empty value. */
 function configuredKeys(): string[] {
@@ -88,7 +89,16 @@ export async function GET() {
     isAdmin ? assessReadiness(configuredKeys(), selectedPaymentProvider()) : undefined;
 
   let dbResult: HealthResult | null = null;
+  let signalsResult: HealthResult | null = null;
   if (isAdmin) {
+    const signalsStart = performance.now();
+    const publication = await readSignalsPublication();
+    signalsResult = {
+      id: "signals-publication", name: "Signals Publication", endpoint: "durable board readback",
+      status: publication.verified ? "ok" : "down", latencyMs: Math.round(performance.now() - signalsStart),
+      detail: publication.scannedAt === null ? `Durable board ${publication.status}`
+        : `${publication.status} · Last scan ${publication.scannedAt} · Age ${publication.ageSeconds}s · Overdue after 45m`,
+    };
     const dbStart = performance.now();
     try {
       await prisma.$queryRaw`SELECT 1`;
@@ -130,6 +140,7 @@ export async function GET() {
   if (dbResult) {
     results.unshift(dbResult);
   }
+  if (signalsResult) results.unshift(signalsResult);
 
   return Response.json(
     { results, configuration, checkedAt: new Date().toISOString() },

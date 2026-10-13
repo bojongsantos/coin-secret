@@ -11,6 +11,8 @@ import { ReadFailure, responseReadFailure } from "@/shared/lib/read-failure";
 export interface SignalsApiPayload {
   result: SdScanResult;
   top: TopSetup[];
+  stale?: boolean;
+  refreshing?: boolean;
 }
 
 const SCAN_REFRESH_MS = 60_000;
@@ -20,6 +22,10 @@ const SCAN_REQUEST_MS = 90_000;
 
 function scanUpdatedAt(data: ScanResult | SignalsApiPayload): string {
   return "result" in data ? data.result.scannedAt : data.scannedAt;
+}
+
+function scanRefreshDelay(data: ScanResult | SignalsApiPayload): number {
+  return "result" in data && data.refreshing ? 5_000 : SCAN_REFRESH_MS;
 }
 
 async function postScan<T extends ScanResult | SignalsApiPayload>(path: string, body: Record<string, unknown>, signal: AbortSignal): Promise<T> {
@@ -38,7 +44,9 @@ async function postScan<T extends ScanResult | SignalsApiPayload>(path: string, 
     (path === "/api/scanner"
       ? Array.isArray(result.opportunities) && Number.isFinite(result.total)
       : Array.isArray(result.demand) && Array.isArray(result.supply) && Array.isArray(payload.top) &&
-        Number.isFinite(result.demandTotal) && Number.isFinite(result.supplyTotal));
+        Number.isFinite(result.demandTotal) && Number.isFinite(result.supplyTotal) &&
+        (payload.stale === undefined || typeof payload.stale === "boolean") &&
+        (payload.refreshing === undefined || typeof payload.refreshing === "boolean"));
   if (!valid) throw new ReadFailure(`${label} returned an unreadable response. Please refresh.`);
   return payload as T;
 }
@@ -49,11 +57,14 @@ function usePollingScan<T extends ScanResult | SignalsApiPayload>(path: string, 
   const accessKey = `${authenticated}:${plan}:${canAccess(path === "/api/scanner" ? "scannerExtended" : "signals")}`;
   const read = useCallback((force: boolean, signal: AbortSignal) =>
     postScan<T>(path, { force, ...(limit === undefined ? {} : { limit }) }, signal), [path, limit]);
-  return usePollingRead<T>({
+  const state = usePollingRead<T>({
     enabled, accessKey, invalidateEvent: AUTH_STATE_CHANGED_EVENT,
     label: path === "/api/scanner" ? "Scanner" : "Signals", refreshMs: SCAN_REFRESH_MS,
-    read, updatedAt: scanUpdatedAt,
+    read, updatedAt: scanUpdatedAt, refreshDelay: scanRefreshDelay,
   });
+  const data: ScanResult | SignalsApiPayload | null = state.data;
+  const board = data && "result" in data ? data : null;
+  return { ...state, loading: state.loading || board?.refreshing === true, stale: state.stale || board?.stale === true };
 }
 
 /** The dashboard reads one response for its tables and five top setups. */

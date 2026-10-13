@@ -27,15 +27,15 @@ runInNewContext(ts.transpileModule(readFileSync("src/presentation/features/analy
 const base = { connectionState: "polling", exchange: "bybit", lastUpdated: "2026-10-10T01:00:00Z", setupState: "published", setupError: null, retry() {} };
 const text = (props: Record<string, unknown>) => textOf(api.ChartDataStatus({ ...base, ...props }));
 
-test("REST-only data is periodic and names its actual exchange", () => {
-  const result = text({});
-  assert.match(result, /Updating periodically.*Bybit.*Spot.*Last successful update/);
-  assert.doesNotMatch(result, /Live|Binance/);
+test("healthy charts have no routine connection, source or timestamp indicators", () => {
+  assert.equal(api.ChartDataStatus(base), null);
+  assert.equal(api.ChartDataStatus({ ...base, connectionState: "live", exchange: "binance" }), null);
 });
 
 test("delayed charts expose retry and never label a stale frame Live", () => {
   const result = text({ connectionState: "delayed" });
-  assert.match(result, /Data delayed.*Last successful update.*Try again/);
+  assert.match(result, /Data delayed.*Try again/);
+  assert.doesNotMatch(result, /Last successful update|Updating periodically|Spot|Binance|Bybit/);
   assert.doesNotMatch(result, /Live/);
 });
 

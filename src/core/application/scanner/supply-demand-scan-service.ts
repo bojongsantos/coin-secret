@@ -161,8 +161,8 @@ export async function runSdScan(
   };
   const metadataComplete = stage("metadata");
   const [stored, retiredZones] = await Promise.all([
-    options.activeSetups?.loadActive(symbols) ?? Promise.resolve([]),
-    options.activeSetups?.loadRetiredZones(symbols) ?? Promise.resolve([]),
+    options.activeSetups?.loadActive(symbols, deadline) ?? Promise.resolve([]),
+    options.activeSetups?.loadRetiredZones(symbols, deadline) ?? Promise.resolve([]),
   ]);
   metadataComplete();
   const tickersBySource = createTickerBatches(sources, symbols, deadline);

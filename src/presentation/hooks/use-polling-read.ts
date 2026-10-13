@@ -12,6 +12,7 @@ interface PollingReadOptions<T> {
   retainOnError?: boolean;
   read: (force: boolean, signal: AbortSignal) => Promise<T>;
   updatedAt: (data: T) => string;
+  refreshDelay?: (data: T) => number;
 }
 
 interface ReadSnapshot<T> {
@@ -23,7 +24,7 @@ interface ReadSnapshot<T> {
   stale: boolean;
 }
 
-export function usePollingRead<T>({ enabled, accessKey, invalidateEvent, label, refreshMs, retainOnError = false, read, updatedAt }: PollingReadOptions<T>) {
+export function usePollingRead<T>({ enabled, accessKey, invalidateEvent, label, refreshMs, retainOnError = false, read, updatedAt, refreshDelay }: PollingReadOptions<T>) {
   const empty: ReadSnapshot<T> = { accessKey, data: null, loading: enabled, error: null, lastUpdated: null, stale: false };
   const [snapshot, setSnapshot] = useState<ReadSnapshot<T>>(empty);
   const trigger = useRef<((force: boolean) => void) | null>(null);
@@ -67,6 +68,7 @@ export function usePollingRead<T>({ enabled, accessKey, invalidateEvent, label, 
         if (!active || controller.signal.aborted || version !== generation) return;
         failures = 0;
         blockedUntil = 0;
+        nextDelay = Math.min(refreshMs, Math.max(1_000, refreshDelay?.(data) ?? refreshMs));
         setSnapshot({ accessKey, data, loading: false, error: null, lastUpdated: updatedAt(data), stale: false });
       } catch (caught) {
         if (!active || controller.signal.aborted || version !== generation) return;
@@ -128,7 +130,7 @@ export function usePollingRead<T>({ enabled, accessKey, invalidateEvent, label, 
     // Snapshot is reset inside the scheduled read, avoiding a synchronous
     // state update in the effect. The return value hides old access immediately.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, accessKey, invalidateEvent, label, refreshMs, retainOnError, read, updatedAt]);
+  }, [enabled, accessKey, invalidateEvent, label, refreshMs, retainOnError, read, updatedAt, refreshDelay]);
 
   const current = enabled && snapshot.accessKey === accessKey ? snapshot : empty;
   return { ...current, loading: enabled && current.loading, refresh: useCallback(() => trigger.current?.(true), []) };

@@ -72,12 +72,20 @@ test("Top Setups distinguishes failed fetching from a successful empty scan", ()
   assert.match(textOf(api.TopSetupsStrip(props)), /No setup/i);
 });
 
-test("a retained public snapshot explicitly shows stale and its update time", () => {
+test("healthy snapshots have no routine status while retained snapshots still expose stale and retry", () => {
   const api = load("src/presentation/ui/data-status.tsx", ui());
+  assert.equal(api.DataStatus({ lastUpdated: "2026-10-10T01:00:00Z" }), null);
   const rendered = textOf(api.DataStatus({ error: "Connection unavailable.", stale: true, lastUpdated: "2026-10-10T01:00:00Z", onRetry() {} }));
   assert.match(rendered, /Showing the last available data; not yet updated/);
-  assert.match(rendered, /Last successful update/);
+  assert.doesNotMatch(rendered, /Last successful update/);
   assert.match(rendered, /Try again/);
+});
+
+test("Top Setups labels an older stored ranking while its refresh runs", () => {
+  const api = load("src/presentation/features/dashboard/top-setups-strip.tsx", ui());
+  const rendered = textOf(api.TopSetupsStrip({ setups: [], loading: true, activeSymbol: null, onSelect() {}, stale: true, lastUpdated: "2026-10-10T01:00:00Z" }));
+  assert.match(rendered, /Showing the last available data; not yet updated/);
+  assert.doesNotMatch(rendered, /Last successful update/);
 });
 
 function chartHarness(options: { available?: boolean; deferKlines?: boolean } = {}) {

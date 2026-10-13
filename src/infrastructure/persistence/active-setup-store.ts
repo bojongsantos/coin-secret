@@ -12,6 +12,8 @@ import { isMarketExchange } from "@/core/domain/market/exchange";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
 import { prisma } from "@/infrastructure/database/prisma";
+import type { Prisma } from "@/generated/prisma/client";
+import { readSetupRows } from "@/infrastructure/database/setup-read";
 import { mapConcurrent } from "@/shared/lib/async";
 
 /**
@@ -22,15 +24,31 @@ import { mapConcurrent } from "@/shared/lib/async";
  * dashboard and the proof images drift apart about what a setup's levels even
  * were.
  */
-export const activeSetupStore: ActiveSetupPort = {
-  async loadActive(symbols: string[]): Promise<ActiveSetup[]> {
+export function createActiveSetupStore(
+  database: Pick<Prisma.TransactionClient, "trackedSetup"> = prisma,
+  transactional = false,
+): ActiveSetupPort {
+  const observed = new Map<string, { updatedAt: Date; status: string }>();
+  const readRows: typeof readSetupRows = transactional
+    ? async (_read, work, signal) => {
+      // A lost transaction cannot be retried on another connection.
+      signal?.throwIfAborted();
+      const rows = await work();
+      signal?.throwIfAborted();
+      return rows;
+    }
+    : readSetupRows;
+  return {
+  async loadActive(symbols: string[], signal?: AbortSignal): Promise<ActiveSetup[]> {
     if (symbols.length === 0) return [];
-    const rows = await prisma.trackedSetup.findMany({
+    const rows = await readRows("active", () => database.trackedSetup.findMany({
       where: { symbol: { in: symbols }, archivedAt: null, status: { notIn: TERMINAL } },
       // Newest first, so the de-duplication below keeps the current one when a
       // symbol somehow carries more than one live row.
       orderBy: { updatedAt: "desc" },
       select: {
+        signature: true,
+        updatedAt: true,
         exchange: true,
         symbol: true,
         timeframe: true,
@@ -45,7 +63,7 @@ export const activeSetupStore: ActiveSetupPort = {
         zoneBaseTime: true,
         status: true,
       },
-    });
+    }), signal);
 
     const bySymbol = new Map<string, ActiveSetup>();
     for (const row of rows) {
@@ -58,6 +76,7 @@ export const activeSetupStore: ActiveSetupPort = {
       // request returns. Held anyway it would sit on the symbol forever:
       // unjudgeable, so never terminal, so never released.
       if (isBeyondScanReach(row.zoneBaseTime, row.timeframe as Timeframe)) continue;
+      if (transactional) observed.set(row.signature, { updatedAt: row.updatedAt, status: row.status });
       bySymbol.set(row.symbol, {
         exchange: isMarketExchange(row.exchange) ? row.exchange : null,
         symbol: row.symbol,
@@ -77,21 +96,21 @@ export const activeSetupStore: ActiveSetupPort = {
     return [...bySymbol.values()];
   },
 
-  async loadRetiredZones(symbols: string[]): Promise<RetiredZone[]> {
+  async loadRetiredZones(symbols: string[], signal?: AbortSignal): Promise<RetiredZone[]> {
     if (symbols.length === 0) return [];
     // Bounded to what the detector could still offer back. It only ever looks
     // at the last `ZONE_SCAN_WINDOW` bars, so a zone older than that on the
     // slowest timeframe scanned can never be re-detected and does not need
     // remembering here.
     const oldest = Math.floor(Date.now() / 1000) - ZONE_SCAN_WINDOW * TIMEFRAME_SECONDS["1H"];
-    const rows = await prisma.trackedSetup.findMany({
+    const rows = await readRows("retired", () => database.trackedSetup.findMany({
       where: {
         symbol: { in: symbols },
         zoneBaseTime: { gte: oldest },
         OR: [{ status: { in: TERMINAL } }, { archivedAt: { not: null } }],
       },
       select: { symbol: true, timeframe: true, direction: true, zoneBaseTime: true },
-    });
+    }), signal);
     return rows.map((row) => ({
       symbol: row.symbol,
       timeframe: row.timeframe as Timeframe,
@@ -130,8 +149,13 @@ export const activeSetupStore: ActiveSetupPort = {
           // WALUSDT flip-flopped between released and live on alternating scans
           // for exactly this reason — its stop had gone at 04:00 and the board
           // kept advertising it anyway.
-          const revived = await prisma.trackedSetup.updateMany({
-            where: { signature, exchange: setup.exchange ?? null, archivedAt: null, status: { notIn: TERMINAL } },
+          // The scan fetches candles after reading these rows. Capture can commit
+          // meanwhile, so a fenced writer may update only the exact version it read.
+          // Running and Filled depend on current price and must not be assigned a rank.
+          const version = transactional ? observed.get(signature) : undefined;
+          const revived = transactional && !version ? { count: 0 } : await database.trackedSetup.updateMany({
+            where: { signature, exchange: setup.exchange ?? null, archivedAt: null,
+              ...(version ? { status: version.status, updatedAt: version.updatedAt } : { status: { notIn: TERMINAL } }) },
             // Levels are never rewritten: they are the plan the reader was given,
             // and the archive's snapshots are photographs of it. The base time is
             // written because it is part of the signature and therefore cannot
@@ -143,12 +167,11 @@ export const activeSetupStore: ActiveSetupPort = {
           signal?.throwIfAborted();
 
           // Nothing was updated: either this zone has never been published, or it
-          // has already had its life. `create` settles which — the signature is
-          // unique, so a row that exists rejects it, and that row is a finished
-          // one we must leave alone.
-          try {
-            await prisma.trackedSetup.create({
-              data: {
+          // has already had its life. Existing signatures are skipped so a
+          // finished row stays finished without aborting the transaction.
+          const created = await database.trackedSetup.createMany({
+              skipDuplicates: true,
+              data: [{
                 signature,
                 exchange: setup.exchange ?? null,
                 symbol: setup.symbol,
@@ -168,18 +191,21 @@ export const activeSetupStore: ActiveSetupPort = {
                 // know whether a setup was published before it filled, and no
                 // later observation can recover that.
                 firstStatus: setup.status,
-              },
+              }],
             });
-          } catch (error) {
-            // Concurrent scans may both observe a missing signature. One wins the
-            // create; the other may ignore only that unique-key race.
-            if (!isPrismaErrorCode(error, "P2002")) throw error;
+          if (created.count === 0) {
+            // ON CONFLICT keeps an interactive transaction usable for this read.
             signal?.throwIfAborted();
-            const winner = await prisma.trackedSetup.findUnique({ where: { signature }, select: { exchange: true, status: true, archivedAt: true } });
+            const winner = await database.trackedSetup.findUnique({ where: { signature }, select: { exchange: true, status: true, archivedAt: true } });
+            if (!winner) throw new Error("Published setup insert conflict; refresh required");
             if (winner?.archivedAt) throw new Error("Published setup archived; refresh required");
             if (winner && !TERMINAL.includes(winner.status) && winner.exchange !== (setup.exchange ?? null)) {
               throw new Error("Published setup exchange conflict; refresh required");
             }
+            // A stale terminal reading cannot release this symbol while the
+            // committed plan is still active. Post-commit validation drops its
+            // uncommitted replacement from the scanned board.
+            if (transactional && !TERMINAL.includes(winner.status)) break;
           }
         }
       } catch (error) {
@@ -191,11 +217,10 @@ export const activeSetupStore: ActiveSetupPort = {
     if (failure) throw failure.error;
     signal?.throwIfAborted();
   },
-};
-
-function isPrismaErrorCode(error: unknown, code: string): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+  };
 }
+
+export const activeSetupStore = createActiveSetupStore();
 
 const TERMINAL = ["Target 2 reached", "Invalidated (SL hit)", "Missed"];
 

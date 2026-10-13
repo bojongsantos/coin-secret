@@ -38,7 +38,7 @@ export interface RetiredZone {
 
 export interface ActiveSetupPort {
   /** Setups still in play for these symbols, at most one per symbol. */
-  loadActive(symbols: string[]): Promise<ActiveSetup[]>;
+  loadActive(symbols: string[], signal?: AbortSignal): Promise<ActiveSetup[]>;
   /**
    * Zones these symbols have already finished, recent enough that the
    * detector can still see them.
@@ -48,7 +48,7 @@ export interface ActiveSetupPort {
    * and publishes it back. A zone's base bar is the setup's identity, so that
    * is not a new setup — it is the old one reopened.
    */
-  loadRetiredZones(symbols: string[]): Promise<RetiredZone[]>;
+  loadRetiredZones(symbols: string[], signal?: AbortSignal): Promise<RetiredZone[]>;
   /**
    * Records new setups and status changes.
    *

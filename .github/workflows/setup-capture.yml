@@ -1,17 +1,10 @@
 name: Setup capture
 
-# Vercel Hobby allows only one cron run per day, which is far too slow to
-# catch a setup at the moment it fills. This workflow drives the same endpoint
-# on a useful interval.
-# Delete it once the project moves to Vercel Pro and vercel.json can carry a
-# frequent schedule on its own.
-#
-# Every 30 minutes keeps the job inside the free Actions allowance for a
-# private repository. GitHub schedules are best effort and can run late under
-# load, so treat the interval as an upper bound rather than a guarantee.
+# Hostinger's native Node cron is primary. GitHub is a best-effort fallback;
+# these schedules can be delayed and do not guarantee a 30-minute cadence.
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "15,45 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -26,32 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Trigger the setup capture sweep
         env:
           APP_URL: ${{ secrets.PRODUCTION_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          # Not configured yet is a setup step the owner has not reached, not a
-          # broken sweep. Failing here buried the real signal under dozens of
-          # identical red runs, so this case exits clean and states what is
-          # missing. A configured sweep that then fails still fails loudly.
-          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "::warning::PRODUCTION_URL atau CRON_SECRET belum diset sebagai repository secret."
-            echo "Sweep dilewati. Alert belum akan dievaluasi sampai keduanya diisi."
-            exit 0
-          fi
-
-          status=$(curl -sS -o response.json -w "%{http_code}" \
-            --max-time 120 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/setup-capture")
-
-          echo "HTTP $status"
-          cat response.json
-          echo
-
-          # A non-2xx here means alerts silently stopped being evaluated, so
-          # the run must fail loudly rather than look healthy.
-          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-            exit 1
-          fi
+          node scripts/setup-capture-cron.mjs

@@ -93,6 +93,7 @@ export function DashboardClient() {
 
         <section className="cs-panel flex flex-col gap-6 p-4 sm:p-5">
           <TopSetupsStrip
+            stale={scanStale}
             setups={top}
             loading={scanLoading}
             activeSymbol={activeSymbol}

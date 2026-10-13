@@ -5,6 +5,7 @@ import type { CapabilityReport } from "@/core/domain/ops/readiness";
 import { Badge } from "@/presentation/ui/badge";
 import { Loader2 } from "lucide-react";
 import { useT } from "@/presentation/hooks/use-translate";
+import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 
 interface HealthResult {
   id: string;
@@ -153,7 +154,7 @@ export function HealthModule() {
           {results.length ? `${ok}/${results.length} layanan online.` : "Belum ada hasil pemeriksaan."}
         </p>
         <p className="mt-1 text-[12px] text-muted">
-          Data live memakai polling REST. Scanner default mencakup 200 simbol.
+          Market updates use the configured data sources. The default scanner covers {DEFAULT_WATCHLIST.length} symbols.
         </p>
       </section>
     </div>

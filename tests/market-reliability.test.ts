@@ -164,7 +164,7 @@ test("provider warnings expose only allowlisted failure codes and preserve respo
   }
 });
 
-function captureQueue(kind: "entry" | "result") {
+function captureQueue(kind: "entry" | "result", busy = false) {
   const clock = { now: 1_790_000_000_000 };
   class ClockDate extends Date {
     constructor(value?: string | number) { super(value ?? clock.now); }
@@ -182,22 +182,51 @@ function captureQueue(kind: "entry" | "result") {
   }));
   const reads: string[] = [];
   const writes: Array<{ id: string; data: Record<string, unknown> }> = [];
+  let boardRefreshes = 0;
+  let onRead: (symbol: string) => void = () => {};
+  let afterUpdate: (id: string) => void = () => {};
+  const updateMany = async ({ where, data }: { where: { id: string; archivedAt: null; status: string; resultAt?: null; snapshots?: { none: { kind: string } } }; data: Record<string, unknown> }) => {
+    const row = rows.find((row) => row.id === where.id);
+    if (!row || row.archivedAt || row.status !== where.status || where.resultAt === null && row.resultAt !== null
+      || where.snapshots && row.snapshots.has(where.snapshots.none.kind)) return { count: 0 };
+    writes.push({ id: where.id, data });
+    Object.assign(row, data);
+    afterUpdate(where.id);
+    return { count: 1 };
+  };
+  const upsert = async ({ create }: { create: { setupId: string; kind: string } }) => {
+    rows.find((row) => row.id === create.setupId)!.snapshots.add(create.kind);
+  };
+  const captureActiveSetups = {};
+  const captureSnapshots = {};
   const captureMarket = { fetchKlines: async ({ symbol }: { symbol: string }) => {
     reads.push(symbol);
+    onRead(symbol);
     if (symbol.startsWith("BAD")) throw new Error("delisted");
     return [1000, 1900, 2800].map((time) => ({ time, open: 100, high: 120, low: 95, close: 110, volume: 1 }));
   } };
   const api = load("src/infrastructure/monitoring/setup-capture-service.ts", { Date: ClockDate }, {
     "@/config/default-watchlist": { DEFAULT_WATCHLIST: [] },
-    "@/core/application/scanner/supply-demand-scan-service": { runSdScan: async () => ({ demand: [], supply: [], errors: [] }) },
+    "@/core/application/scanner/published-board-service": { refreshPublishedBoard: async (input: {
+      marketData: unknown; symbols: unknown[]; activeSetups: unknown; snapshots: unknown;
+    }) => {
+      boardRefreshes += 1;
+      assert.equal(input.marketData, captureMarket);
+      assert.equal(input.activeSetups, captureActiveSetups);
+      assert.equal(input.snapshots, captureSnapshots);
+      assert.deepEqual(Array.from(input.symbols), []);
+      return { result: { demand: [], supply: [], errors: [], scannedAt: new ClockDate().toISOString() }, stale: false, refreshing: busy, snapshotPublished: !busy };
+    } },
     "@/core/application/market-data/source-selection": sourceSelection,
     "@/core/domain/market/exchange": marketExchanges,
     "@/core/domain/analysis/supply-demand": { publishedBaseIndex: () => 0, publishedScanLimit: () => 1000 },
-    "@/core/domain/analysis/setup-lifecycle": { traceSetupLifecycle: () => ({ status: "Target 2 reached", filledIndex: 1, target2Index: 2, stopIndex: null }) },
+    "@/core/domain/analysis/setup-lifecycle": { isTerminalSetupStatus: (status: string) => ["Target 2 reached", "Invalidated (SL hit)", "Missed"].includes(status), traceSetupLifecycle: () => ({ status: "Target 2 reached", filledIndex: 1, target2Index: 2, stopIndex: null }) },
     "@/core/domain/promo/capture-trigger": { isFilledStatus: () => true },
     "@/core/domain/promo/proof-image": { proofWindow: () => ({ from: 0, to: 3 }) },
-    "@/infrastructure/persistence/active-setup-store": { activeSetupStore: {} },
+    "@/infrastructure/persistence/active-setup-store": { activeSetupStore: captureActiveSetups },
+    "@/infrastructure/persistence/signals-snapshot-store": { signalsSnapshotStore: captureSnapshots },
     "@/infrastructure/market-data/market-data-provider": { marketData: captureMarket, marketDataSources: [{ exchange: "binance", marketData: captureMarket }] },
+    "@/infrastructure/monitoring/signals-publication": { readSignalsPublication: async () => ({ status: "fresh", durable: true, verified: true, scannedAt: new ClockDate().toISOString(), checkedAt: new ClockDate().toISOString(), ageSeconds: 0 }) },
     "@/infrastructure/database/prisma": { prisma: {
       trackedSetup: {
         findMany: async (query: { where: { archivedAt: null; exchange: { in: string[] }; firstStatus?: string; OR: Array<{ resultCheckedAt: null | { lte: Date } }> }; take: number }) => {
@@ -210,21 +239,65 @@ function captureQueue(kind: "entry" | "result") {
             (query.where.firstStatus ? row.firstStatus === "Limit Order" && !row.snapshots.has("ENTRY") :
               row.resultAt === null && row.snapshots.has("ENTRY")))
             .sort((a, b) => (a.resultCheckedAt?.getTime() ?? 0) - (b.resultCheckedAt?.getTime() ?? 0) || a.id.localeCompare(b.id))
-            .slice(0, query.take);
+            .slice(0, query.take).map((row) => ({ ...row, snapshots: new Set(row.snapshots) }));
         },
-        update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-          writes.push({ id: where.id, data });
-          Object.assign(rows.find((row) => row.id === where.id)!, data);
-        },
+        updateMany,
       },
-      setupSnapshot: { upsert: async ({ create }: { create: { setupId: string; kind: string } }) => {
-        rows.find((row) => row.id === create.setupId)!.snapshots.add(create.kind);
-      } },
-      $transaction: async (operations: Promise<unknown>[]) => Promise.all(operations),
+      setupSnapshot: { upsert },
+      $transaction: async (work: (tx: unknown) => Promise<unknown>) => work({ trackedSetup: { updateMany }, setupSnapshot: { upsert } }),
     } },
   });
-  return { api, rows, reads, writes, clock };
+  return { api, rows, reads, writes, clock, boardRefreshes: () => boardRefreshes,
+    race: (run: (symbol: string) => void) => { onRead = run; },
+    raceAfterUpdate: (run: (id: string) => void) => { afterUpdate = run; } };
 }
+
+test("capture entry/result writers cannot overwrite concurrent terminal outcomes or create proofs after archival", async () => {
+  for (const kind of ["entry", "result"] as const) {
+    for (const action of ["archive", "terminal"] as const) {
+      const f = captureQueue(kind);
+      const first = f.rows[0];
+      first.symbol = "GOODRACEUSDT";
+      f.race((symbol) => {
+        if (symbol !== first.symbol) return;
+        if (action === "archive") first.archivedAt = new Date(f.clock.now);
+        else first.status = "Invalidated (SL hit)";
+      });
+      await f.api.runSetupCapture();
+      assert.equal(first.status, action === "archive" ? "Running" : "Invalidated (SL hit)");
+      assert.equal(f.writes.some((write) => write.id === first.id), false);
+      assert.equal(first.snapshots.has(kind === "entry" ? "ENTRY" : "RESULT"), false);
+    }
+  }
+});
+
+test("a busy coordinated refresh returns in-progress before dispatching proof reads or writes", async () => {
+  const f = captureQueue("entry", true);
+  const report = await f.api.runSetupCapture() as { publication: { status: string; verified: boolean } };
+  assert.equal(report.publication.status, "in-progress");
+  assert.equal(report.publication.verified, false);
+  assert.deepEqual(f.reads, []);
+  assert.deepEqual(f.writes, []);
+});
+
+test("archival between lifecycle CAS and entry proof transaction prevents the snapshot", async () => {
+  const f = captureQueue("entry");
+  const first = f.rows[0];
+  first.symbol = "GOODRACEUSDT";
+  f.raceAfterUpdate((id) => { if (id === first.id) first.archivedAt = new Date(f.clock.now); });
+  await f.api.runSetupCapture();
+  assert.ok(first.archivedAt);
+  assert.equal(first.snapshots.has("ENTRY"), false);
+  assert.equal(first.snapshots.has("RESULT"), false);
+});
+
+test("the existing capture sweep refreshes and publishes the board exactly once before checking proof queues", async () => {
+  const f = captureQueue("entry");
+  await f.api.runSetupCapture();
+  assert.equal(f.boardRefreshes(), 1);
+  await f.api.runSetupCapture();
+  assert.equal(f.boardRefreshes(), 2);
+});
 
 for (const kind of ["entry", "result"] as const) {
   test(`archived setups and setups with an unknown exchange never enter the ${kind} proof queue`, async () => {
@@ -370,6 +443,25 @@ function pollingHook(path: string, hookName: string, payload: unknown) {
 const settlePolling = () => new Promise<void>((resolve) => setImmediate(resolve));
 const marketPayload = { context: { btc: { value: "80K" } }, sentiment: { score: 71 }, fetchedAt: "2026-10-05T00:00:00Z" };
 const signalsPayload = { result: { demand: [{ symbol: "BTCUSDT" }], supply: [], demandTotal: 1, supplyTotal: 0, errors: [], scannedAt: "2026-10-05T00:00:00Z" }, top: [] };
+
+test("a stored board stays visible and labelled stale while polling for a background scan", async () => {
+  const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", { ...signalsPayload, stale: true, refreshing: true });
+  harness.runTimer(); await settlePolling();
+  const stored = harness.render();
+  assert.ok(stored.result);
+  assert.equal(stored.stale, true);
+  assert.equal(stored.lastUpdated, signalsPayload.result.scannedAt);
+  assert.equal(stored.loading, true);
+  assert.equal(harness.nextDelay(), 5_000);
+  const completedAt = "2026-10-05T00:01:00Z";
+  harness.mode.payload = { ...signalsPayload, result: { ...signalsPayload.result, scannedAt: completedAt }, stale: false, refreshing: false };
+  harness.runTimer(); await settlePolling();
+  assert.equal(harness.render().stale, false);
+  assert.equal(harness.render().loading, false);
+  assert.equal(harness.render().lastUpdated, completedAt);
+  assert.equal(harness.nextDelay(), 60_000);
+  harness.unmount();
+});
 
 test("initial offline Signals stops the skeleton and resumes immediately when online", async () => {
   const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);

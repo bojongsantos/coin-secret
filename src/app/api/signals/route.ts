@@ -1,16 +1,20 @@
+import { after } from "next/server";
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
 import { parseScanSymbols } from "@/core/application/scanner/scan-request";
-import { rankTopSetups, runSdScanCached } from "@/core/application/scanner/supply-demand-scan-service";
+import { rankTopSetups } from "@/core/application/scanner/supply-demand-scan-service";
+import { readPublishedBoard } from "@/core/application/scanner/published-board-service";
 import { visibleSignalsFor } from "@/core/domain/analysis/signal-display";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
+import { signalsSnapshotStore } from "@/infrastructure/persistence/signals-snapshot-store";
 import { marketData } from "@/infrastructure/market-data/market-data-provider";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { canUserAccessFeature } from "@/infrastructure/auth/entitlements";
 import { getRequestIp, tooManyRequests } from "@/shared/server/http";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Deployment hint leaves room for native reads to drain before releasing refresh coordination.
+export const maxDuration = 120;
 
 /** Same fan-out exposure as the scanner, so the same guard applies. */
 const limiter = createFixedWindowLimiter({ limit: 20, windowMs: 60_000 });
@@ -52,12 +56,12 @@ export async function POST(request: Request) {
     // The store is what keeps a published setup on screen until price finishes
     // it. Without it a refresh would pick the best zone visible right now and
     // quietly swap out the plan somebody was already trading.
-    const scanned = await runSdScanCached(
-      marketData,
-      symbols,
-      user !== null && body.force === true,
-      { activeSetups: activeSetupStore },
-    );
+    const board = await readPublishedBoard({
+      marketData, symbols, activeSetups: activeSetupStore, snapshots: signalsSnapshotStore,
+      force: user !== null && body.force === true,
+      scheduleAfter: after,
+    });
+    const scanned = board.result;
 
     // Filtering happens here, before the free-plan truncation, and not in the
     // browser. Ranking reads the filtered set so the top-5 strip and the
@@ -71,13 +75,13 @@ export async function POST(request: Request) {
     // confidence, so a weaker leader states its own weakness.
     const top = rankTopSetups(scanned, limit);
     const result = { ...scanned, ...visible };
-    return complete(Response.json({ result, top }), scanned.errors.length);
+    return complete(Response.json({ result, top, stale: board.stale, refreshing: board.refreshing }), scanned.errors.length);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Signals unavailable";
     const badRequest = message.startsWith("symbols");
     return complete(Response.json(
       { error: badRequest ? message : "Signals unavailable" },
-      { status: badRequest ? 400 : 503 },
+      { status: badRequest ? 400 : 503, headers: badRequest ? undefined : { "Retry-After": "5" } },
     ));
   }
 }

@@ -21,12 +21,14 @@ export function TopSetupsStrip({
   activeSymbol,
   onSelect,
   error,
+  stale,
   lastUpdated,
   onRetry,
 }: {
   setups: TopSetup[];
   loading: boolean;
   error?: string | null;
+  stale?: boolean;
   lastUpdated?: string | null;
   onRetry?: () => void;
   activeSymbol: string | null;
@@ -41,7 +43,7 @@ export function TopSetupsStrip({
         {t("dashboard.topSetups")}
       </h2>
 
-      <DataStatus error={error} lastUpdated={lastUpdated} loading={loading} onRetry={onRetry} />
+      <DataStatus error={error} stale={stale} lastUpdated={lastUpdated} loading={loading} onRetry={onRetry} />
       {setups.some(({ hit }) => hit.exchange === null) && <p className="mt-2 text-[11px] text-warning">{t("chart.legacySetups")}</p>}
 
       {loading && setups.length === 0 ? (

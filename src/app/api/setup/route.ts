@@ -1,6 +1,6 @@
 import { normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
-import { apiError } from "@/shared/server/http";
+import { apiError, HttpError } from "@/shared/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +40,9 @@ export async function GET(request: Request) {
   } catch (error) {
     const response = apiError(error);
     response.headers.set("Cache-Control", "no-store");
+    if (error instanceof HttpError && error.code === "SETUP_STORE_UNAVAILABLE") {
+      response.headers.set("Retry-After", "5");
+    }
     return response;
   }
 }

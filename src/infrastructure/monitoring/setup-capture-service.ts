@@ -1,17 +1,19 @@
 import "server-only";
 
 import { DEFAULT_WATCHLIST } from "@/config/default-watchlist";
-import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service";
+import { refreshPublishedBoard } from "@/core/application/scanner/published-board-service";
 import { publishedBaseIndex, publishedScanLimit } from "@/core/domain/analysis/supply-demand";
 import { fetchPublishedCandles } from "@/core/application/market-data/source-selection";
-import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
+import { isTerminalSetupStatus, traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import { isMarketExchange } from "@/core/domain/market/exchange";
 import type { Candle, SetupDirection, Timeframe } from "@/core/domain/models";
 import { isFilledStatus } from "@/core/domain/promo/capture-trigger";
 import { proofWindow, type ProofInput } from "@/core/domain/promo/proof-image";
 import { prisma } from "@/infrastructure/database/prisma";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
+import { signalsSnapshotStore } from "@/infrastructure/persistence/signals-snapshot-store";
 import { marketData, marketDataSources } from "@/infrastructure/market-data/market-data-provider";
+import { readSignalsPublication, type SignalsPublication } from "@/infrastructure/monitoring/signals-publication";
 
 export interface SetupCaptureReport {
   scanned: number;
@@ -19,6 +21,7 @@ export interface SetupCaptureReport {
   entrySnapshots: number;
   resultSnapshots: number;
   skippedSymbols: string[];
+  publication: SignalsPublication | null;
 }
 
 
@@ -104,10 +107,18 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
     entrySnapshots: 0,
     resultSnapshots: 0,
     skippedSymbols: [],
+    publication: null,
   };
 
-  // Refreshes every published setup's status and records new ones.
-  const scan = await runSdScan(marketData, DEFAULT_WATCHLIST, { activeSetups: activeSetupStore });
+  // The existing sweep also warms the durable board, using this same status scan.
+  const board = await refreshPublishedBoard({
+    marketData, symbols: DEFAULT_WATCHLIST, activeSetups: activeSetupStore, snapshots: signalsSnapshotStore,
+  });
+  if (board.refreshing) {
+    report.publication = { ...await readSignalsPublication(), status: "in-progress", verified: false };
+    return report;
+  }
+  const scan = board.result;
   report.scanned = scan.demand.length + scan.supply.length;
   report.tracked = report.scanned;
   report.skippedSymbols = scan.errors.map((entry) => entry.split(":")[0]);
@@ -115,6 +126,8 @@ export async function runSetupCapture(): Promise<SetupCaptureReport> {
   const now = new Date();
   report.entrySnapshots = await captureEntries(now, report);
   report.resultSnapshots = await resolveResults(now);
+  report.publication = await readSignalsPublication(scan.scannedAt);
+  if (board.snapshotPublished !== true || scan.errors.length > 0) report.publication.verified = false;
   return report;
 }
 
@@ -158,6 +171,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
   for (const setup of candidates) {
     if (setup.archivedAt || !isMarketExchange(setup.exchange)) continue;
     if (captured >= MAX_CAPTURES_PER_RUN) break;
+    const observed = { id: setup.id, archivedAt: null, status: setup.status };
 
     // Deep enough to hold the bar the zone formed on, however long ago the
     // setup was published. Three hundred bars covered three days of the
@@ -173,7 +187,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       if (!report.skippedSymbols.includes(setup.symbol)) report.skippedSymbols.push(setup.symbol);
       // A failed read changes neither the trade status nor the archive. It
       // still advances the queue and waits before retrying the same record.
-      await prisma.trackedSetup.update({ where: { id: setup.id }, data: { resultCheckedAt: now } });
+      await prisma.trackedSetup.updateMany({ where: observed, data: { resultCheckedAt: now } });
       continue;
     }
 
@@ -181,8 +195,8 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
     if (baseIndex < 0) {
       // Older than the deepest window one request returns. Nothing can be said
       // about it; the row is stamped so the queue rotates past it.
-      await prisma.trackedSetup.update({
-        where: { id: setup.id },
+      await prisma.trackedSetup.updateMany({
+        where: observed,
         data: { resultCheckedAt: now },
       });
       continue;
@@ -202,10 +216,11 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
     );
 
     // Marked as looked at whatever the answer, so the queue moves on.
-    await prisma.trackedSetup.update({
-      where: { id: setup.id },
-      data: { status: life.status, resultCheckedAt: now },
+    const matched = await prisma.trackedSetup.updateMany({
+      where: observed,
+      data: { status: isTerminalSetupStatus(setup.status) ? setup.status : life.status, resultCheckedAt: now },
     });
+    if (matched.count !== 1 || isTerminalSetupStatus(setup.status) && setup.status !== life.status) continue;
 
     // Never filled, or filled and lost. Neither earns a place in the archive.
     if (life.filledIndex === null) continue;
@@ -230,23 +245,26 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       filledPrice: filled.close,
     };
 
-    await prisma.$transaction([prisma.setupSnapshot.upsert({
-      where: { setupId_kind: { setupId: setup.id, kind: "ENTRY" } },
-      create: {
-        setupId: setup.id,
-        kind: "ENTRY",
-        status: "Filled",
-        price: payload.filledPrice,
-        payload: JSON.parse(JSON.stringify(payload)),
-      },
-      update: {},
-    }), prisma.trackedSetup.update({
-      where: { id: setup.id },
-      // A new entry proof deserves an immediate result check in this sweep,
-      // even when its terminal outcome was already observed above.
-      data: { resultCheckedAt: null },
-    })]);
-    captured++;
+    const saved = await prisma.$transaction(async (tx) => {
+      const guarded = await tx.trackedSetup.updateMany({
+        where: { id: setup.id, archivedAt: null, status: life.status, snapshots: { none: { kind: "ENTRY" } } },
+        data: { resultCheckedAt: null },
+      });
+      if (guarded.count !== 1) return false;
+      await tx.setupSnapshot.upsert({
+        where: { setupId_kind: { setupId: setup.id, kind: "ENTRY" } },
+        create: {
+          setupId: setup.id,
+          kind: "ENTRY",
+          status: "Filled",
+          price: payload.filledPrice,
+          payload: JSON.parse(JSON.stringify(payload)),
+        },
+        update: {},
+      });
+      return true;
+    });
+    if (saved) captured++;
   }
   return captured;
 }
@@ -286,12 +304,13 @@ async function resolveResults(now: Date): Promise<number> {
   let captured = 0;
   for (const setup of pending) {
     if (setup.archivedAt || !isMarketExchange(setup.exchange)) continue;
+    const observed = { id: setup.id, archivedAt: null, status: setup.status, resultAt: null };
     // Enough history to hold the zone, the fill and the target in one window.
     const history = await fetchPublishedCandles(marketDataSources, setup.exchange,
       { symbol: setup.symbol, timeframe: setup.timeframe as Timeframe, limit: PROOF_HISTORY_BARS })
       .catch(() => [] as Candle[]);
     if (history.length === 0) {
-      await prisma.trackedSetup.update({ where: { id: setup.id }, data: { resultCheckedAt: now } });
+      await prisma.trackedSetup.updateMany({ where: observed, data: { resultCheckedAt: now } });
       continue;
     }
 
@@ -304,8 +323,8 @@ async function resolveResults(now: Date): Promise<number> {
     };
     const baseIndex = publishedBaseIndex(history, setup.zoneBaseTime);
     if (baseIndex < 0) {
-      await prisma.trackedSetup.update({
-        where: { id: setup.id },
+      await prisma.trackedSetup.updateMany({
+        where: observed,
         data: { resultCheckedAt: now },
       });
       continue;
@@ -316,10 +335,10 @@ async function resolveResults(now: Date): Promise<number> {
     // Not finished, or finished the wrong way. Either way there is no proof to
     // publish; the stop is what the loop below records so the sweep moves on.
     if (life.filledIndex === null || life.target2Index === null || life.stopIndex !== null) {
-      await prisma.trackedSetup.update({
-        where: { id: setup.id },
+      await prisma.trackedSetup.updateMany({
+        where: observed,
         data: {
-          status: life.status,
+          status: isTerminalSetupStatus(setup.status) ? setup.status : life.status,
           resultCheckedAt: now,
         },
       });
@@ -328,8 +347,17 @@ async function resolveResults(now: Date): Promise<number> {
 
     const payload = proofPayload(setup, history, life.filledIndex, life.target2Index);
 
-    await prisma.$transaction([
-      prisma.setupSnapshot.upsert({
+    const saved = await prisma.$transaction(async (tx) => {
+      const guarded = await tx.trackedSetup.updateMany({
+        where: observed,
+        data: {
+          status: "Target 2 reached",
+          resultAt: new Date(history[life.target2Index!].time * 1000),
+          resultCheckedAt: now,
+        },
+      });
+      if (guarded.count !== 1) return false;
+      await tx.setupSnapshot.upsert({
         where: { setupId_kind: { setupId: setup.id, kind: "RESULT" } },
         create: {
           setupId: setup.id,
@@ -341,17 +369,10 @@ async function resolveResults(now: Date): Promise<number> {
         // Rewritten on purpose: the picture is rendered from this, and an
         // older shape would keep the archive on the previous design forever.
         update: { payload: JSON.parse(JSON.stringify(payload)), price: payload.targetReachedPrice },
-      }),
-      prisma.trackedSetup.update({
-        where: { id: setup.id },
-        data: {
-          status: "Target 2 reached",
-          resultAt: new Date(history[life.target2Index].time * 1000),
-          resultCheckedAt: now,
-        },
-      }),
-    ]);
-    captured++;
+      });
+      return true;
+    });
+    if (saved) captured++;
   }
   return captured;
 }

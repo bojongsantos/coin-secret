@@ -13,11 +13,18 @@ type Node = { type: unknown; props: Record<string, unknown> };
 function jsx(type: unknown, props: Record<string, unknown>): unknown {
   return typeof type === "function" ? type(props) : { type, props };
 }
-function textOf(node: unknown): string {
-  if (Array.isArray(node)) return node.map(textOf).join(" ");
+function textOf(node: unknown, visibleOnly = false): string {
+  if (Array.isArray(node)) return node.map((child) => textOf(child, visibleOnly)).join(" ");
   if (!node || typeof node === "boolean") return "";
   if (typeof node !== "object") return String(node);
-  return textOf((node as Node).props?.children);
+  const props = (node as Node).props;
+  if (visibleOnly && (props?.["aria-hidden"] || String(props?.className).split(" ").includes("sr-only"))) return "";
+  return textOf(props?.children, visibleOnly);
+}
+function nodesOf(node: unknown): Node[] {
+  if (Array.isArray(node)) return node.flatMap(nodesOf);
+  if (!node || typeof node !== "object") return [];
+  return [node as Node, ...nodesOf((node as Node).props?.children)];
 }
 function load(path: string, dependencies: Record<string, unknown>, globals: Record<string, unknown> = {}) {
   const exports: Record<string, (...args: unknown[]) => unknown> = {};
@@ -35,7 +42,7 @@ function ui() {
   const deps: Record<string, unknown> = {
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/link": { default: "link" },
-    "lucide-react": { CandlestickChart: "icon", Loader2: "loader", Lock: "lock", RefreshCw: "refresh" },
+    "lucide-react": { CandlestickChart: "icon", Clock3: "clock", Loader2: "loader", Lock: "lock", RefreshCw: "refresh" },
     "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) => translate("en", key, vars), locale: "en" }) },
     "@/presentation/ui/coin-icon": { CoinIcon: "coin" },
     "@/presentation/ui/status-icon": { StatusIcon: "status-icon" },
@@ -72,20 +79,69 @@ test("Top Setups distinguishes failed fetching from a successful empty scan", ()
   assert.match(textOf(api.TopSetupsStrip(props)), /No setup/i);
 });
 
-test("healthy snapshots have no routine status while retained snapshots still expose stale and retry", () => {
+test("healthy snapshots stay quiet; idle retained snapshots expose stale and retry without a warning banner", () => {
   const api = load("src/presentation/ui/data-status.tsx", ui());
   assert.equal(api.DataStatus({ lastUpdated: "2026-10-10T01:00:00Z" }), null);
-  const rendered = textOf(api.DataStatus({ error: "Connection unavailable.", stale: true, lastUpdated: "2026-10-10T01:00:00Z", onRetry() {} }));
-  assert.match(rendered, /Showing the last available data; not yet updated/);
-  assert.doesNotMatch(rendered, /Last successful update/);
-  assert.match(rendered, /Try again/);
+  let retries = 0;
+  const rendered = api.DataStatus({ error: "Connection unavailable.", stale: true, lastUpdated: "2026-10-10T01:00:00Z", onRetry() { retries++; } });
+  assert.match(textOf(rendered), /Showing the last available data; not yet updated.*Connection unavailable/);
+  assert.equal(textOf(rendered, true).trim(), "");
+  assert.equal(nodesOf(rendered).find(({ props }) => props.role === "status")?.props.title, translate("en", "data.stale"));
+  assert.ok(nodesOf(rendered).some(({ type }) => type === "clock"));
+  assert.ok(nodesOf(rendered).every(({ props }) => !String(props.className).includes("warning")));
+  const retry = nodesOf(rendered).find(({ type }) => type === "button")!;
+  assert.equal(retry.props["aria-label"], "Try again");
+  (retry.props.onClick as () => void)();
+  assert.equal(retries, 1);
 });
 
-test("Top Setups labels an older stored ranking while its refresh runs", () => {
-  const api = load("src/presentation/features/dashboard/top-setups-strip.tsx", ui());
-  const rendered = textOf(api.TopSetupsStrip({ setups: [], loading: true, activeSymbol: null, onSelect() {}, stale: true, lastUpdated: "2026-10-10T01:00:00Z" }));
-  assert.match(rendered, /Showing the last available data; not yet updated/);
-  assert.doesNotMatch(rendered, /Last successful update/);
+test("refreshing status is a compact accessible spinner without warning prose or duplicate retry", () => {
+  const api = load("src/presentation/ui/data-status.tsx", ui());
+  for (const props of [{ loading: true }, { loading: true, stale: true, error: "Connection unavailable.", onRetry() {} }]) {
+    const rendered = api.DataStatus(props);
+    const nodes = nodesOf(rendered);
+    assert.equal(textOf(rendered, true).trim(), "");
+    assert.match(textOf(rendered), /Loading/);
+    assert.equal(nodes.find(({ props }) => props.role === "status")?.props.title, "Loading…");
+    assert.match(String(nodes.find(({ type }) => type === "loader")?.props.className), /size-4 animate-spin motion-reduce:animate-none/);
+    assert.ok(nodes.every(({ props }) => !String(props.className).includes("warning")));
+    assert.ok(nodes.every(({ type }) => type !== "button"));
+  }
+});
+
+test("unavailable data still exposes its visible error and a working retry", () => {
+  const api = load("src/presentation/ui/data-status.tsx", ui());
+  let retries = 0;
+  const rendered = api.DataStatus({ error: "Connection unavailable.", onRetry() { retries++; } });
+  assert.match(textOf(rendered, true), /Data temporarily unavailable.*Connection unavailable.*Try again/);
+  assert.ok(nodesOf(rendered).some(({ props }) => String(props.className).includes("text-warning")));
+  (nodesOf(rendered).find(({ type }) => type === "button")!.props.onClick as () => void)();
+  assert.equal(retries, 1);
+});
+
+test("Signals, Top Setups and Market Overview preserve their data during refresh without visible stale prose", () => {
+  const deps = {
+    ...ui(),
+    "@/core/domain/analysis/conviction": { buildConviction: () => undefined },
+    "@/presentation/features/dashboard/panel": { Panel: ({ children }: { children: unknown }) => jsx("section", { children }) },
+    "@/presentation/widgets/right-rail/conviction-score-card": { ConvictionScoreCard: "conviction" },
+    "@/presentation/widgets/right-rail/market-context-card": { MarketContextCard: ({ data }: { data: { marketCap: string } }) => jsx("context", { children: data.marketCap }) },
+    "@/presentation/widgets/right-rail/market-sentiment-card": { MarketSentimentCard: ({ data }: { data: { value: number } }) => jsx("sentiment", { children: data.value }) },
+    "@/config/market-fallbacks": {},
+  };
+  const hit = { symbol: "BTCUSDT", base: "BTC", entry: 100, direction: "long", confidence: 80, exchange: "binance", volume24h: 1_000_000, change24h: 1, timeframe: "15m", status: "active" };
+  const base = { loading: true, stale: true, lastUpdated: "2026-10-10T01:00:00Z" };
+  const views = [
+    load("src/presentation/features/signals/signals-board.tsx", deps).SignalsBoard({ ...base, demand: [hit], supply: [], error: null, onRefresh() {} }),
+    load("src/presentation/features/dashboard/top-setups-strip.tsx", deps).TopSetupsStrip({ ...base, setups: [{ hit }], activeSymbol: null, onSelect() {} }),
+    load("src/presentation/features/dashboard/market-overview.tsx", deps).MarketOverview({ ...base, context: { marketCap: "$100T" }, sentiment: { value: 65 } }),
+  ];
+  views.forEach((rendered, index) => {
+    assert.match(textOf(rendered, true), index === 2 ? /\$100T.*65|65.*\$100T/ : /BTC/);
+    assert.doesNotMatch(textOf(rendered, true), /Showing the last available data|Loading|Try again/);
+    assert.match(textOf(rendered), /Showing the last available data/);
+    assert.ok(nodesOf(rendered).some(({ type }) => type === "loader"));
+  });
 });
 
 function chartHarness(options: { available?: boolean; deferKlines?: boolean } = {}) {

@@ -53,8 +53,8 @@ export function AnalysisClient({
   return (
     <AppShell>
       <div className="flex flex-col gap-4 sm:gap-5">
-        <ChartDataStatus connectionState={connectionState} exchange={exchange} lastUpdated={lastUpdated} setupState={setupState} setupError={setupError} retry={retry} />
-        {error && (
+        <ChartDataStatus connectionState={connectionState} exchange={exchange} lastUpdated={lastUpdated} setupState={setupState} setupError={setupError} historyError={history?.error} retry={retry} />
+        {error && !analysis && (
           <div className="rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-[12.5px] text-negative">
             {error}
           </div>

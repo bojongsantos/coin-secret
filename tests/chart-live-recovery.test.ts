@@ -6,6 +6,7 @@ import ts from "typescript";
 import type { KlineQuery, MarketDataPort } from "@/core/application/ports/market-data-port";
 import type { Candle, Timeframe } from "@/core/domain/models";
 import type { LiveAnalysis } from "@/presentation/hooks/use-live-analysis";
+import type { HistoryLoad, LoadHistoryOptions } from "@/core/application/market-data/history-loader";
 import * as candleOperations from "@/core/domain/market/candles";
 import * as exchanges from "@/core/domain/market/exchange";
 import * as timeframes from "@/core/domain/market/timeframe";
@@ -43,8 +44,9 @@ test("missing recovery bars never become a supposedly complete lifecycle tape", 
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 function hookHarness() {
@@ -57,6 +59,8 @@ function hookHarness() {
   let result!: LiveAnalysis;
   let nextTimer = 0;
   let setupReads = 0;
+  let historyReads = 0;
+  let nextHistory: ((options: LoadHistoryOptions) => Promise<HistoryLoad>) | null = null;
   let nextSetup: ((signal: AbortSignal) => Promise<unknown>) | null = null;
   let plan: unknown = published(symbol);
   let failBinance = false;
@@ -69,7 +73,7 @@ function hookHarness() {
   const timers = new Map<number, { at: number; interval?: number; callback: () => void }>();
   const listeners = new Map<string, Set<() => void>>();
   const reads: Array<{ exchange: string; query?: KlineQuery; symbol: string }> = [];
-  const engine: Array<{ symbol: string; timeframe: string; exchange: string; candles: Candle[]; setup: unknown; options: Record<string, unknown> }> = [];
+  const engine: Array<{ symbol: string; timeframe: string; exchange: string; candles: Candle[]; ticker: ReturnType<typeof ticker>; setup: unknown; options: Record<string, unknown> }> = [];
   const sockets: Array<{ update: (value: { symbol: string; candle?: Candle; ticker?: ReturnType<typeof ticker> }) => void; status: (value: string) => void; stopped: boolean }> = [];
   const addEventListener = (name: string, callback: () => void) => { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name)!.add(callback); };
   const removeEventListener = (name: string, callback: () => void) => listeners.get(name)?.delete(callback);
@@ -118,12 +122,12 @@ function hookHarness() {
       },
       "@/core/application/market-data/source-selection": sources,
       "@/core/application/market-data/live-recovery": recovery,
-      "@/core/application/market-data/history-loader": { HISTORY_PAGE_SIZE: 1000, fetchListingTime: async () => null, loadHistory: async () => ({ candles: [], truncated: false }) },
+      "@/core/application/market-data/history-loader": { HISTORY_PAGE_SIZE: 1000, fetchListingTime: async () => null, loadHistory: async (options: LoadHistoryOptions) => { historyReads++; const loader = nextHistory; nextHistory = null; return loader ? loader(options) : { candles: [], truncated: false, fromSeconds: 0 }; } },
       "@/core/application/market-data/history-plan": { estimateRangeCandles: () => 100 },
       "@/core/domain/market/exchange": exchanges,
       "@/core/domain/market/timeframe": timeframes,
       "@/core/domain/market/candles": candleOperations,
-      "@/core/domain/analysis/analysis-engine": { buildAnalysisResult: (requested: string, _base: string, _quote: string, interval: string, exchange: string, candles: Candle[], _ticker: unknown, setup: unknown, _locale: unknown, options: Record<string, unknown>) => { engine.push({ symbol: requested, timeframe: interval, exchange, candles, setup, options }); return { pair: { symbol: requested }, chartData: { candles } }; } },
+      "@/core/domain/analysis/analysis-engine": { buildAnalysisResult: (requested: string, _base: string, _quote: string, interval: string, exchange: string, candles: Candle[], latestTicker: ReturnType<typeof ticker>, setup: unknown, _locale: unknown, options: Record<string, unknown>) => { engine.push({ symbol: requested, timeframe: interval, exchange, candles, ticker: latestTicker, setup, options }); return { pair: { symbol: requested }, chartData: { candles } }; } },
       "@/infrastructure/market-data/market-data-provider": { marketDataSources: sourceList },
       "@/infrastructure/market-data/binance-stream-client": { subscribeBinanceMarket: (_symbol: string, _timeframe: string, update: (value: unknown) => void, status: (value: string) => void) => { const socket = { update, status, stopped: false }; sockets.push(socket); return () => { socket.stopped = true; }; } },
       "@/presentation/hooks/use-ui-preference": { useLocale: () => ({ locale: "en" }) },
@@ -155,6 +159,8 @@ function hookHarness() {
     reads, sockets, engine, timers, flush,
     view: () => result,
     setupReads: () => setupReads,
+    historyReads: () => historyReads,
+    historyResponse: (callback: (options: LoadHistoryOptions) => Promise<HistoryLoad>) => { nextHistory = callback; },
     setPlan: (value: unknown) => { plan = value; },
     setupResponse: (callback: (signal: AbortSignal) => Promise<unknown>) => { nextSetup = callback; },
     bybitOnly: () => { failBinance = true; },
@@ -225,7 +231,7 @@ test("an open socket is not live until actual current data arrives", async () =>
   h.sockets[0].status("live"); await h.flush();
   assert.equal(h.view().connectionState, "polling");
   await h.advance(1000);
-  h.sockets[0].update({ symbol: "ZECUSDT", ticker: ticker("ZECUSDT") }); await h.flush();
+  h.sockets[0].update({ symbol: "ZECUSDT", candle: candle(h.engine.at(-1)!.candles.at(-1)!.time), ticker: ticker("ZECUSDT") }); await h.flush();
   assert.equal(h.view().connectionState, "live");
   assert.notEqual(h.view().lastUpdated, firstUpdate);
   h.stop();
@@ -322,16 +328,171 @@ test("plan rate limiting honors Retry-After even through repeated manual retries
 test("REST repairs the previous closed candle after its final websocket frame was missed", async () => {
   const h = hookHarness(); await h.flush();
   const priorTime = h.engine.at(-1)!.candles.at(-1)!.time;
+  const pending = h.deferCandles();
   h.elapse(900_000);
   h.sockets[0].update({ symbol: "ZECUSDT", candle: candle(priorTime + 900) }); await h.flush();
-  const pending = h.deferCandles(); h.view().retry(); await h.flush();
   const read = h.reads.filter((row) => row.query).at(-1)!;
   assert.equal(read.query?.startTime, priorTime * 1000);
+  h.elapse(900_000);
   h.sockets[0].update({ symbol: "ZECUSDT", candle: candle(priorTime + 1800) }); await h.flush();
   pending.resolve([{ ...candle(priorTime), high: 111 }, candle(priorTime + 900)]);
   await h.flush(); await h.advance(400);
   assert.equal(h.engine.at(-1)!.candles.find((row) => row.time === priorTime)?.high, 111);
-  assert.equal(h.engine.at(-1)!.candles.at(-1)!.time, priorTime + 900);
+  assert.equal(h.engine.at(-1)!.candles.at(-1)!.time, priorTime + 1800);
+  assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, false, "a newer rollover still requires its own closed-bar reconciliation");
+  await h.advance(4000);
+  assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, true);
+  assert.equal(h.view().error, null);
+  h.stop();
+});
+
+test("fresh contiguous socket data avoids routine REST polls and keeps updating through a stalled manual read", async () => {
+  const h = hookHarness(); await h.flush();
+  const socket = h.sockets[0];
+  const time = h.engine.at(-1)!.candles.at(-1)!.time;
+  socket.status("live");
+  socket.update({ symbol: "ZECUSDT", candle: candle(time), ticker: ticker("ZECUSDT") }); await h.flush();
+  const reads = h.reads.length;
+  await h.advance(4000);
+  assert.equal(h.reads.length, reads, "a fresh stream needs no fallback poll");
+  const pending = h.deferCandles(); h.view().retry(); await h.flush();
+  await h.advance(4000);
+  socket.update({ symbol: "ZECUSDT", candle: { ...candle(time), close: 107 }, ticker: { ...ticker("ZECUSDT"), lastPrice: 107 } });
+  await h.flush(); await h.advance(400);
+  const updated = h.view().lastUpdated;
+  assert.equal(h.engine.at(-1)!.candles.at(-1)!.close, 107);
+  assert.equal(h.engine.at(-1)!.ticker.lastPrice, 107);
+  assert.equal(h.view().connectionState, "live");
+  pending.resolve([candle(time - 900), candle(time)]); await h.flush(); await h.advance(400);
+  assert.equal(h.engine.at(-1)!.candles.at(-1)!.close, 107, "an older REST response cannot replace the newer stream frame");
+  assert.equal(h.engine.at(-1)!.ticker.lastPrice, 107);
+  assert.equal(h.view().error, null);
+  assert.ok(h.view().lastUpdated! >= updated!);
+  h.stop();
+});
+
+test("history timeout retains contiguous partial pages and healthy current data, with a working retry", async () => {
+  const h = hookHarness();
+  const pending = deferred<HistoryLoad>();
+  let attempt!: LoadHistoryOptions;
+  const old = 1_800_000_000 - 900 * 4;
+  h.historyResponse(async (options) => {
+    attempt = options;
+    options.onPartial?.([candle(old), candle(old + 900)]);
+    return pending.promise;
+  });
+  await h.flush();
+  const socket = h.sockets[0]; socket.status("live");
+  socket.update({ symbol: "ZECUSDT", candle: candle(h.engine.at(-1)!.candles.at(-1)!.time), ticker: ticker("ZECUSDT") }); await h.flush();
+  const lastUpdated = h.view().lastUpdated;
+  pending.reject(new DOMException("Timed out", "TimeoutError")); await h.flush(); await h.advance(400);
+  assert.equal(h.view().connectionState, "live");
+  assert.equal(h.view().lastUpdated, lastUpdated);
+  assert.equal(h.view().error, null);
+  assert.match(h.view().history.error!, /Chart history request timed out/);
+  assert.equal(h.view().history.loading, false);
+  assert.equal(attempt.signal?.aborted, true);
+  assert.equal(h.engine.at(-1)!.candles[0].time, old);
+  assert.equal(recovery.hasCandleGap(h.engine.at(-1)!.candles, "15m"), false);
+  attempt.onPartial?.([candle(old - 900)]); await h.flush();
+  assert.equal(h.engine.at(-1)!.candles[0].time, old, "aborted sibling pages cannot alter the retained partial history");
+  const reads = h.reads.length;
+  h.view().retry(); await h.flush();
+  assert.equal(h.historyReads(), 2);
+  assert.equal(h.view().history.error, null);
+  assert.equal(h.reads.length, reads, "history retry does not interrupt a healthy current stream");
+  h.stop();
+});
+
+test("a socket reconnect through connecting reconciles candles before lifecycle replay resumes", async () => {
+  const h = hookHarness(); await h.flush();
+  const socket = h.sockets[0]; socket.status("live");
+  socket.update({ symbol: "ZECUSDT", candle: candle(h.engine.at(-1)!.candles.at(-1)!.time), ticker: ticker("ZECUSDT") }); await h.flush();
+  const reads = h.reads.length;
+  const pending = h.deferCandles();
+  socket.status("fallback"); socket.status("connecting"); socket.status("live"); await h.flush();
+  assert.equal(h.reads.length, reads + 2);
+  socket.update({ symbol: "ZECUSDT", ticker: { ...ticker("ZECUSDT"), lastPrice: 106 } }); await h.flush(); await h.advance(400);
+  assert.equal(h.view().connectionState, "reconnecting");
+  assert.equal(h.engine.at(-1)!.ticker.lastPrice, 106);
+  assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, false);
+  const time = h.engine.at(-1)!.candles.at(-1)!.time;
+  pending.resolve([candle(time - 900), candle(time)]); await h.flush(); await h.advance(400);
+  assert.equal(h.view().connectionState, "live");
+  assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, true);
+  h.stop();
+});
+
+test("ticker-only frames require current candles at rollover and cannot hide an incomplete REST response", async () => {
+  for (const alreadyPolling of [false, true]) {
+    const h = hookHarness(); await h.flush();
+    const socket = h.sockets[0]; const time = h.engine.at(-1)!.candles.at(-1)!.time;
+    socket.status("live"); socket.update({ symbol: "ZECUSDT", candle: candle(time), ticker: ticker("ZECUSDT") }); await h.flush();
+    const reads = h.reads.length;
+    const pending = h.deferCandles();
+    if (alreadyPolling) { h.view().retry(); await h.flush(); }
+    h.elapse(900_000);
+    socket.update({ symbol: "ZECUSDT", ticker: { ...ticker("ZECUSDT"), lastPrice: 108 } }); await h.flush(); await h.advance(400);
+    assert.equal(h.reads.length, reads + 2, "ticker messages cannot suppress recovery of a missing current candle");
+    assert.equal(h.view().connectionState, "reconnecting");
+    assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, false);
+    pending.resolve([candle(time - 900), candle(time)]); await h.flush();
+    assert.equal(h.view().connectionState, "delayed");
+    assert.ok(h.view().error);
+    h.failCandles();
+    socket.update({ symbol: "ZECUSDT", ticker: { ...ticker("ZECUSDT"), lastPrice: 109 } }); await h.flush();
+    assert.equal(h.view().connectionState, "delayed");
+    assert.ok(h.view().error, "a known candle gap cannot be cleared by a ticker-only frame");
+    assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, false);
+    h.failCandles(false);
+    h.view().retry(); await h.flush(); await h.advance(400);
+    assert.equal(h.view().error, null);
+    assert.equal(h.view().connectionState, "polling", "REST recovery does not claim a healthy candle stream");
+    assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, true);
+    h.stop();
+  }
+});
+
+test("missing historical intervals gate analysis without mislabeling healthy current candles", async () => {
+  for (const failed of [false, true]) {
+    const h = hookHarness();
+    if (failed) h.setPlan(null);
+    h.historyResponse(async (options) => {
+      const older = [candle(1_800_000_000 - 900 * 5), candle(1_800_000_000 - 900 * 3)];
+      if (failed) {
+        options.onPartial?.(older);
+        throw new DOMException("Timed out", "TimeoutError");
+      }
+      return { candles: older, truncated: false, fromSeconds: older[0].time };
+    });
+    await h.flush();
+    const socket = h.sockets[0]; socket.status("live");
+    socket.update({ symbol: "ZECUSDT", candle: candle(1_800_000_000), ticker: ticker("ZECUSDT") }); await h.flush(); await h.advance(400);
+    assert.equal(h.view().connectionState, "live");
+    assert.equal(h.view().error, null);
+    assert.equal(h.engine.at(-1)!.options.publishedOnly, true);
+    assert.equal(h.engine.at(-1)!.options.evaluateLifecycle, false);
+    assert.equal(recovery.hasCandleGap(h.engine.at(-1)!.candles, "15m"), true);
+    h.stop();
+  }
+});
+
+test("fresh candle frames cannot suppress REST recovery when ticker frames stop", async () => {
+  const h = hookHarness(); await h.flush();
+  const socket = h.sockets[0]; const time = h.engine.at(-1)!.candles.at(-1)!.time;
+  socket.status("live");
+  socket.update({ symbol: "ZECUSDT", candle: candle(time), ticker: { ...ticker("ZECUSDT"), lastPrice: 110 } }); await h.flush();
+  const reads = h.reads.length;
+  for (let tick = 0; tick < 3; tick++) {
+    await h.advance(4000);
+    socket.update({ symbol: "ZECUSDT", candle: { ...candle(time), close: 111 } }); await h.flush();
+    assert.equal(h.reads.length, reads);
+    assert.equal(h.engine.at(-1)!.ticker.lastPrice, 110);
+  }
+  await h.advance(4000);
+  assert.equal(h.reads.length, reads + 2, "a stale ticker needs REST even with fresh candle frames");
+  assert.equal(h.engine.at(-1)!.ticker.lastPrice, 101);
+  assert.equal(h.view().connectionState, "polling");
   assert.equal(h.view().error, null);
   h.stop();
 });

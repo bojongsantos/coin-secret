@@ -78,6 +78,7 @@ function parseSetup(payload: unknown, symbol: string): ChartPublishedSetup | nul
 export interface HistoryState {
   loading: boolean;
   progress: HistoryProgress | null;
+  error: string | null;
   /** The candle budget stopped the load short of the requested range. */
   truncated: boolean;
   /** The oldest loaded candle is the first this market ever printed. */
@@ -130,6 +131,7 @@ export function useLiveAnalysis(
   const [history, setHistory] = useState<HistoryState>({
     loading: false,
     progress: null,
+    error: null,
     truncated: false,
     reachedStart: false,
   });
@@ -166,7 +168,7 @@ export function useLiveAnalysis(
     setSetupState("loading");
     setSetupError(null);
     setPublishedTimeframe(null);
-    setHistory({ loading: true, progress: null, truncated: false, reachedStart: false });
+    setHistory({ loading: true, progress: null, error: null, truncated: false, reachedStart: false });
   }
 
   useEffect(() => {
@@ -187,10 +189,20 @@ export function useLiveAnalysis(
     let publishedExchange: MarketExchange | undefined;
     let socketState: BinanceStreamStatus = "connecting";
     let freshAt = 0;
-    let streamFreshAt = 0;
+    let streamCandleFreshAt = 0;
+    let streamTickerFreshAt = 0;
     let contiguous = true;
     let starting = false;
     let polling = false;
+    // REST repairs closed bars; newer socket observations win when it finishes.
+    let pollingCandles: Candle[] = [];
+    let pollingTicker: MarketTicker | null = null;
+    // A rollover during an older REST read still needs another reconciliation.
+    let reconciliationVersion = 0;
+    let reconciledVersion = 0;
+    let socketInterrupted = false;
+    let loadingRange = false;
+    let retryHistory: (() => Promise<void>) | null = null;
     let startupFailures = 0;
 
     // The series is kept in two pieces so bulk history never forces a re-sort.
@@ -209,12 +221,37 @@ export function useLiveAnalysis(
     let exhausted = false;
     publishedRef.current = null;
 
-    function markFresh(stream = false) {
+    function needsReconciliation() {
+      return reconciliationVersion !== reconciledVersion;
+    }
+
+    function hasFreshStream() {
+      return socketState === "live" && contiguous && streamCandleFreshAt > 0
+        && Date.now() - streamCandleFreshAt < DELAYED_AFTER_MS
+        && streamTickerFreshAt > 0 && Date.now() - streamTickerFreshAt < DELAYED_AFTER_MS
+        && (recent.at(-1)?.time ?? 0) >= currentBarTime();
+    }
+
+    function currentBarTime() {
+      return Math.floor(Date.now() / 1_000 / TIMEFRAME_SECONDS[timeframe]) * TIMEFRAME_SECONDS[timeframe];
+    }
+
+    function requireCurrentBar() {
+      if ((recent.at(-1)?.time ?? 0) < currentBarTime() && !needsReconciliation()) {
+        reconciliationVersion++;
+        setConnectionState("reconnecting");
+      }
+    }
+
+    function markFresh() {
       freshAt = Date.now();
-      if (stream) streamFreshAt = freshAt;
       setLastUpdated(new Date(freshAt).toISOString());
+      if (!contiguous || needsReconciliation()) {
+        setConnectionState((state) => state === "delayed" ? state : "reconnecting");
+        return;
+      }
       setError(null);
-      setConnectionState(stream || (socketState === "live" && freshAt - streamFreshAt < DELAYED_AFTER_MS) ? "live" : "polling");
+      setConnectionState(hasFreshStream() ? "live" : "polling");
     }
 
     /** A plan request is bounded and single-flight, including manual retries. */
@@ -321,6 +358,8 @@ export function useLiveAnalysis(
       if (cancelled || !ticker) return;
       const candles = series();
       if (candles.length === 0) return;
+      const analysisCandles = candles.slice(-ANALYSIS_WINDOW_SIZE);
+      const verified = contiguous && !needsReconciliation() && !hasCandleGap(analysisCandles, timeframe);
       lastPublishedAt = Date.now();
       const base = symbol.replace(/USDT$/, "") || symbol;
       const result = buildAnalysisResult(
@@ -329,11 +368,11 @@ export function useLiveAnalysis(
         "USDT",
         timeframe,
         selectedExchange === "bybit" ? "Bybit" : "Binance",
-        candles.slice(-ANALYSIS_WINDOW_SIZE),
+        analysisCandles,
         ticker,
         publishedRef.current,
         locale,
-        { publishedOnly: currentSetupState !== "missing" || !contiguous, evaluateLifecycle: contiguous && currentSetupState === "published", computePerformance: false },
+        { publishedOnly: currentSetupState !== "missing" || !verified, evaluateLifecycle: verified && currentSetupState === "published", computePerformance: false },
       );
       setAnalysis({ ...result, chartData: { ...result.chartData, candles } });
     }
@@ -397,13 +436,18 @@ export function useLiveAnalysis(
 
     /** Phase two: backfill the selected range behind the newest window. */
     async function loadRange() {
-      if (!selectedData) return;
+      if (!selectedData || loadingRange || extending || cancelled || navigator.onLine === false || document.visibilityState === "hidden") return;
+      loadingRange = true;
+      retryHistory = null;
+      const rangeController = new AbortController();
+      const signal = AbortSignal.any([controller.signal, rangeController.signal]);
+      setHistory((prev) => ({ ...prev, loading: true, progress: null, error: null }));
       try {
-        listingSeconds = await fetchListingTime(selectedData, symbol, timeframe, controller.signal);
+        listingSeconds = await fetchListingTime(selectedData, symbol, timeframe, signal);
       } catch {
         listingSeconds = null;
       }
-      if (cancelled) return;
+      if (cancelled) { loadingRange = false; return; }
       try {
         const loaded = await loadHistory({
           marketData: selectedData,
@@ -412,12 +456,12 @@ export function useLiveAnalysis(
           range,
           nowSeconds: Math.floor(Date.now() / 1_000),
           listingSeconds,
-          signal: controller.signal,
+          signal,
           onProgress: (progress) => {
-            if (!cancelled) setHistory((prev) => ({ ...prev, progress }));
+            if (!signal.aborted) setHistory((prev) => ({ ...prev, progress }));
           },
           onPartial: (batch) => {
-            if (cancelled) return;
+            if (signal.aborted) return;
             // Accumulate only. The chart is left untouched until the load ends.
             prependOlder(batch);
           },
@@ -427,25 +471,34 @@ export function useLiveAnalysis(
         // only matters when no partial handler consumed them.
         if (older.length === 0 && pendingOlder.length === 0) prependOlder(loaded.candles);
         commitOlder();
-        contiguous = !hasCandleGap(series().slice(-ANALYSIS_WINDOW_SIZE), timeframe);
         setHistory({
           loading: false,
           progress: null,
+          error: null,
           truncated: loaded.truncated,
           reachedStart: reachedStart(),
         });
         publish();
       } catch (caught) {
         if (cancelled) return;
-        setHistory((prev) => ({ ...prev, loading: false }));
-        fail(caught);
+        rangeController.abort();
+        retryHistory = loadRange;
+        if (commitOlder()) publish();
+        setHistory((prev) => ({ ...prev, loading: false, progress: null, error: normalizeReadFailure(caught, "Chart history").message }));
+      } finally {
+        loadingRange = false;
       }
     }
 
     /** Cheap poll that keeps the last bar fresh when the socket is down. */
     async function pollLatest() {
       if (starting || polling || !selectedData || cancelled || document.visibilityState === "hidden" || navigator.onLine === false) return;
+      requireCurrentBar();
+      if (needsReconciliation()) publish();
       polling = true;
+      pollingCandles = [];
+      pollingTicker = null;
+      const reconciliation = reconciliationVersion;
       try {
         const last = recent[recent.length - 1];
         // If a gap was observed, recover from the last verified bar rather
@@ -463,26 +516,35 @@ export function useLiveAnalysis(
         const latestTicker = reads[0].value;
         const latest = reads[1].value;
         if (cancelled) return;
-        ticker = latestTicker;
-        recent = applyRecentCandles(recent, latest);
-        contiguous = !hasCandleGap(recent.slice(-ANALYSIS_WINDOW_SIZE), timeframe);
-        if (!contiguous) throw new Error("Missing candle intervals");
+        let next = applyRecentCandles(recent, latest);
+        for (const candle of pollingCandles) next = upsertLatestCandle(next, candle);
+        contiguous = !hasCandleGap(next.slice(-ANALYSIS_WINDOW_SIZE), timeframe) && next.at(-1)!.time >= currentBarTime();
+        if (!contiguous) {
+          if (!needsReconciliation()) reconciliationVersion++;
+          throw new Error("Missing candle intervals");
+        }
+        ticker = pollingTicker ?? latestTicker;
+        recent = next;
+        reconciledVersion = reconciliation;
         invalidate();
         markFresh();
         publish();
       } catch (caught) {
-        fail(caught);
+        if (!hasFreshStream() || needsReconciliation()) fail(caught);
       } finally {
         polling = false;
+        pollingCandles = [];
+        pollingTicker = null;
       }
     }
 
     /** Scroll-triggered paging further back than the loaded window. */
     loadMoreRef.current = async () => {
       const oldest = oldestTime();
-      if (cancelled || !selectedData || extending || exhausted || oldest === null) return;
+      if (cancelled || !selectedData || loadingRange || extending || exhausted || oldest === null || navigator.onLine === false || document.visibilityState === "hidden") return;
       extending = true;
-      setHistory((prev) => ({ ...prev, loading: true }));
+      retryHistory = null;
+      setHistory((prev) => ({ ...prev, loading: true, error: null }));
       try {
         const batch = await selectedData.fetchKlines({
           symbol,
@@ -499,7 +561,9 @@ export function useLiveAnalysis(
         commitOlder();
         publish();
       } catch (caught) {
-        fail(caught);
+        if (cancelled) return;
+        retryHistory = loadMoreRef.current;
+        setHistory((prev) => ({ ...prev, error: normalizeReadFailure(caught, "Chart history").message }));
       } finally {
         extending = false;
         if (!cancelled) {
@@ -532,47 +596,65 @@ export function useLiveAnalysis(
           if (cancelled) return;
           if (document.visibilityState === "hidden" || navigator.onLine === false) return;
           if (update.symbol !== symbol) return;
-          // REST commits the pair atomically. A socket append during that
-          // read would otherwise be overwritten by an older REST window.
-          if (polling) return;
+          const priorReconciliation = reconciliationVersion;
           const lastKnown = recent[recent.length - 1];
           if (lastKnown && Math.floor(Date.now() / 1_000) - lastKnown.time >= 2 * TIMEFRAME_SECONDS[timeframe]) {
+            const firstGap = contiguous;
+            if (firstGap) reconciliationVersion++;
             contiguous = false;
             setConnectionState("reconnecting");
-            void pollLatest();
+            if (firstGap) void pollLatest();
             return;
           }
           if (update.candle) {
             const last = recent[recent.length - 1];
+            if (last && update.candle.time < last.time) return;
             if (!contiguous || (last && update.candle.time > last.time + TIMEFRAME_SECONDS[timeframe])) {
+              const firstGap = contiguous;
+              if (firstGap) reconciliationVersion++;
               contiguous = false;
               setConnectionState("reconnecting");
-              void pollLatest();
+              if (firstGap) void pollLatest();
               return;
             }
+            if (last && update.candle.time > last.time) reconciliationVersion++;
             recent = upsertLatestCandle(recent, update.candle);
+            streamCandleFreshAt = Date.now();
+            if (polling) pollingCandles = upsertLatestCandle(pollingCandles, update.candle);
             invalidate();
           }
-          if (update.ticker) ticker = update.ticker;
+          if (update.ticker) {
+            ticker = update.ticker;
+            streamTickerFreshAt = Date.now();
+            if (polling) pollingTicker = update.ticker;
+          }
           if (!contiguous || (!update.candle && !update.ticker)) return;
-          markFresh(true);
+          requireCurrentBar();
+          markFresh();
           publish();
+          if (reconciliationVersion !== priorReconciliation) void pollLatest();
         },
         (status) => {
           if (cancelled) return;
-          const prior = socketState;
           socketState = status;
           setStreamStatus(status);
+          if (status === "fallback" && !socketInterrupted) {
+            socketInterrupted = true;
+            reconciliationVersion++;
+          }
           if (status !== "live") setConnectionState("reconnecting");
           // An open socket says nothing about the missing candles. REST fills
           // the entire gap before lifecycle replay resumes.
-          if (status === "live" && prior === "fallback") void pollLatest();
+          if (status === "live" && socketInterrupted) {
+            socketInterrupted = false;
+            void pollLatest();
+          }
         },
       );
       else setStreamStatus("fallback");
       pollTimer = setInterval(() => {
         if (freshAt && Date.now() - freshAt >= DELAYED_AFTER_MS) setConnectionState("delayed");
-        void pollLatest();
+        if (!hasFreshStream() || needsReconciliation()) void pollLatest();
       }, FALLBACK_POLL_MS);
       repaintRef.current = () => publish();
       await loadRange();
@@ -581,18 +663,24 @@ export function useLiveAnalysis(
     function resume() {
       if (document.visibilityState === "hidden" || navigator.onLine === false) return;
       void loadPublished();
+      reconciliationVersion++;
       contiguous = false;
       setConnectionState("reconnecting");
       if (recent.length > 0) void pollLatest();
       else void start();
     }
     function offline() {
+      reconciliationVersion++;
       contiguous = false;
       setConnectionState("delayed");
     }
     retryRef.current = () => {
       void loadPublished();
-      if (recent.length) void pollLatest();
+      const historyRetry = retryHistory;
+      if (historyRetry) void historyRetry();
+      if (recent.length) {
+        if (!historyRetry || !hasFreshStream() || needsReconciliation()) void pollLatest();
+      }
       else void start();
     };
     void start();

@@ -212,6 +212,7 @@ export const MESSAGES = {
   "chart.connectionPolling": { id: "Diperbarui berkala", en: "Updating periodically" },
   "chart.connectionReconnecting": { id: "Menghubungkan kembali", en: "Reconnecting" },
   "chart.connectionDelayed": { id: "Data tertunda", en: "Data delayed" },
+  "chart.historyUnavailable": { id: "Riwayat candle belum selesai dimuat; chart saat ini tetap tersedia.", en: "Historical candles could not finish loading; current chart remains available." },
   "chart.setupLoading": { id: "Memeriksa rencana trading yang diterbitkan…", en: "Checking the published trading plan…" },
   "chart.setupLocal": { id: "Analisis belum diterbitkan. Belum ada rencana trading terbit untuk coin ini.", en: "Unpublished analysis. No published trading plan is available for this coin." },
   "chart.setupUnavailable": { id: "Rencana trading belum dapat diverifikasi. Level trading disembunyikan sampai verifikasi berhasil.", en: "The trading plan could not be verified. Trade levels are hidden until verification succeeds." },

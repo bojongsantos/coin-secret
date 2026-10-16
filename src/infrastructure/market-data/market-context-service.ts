@@ -56,30 +56,53 @@ function failureCode(error: unknown): string {
   return failure?.name === "SyntaxError" ? "JSON_PARSE_ERROR" : "UNKNOWN";
 }
 
-async function externalJson<T>(url: string, signal: AbortSignal): Promise<T> {
-  const res = await fetch(url, {
-    cache: "no-store",
-    signal,
-    headers: { Accept: "application/json" },
+/** Abort also settles our read if a provider ignores cancellation or stalls decoding. */
+function withinDeadline<T>(signal: AbortSignal, read: () => Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  let abort!: () => void;
+  const cancelled = new Promise<T>((_, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
   });
-  if (!res.ok) throw new ExternalHttpError(res.status);
-  return (await res.json()) as T;
+  const pending = Promise.resolve().then(() => {
+    signal.throwIfAborted();
+    return read();
+  });
+  return Promise.race([cancelled, pending]).finally(() => signal.removeEventListener("abort", abort));
+}
+
+async function externalJson<T>(url: string, signal: AbortSignal): Promise<T> {
+  return withinDeadline(signal, async () => {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new ExternalHttpError(res.status);
+    return (await res.json()) as T;
+  });
 }
 
 /** Keep both overview prices on one venue, with time left for its fallback. */
 async function fetchSpotPair(budget: AbortSignal) {
   for (const source of sourcesForMarketData(marketData)) {
     if (budget.aborted) break;
+    const started = performance.now();
     const controller = new AbortController();
     const signal = AbortSignal.any([budget, AbortSignal.timeout(SPOT_PROVIDER_MS), controller.signal]);
     try {
-      const pair = await Promise.all([
+      const pair = await withinDeadline(signal, () => Promise.all([
         source.marketData.fetchTicker24h("BTCUSDT", signal),
         source.marketData.fetchTicker24h("ETHUSDT", signal),
-      ]);
+      ]));
       signal.throwIfAborted();
       return pair;
-    } catch {
+    } catch (error) {
+      console.warn("[market.spot.failure]", {
+        provider: source.exchange ?? "unknown",
+        elapsedMs: Math.round(performance.now() - started),
+        code: signal.aborted ? "TIMEOUT" : failureCode(error),
+      });
       // The next venue must supply the complete pair, never a mixed snapshot.
     } finally {
       controller.abort();

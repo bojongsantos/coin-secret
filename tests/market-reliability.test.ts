@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import * as sourceSelection from "@/core/application/market-data/source-selection";
 import * as marketExchanges from "@/core/domain/market/exchange";
 import { readFileSync } from "node:fs";
+import { getEventListeners } from "node:events";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as derivatives from "@/core/domain/market/derivatives";
@@ -62,6 +63,7 @@ function contextService(mode: "fallback" | "timeout" | "errors", failure?: unkno
   spot?: ContextSpotRead;
   fallbackSpot?: ContextSpotRead;
   optionalStalled?: boolean;
+  externalRead?: (url: string, signal: AbortSignal) => Promise<Response> | undefined;
 } = {}) {
   const requests: string[] = [];
   const budgets: number[] = [];
@@ -79,6 +81,8 @@ function contextService(mode: "fallback" | "timeout" | "errors", failure?: unkno
     },
     fetch: async (url: string, init: { signal: AbortSignal }) => {
       requests.push(url);
+      const override = options.externalRead?.(url, init.signal);
+      if (override) return override;
       if (options.optionalStalled && (url.includes("coingecko") || url.includes("alternative.me"))) return stalledRead<Response>(init.signal);
       if (url.includes("coingecko")) return Response.json({ data: { market_cap_percentage: { btc: 58 }, market_cap_change_percentage_24h_usd: 1 } });
       if (url.includes("alternative.me")) return Response.json({ data: [{ value: "71" }] });
@@ -186,6 +190,7 @@ test("a slow primary spot venue leaves time for a complete fallback price pair",
     },
   });
   const pending = api.getMarketContextPayload() as Promise<{ context: { btc: { value: string }; eth: { value: string } } }>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
   t.mock.timers.tick(2500);
   const payload = await pending;
   assert.deepEqual(fallbackSymbols, ["BTCUSDT", "ETHUSDT"]);
@@ -232,6 +237,7 @@ test("the overview deadline bounds futures after spot fallback consumes part of 
   });
   const started = Date.now();
   const pending = api.getMarketContextPayload() as Promise<{ context: { fundingRate: { warning: boolean }; openInterest: { warning: boolean } } }>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
   for (const step of [2500, 2500, 2500, 500]) {
     t.mock.timers.tick(step);
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -268,6 +274,137 @@ test("a rejected overview remains single-flight and clears the promise for the n
   await api.getMarketContextPayload();
   assert.equal(calls, 4);
   assert.equal(requests.length, reads, "a recovered result uses the normal snapshot cache");
+});
+
+test("a noncooperative spot venue cannot prevent fallback or overwrite its cached prices later", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const late: Array<() => void> = [];
+  const signals: AbortSignal[] = [];
+  const { api, warnings } = contextService("fallback", undefined, 1, {
+    spot: (_symbol, signal) => {
+      signals.push(signal);
+      return new Promise((resolve) => late.push(() => resolve({ lastPrice: 1, priceChangePercent: 0 })));
+    },
+    fallbackSpot: async () => ({ lastPrice: 86000, priceChangePercent: 2 }),
+  });
+  const pending = api.getMarketContextPayload() as Promise<{ context: { btc: { value: string } } }>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(2500);
+  const payload = await pending;
+  assert.equal(payload.context.btc.value, format.formatCompact(86000));
+  assert.ok(signals.every((signal) => signal.aborted), "native cancellation still reaches the abandoned reads");
+  const spotWarning = warnings.find((warning) => warning.event === "[market.spot.failure]");
+  assert.equal(spotWarning?.detail.provider, "binance");
+  assert.equal(spotWarning?.detail.code, "TIMEOUT");
+  late.forEach((finish) => finish());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(await api.getMarketContextPayload(), payload, "late primary data cannot replace the fallback snapshot");
+});
+
+test("noncooperative core and optional reads cannot poison the overview single-flight", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  let down = true;
+  const lateFailures: Array<() => void> = [];
+  const stall: ContextSpotRead = () => down
+    ? new Promise((_, reject) => lateFailures.push(() => reject(new Error("late provider failure"))))
+    : Promise.resolve({ lastPrice: 80000, priceChangePercent: 1 });
+  const { api } = contextService("fallback", undefined, 1, {
+    spot: stall, fallbackSpot: stall,
+    externalRead: () => down ? new Promise(() => {}) : undefined,
+  });
+  const first = api.getMarketContextPayload() as Promise<unknown>;
+  assert.equal(api.getMarketContextPayload(), first);
+  const rejected = assert.rejects(first, /Core exchange ticker data is unavailable/);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  for (const step of [2500, 2500]) {
+    t.mock.timers.tick(step);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  await rejected;
+  down = false;
+  const retry = api.getMarketContextPayload() as Promise<unknown>;
+  assert.notEqual(retry, first);
+  const recovered = await retry;
+  lateFailures.forEach((fail) => fail());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(await api.getMarketContextPayload(), recovered, "late rejection is handled and cannot disturb recovery");
+});
+
+test("optional response decoding that ignores abort cannot keep the overview pending", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const lateBodies: Array<() => void> = [];
+  const signals: AbortSignal[] = [];
+  const { api } = contextService("fallback", undefined, 1, {
+    externalRead: (url, signal) => {
+      if (!url.includes("coingecko") && !url.includes("alternative.me")) return;
+      signals.push(signal);
+      const response = Response.json({});
+      response.json = () => new Promise((resolve) => lateBodies.push(() => resolve({ data: [{ value: "99" }] })));
+      return Promise.resolve(response);
+    },
+  });
+  const pending = api.getMarketContextPayload() as Promise<{ sentiment: { available: boolean } }>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(lateBodies.length, 2);
+  t.mock.timers.tick(2500);
+  const payload = await pending;
+  assert.equal(payload.sentiment.available, false);
+  assert.ok(signals.every((signal) => signal.aborted));
+  lateBodies.forEach((finish) => finish());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(await api.getMarketContextPayload(), payload);
+  assert.equal(payload.sentiment.available, false);
+});
+
+test("noncooperative futures respect the remaining deadline and cannot publish late diagnostics", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  let down = true;
+  const late: Array<() => void> = [];
+  const optionalSignals: AbortSignal[] = [];
+  const { api } = contextService("fallback", undefined, 1, {
+    spot: (_symbol, signal) => down ? stalledRead(signal) : Promise.resolve({ lastPrice: 81000, priceChangePercent: 2 }),
+    fallbackSpot: async () => ({ lastPrice: 80000, priceChangePercent: 1 }),
+    externalRead: (url, signal) => {
+      if (url.includes("coingecko") || url.includes("alternative.me")) { optionalSignals.push(signal); return; }
+      if (!down) return;
+      return new Promise((resolve) => late.push(() => resolve(Response.json({ lastFundingRate: "0.0001", openInterest: "1000" }))));
+    },
+  });
+  const started = Date.now();
+  const pending = api.getMarketContextPayload() as Promise<{ context: { fundingRate: { warning: boolean } } }>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(optionalSignals.every((signal) => !signal.aborted));
+  assert.ok(optionalSignals.every((signal) => getEventListeners(signal, "abort").length === 0), "completed reads remove their abort listeners before the overview finishes");
+  for (const step of [2500, 2500, 2500, 500]) {
+    t.mock.timers.tick(step);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.equal(Date.now() - started, 8000);
+  assert.equal((await pending).context.fundingRate.warning, true);
+  down = false;
+  const current = await api.getMarketContextPayload(true);
+  const diagnostic = api.getDerivativesDiagnostics();
+  assert.equal((diagnostic as { source: string }).source, "bybit");
+  late.forEach((finish) => finish());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(api.getDerivativesDiagnostics(), diagnostic);
+  assert.equal(await api.getMarketContextPayload(), current);
+});
+
+test("spot warnings expose only safe fields and allowlisted failure codes", async () => {
+  const privateCanary = "private-spot-canary";
+  const { api, warnings } = contextService("fallback", undefined, 100, {
+    spot: async () => { throw new Error(privateCanary, { cause: { code: "ECONNREFUSED", headers: privateCanary } }); },
+    fallbackSpot: async () => ({ lastPrice: 80000, priceChangePercent: 1 }),
+  });
+  await api.getMarketContextPayload();
+  const spot = warnings.filter((warning) => warning.event === "[market.spot.failure]");
+  assert.equal(spot.length, 1);
+  assert.deepEqual(Object.keys(spot[0].detail).sort(), ["code", "elapsedMs", "provider"]);
+  assert.equal(spot[0].detail.code, "ECONNREFUSED");
+  assert.equal(spot[0].detail.provider, "binance");
+  assert.ok(Number.isInteger(spot[0].detail.elapsedMs) && spot[0].detail.elapsedMs >= 0);
+  assert.equal(JSON.stringify(warnings).includes(privateCanary), false);
 });
 
 test("provider warnings expose only allowlisted failure codes and preserve response diagnostics", async () => {
@@ -712,7 +849,7 @@ test("market refresh is single-flight, labels a retained snapshot stale after ti
   assert.equal(harness.render().stale, false);
   assert.equal(harness.render().error, null);
   assert.ok(harness.requests.every((request) => request.url === "/api/market-context"));
-  assert.ok(harness.budgets.every((budget) => budget === 45000));
+  assert.ok(harness.budgets.every((budget) => budget === 12000));
   harness.mode.stalled = true;
   harness.render().refresh();
   const revision = harness.revision();

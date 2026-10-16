@@ -72,7 +72,7 @@ export function MarketOverview({
     >
       <DataStatus error={error} stale={stale} lastUpdated={lastUpdated} loading={loading} onRetry={onRefresh} />
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
-        {loading && !context && !sentiment ? (
+        {loading && !error && !context && !sentiment ? (
           [0, 1].map((item) => (
             <div key={item} aria-label="Loading market data" className="h-72 animate-pulse rounded-2xl border border-border bg-surface" />
           ))

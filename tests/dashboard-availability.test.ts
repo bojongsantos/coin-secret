@@ -170,9 +170,54 @@ test("market loading and failure do not hide independent chart confidence or inv
   (nodesOf(failed).find(({ type }) => type === "button")!.props.onClick as () => void)();
   assert.equal(retries, 1);
 
+  const retrying = api.MarketOverview({ ...props, loading: true, error: "Connection unavailable." });
+  assert.match(textOf(retrying, true), /Data temporarily unavailable.*Confidence 83/);
+  assert.equal(nodesOf(retrying).filter(({ props }) => String(props.className).includes("animate-pulse")).length, 0);
+  assert.ok(nodesOf(retrying).some(({ type }) => type === "loader"));
+
   const waiting = api.MarketOverview({ ...props, analysis: null, loading: true });
   assert.match(textOf(waiting, true), /Waiting for chart data/);
   assert.doesNotMatch(textOf(waiting, true), /Confidence \d/);
+});
+
+test("market requests abort transport after twelve seconds and still honor caller cancellation", async () => {
+  let read!: (force: boolean, signal: AbortSignal) => Promise<unknown>;
+  const deadlines: Array<{ delay: number; expire(): void }> = [];
+  const signals: AbortSignal[] = [];
+  const api = load("src/presentation/hooks/use-market-context.ts", {
+    "@/shared/lib/read-failure": failures,
+    "@/presentation/hooks/use-polling-read": { usePollingRead: (options: { read: typeof read }) => {
+      read = options.read;
+      return { data: null, loading: true };
+    } },
+  }, {
+    AbortSignal: {
+      any: AbortSignal.any,
+      timeout: (delay: number) => {
+        const deadline = new AbortController();
+        deadlines.push({ delay, expire: () => deadline.abort(new DOMException("timed out", "TimeoutError")) });
+        return deadline.signal;
+      },
+    },
+    fetch: (_url: string, { signal }: { signal: AbortSignal }) => new Promise<never>((_resolve, reject) => {
+      signals.push(signal);
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }),
+  });
+  api.useMarketContext();
+  const caller = new AbortController();
+  const pending = read(false, caller.signal);
+  assert.equal(deadlines[0].delay, 12_000);
+  assert.equal(signals[0].aborted, false);
+  deadlines[0].expire();
+  await assert.rejects(pending, { name: "TimeoutError" });
+  assert.equal(signals[0].aborted, true);
+  assert.equal(caller.signal.aborted, false);
+
+  const cancelled = read(false, caller.signal);
+  caller.abort();
+  await assert.rejects(cancelled, { name: "AbortError" });
+  assert.equal(signals[1].aborted, true);
 });
 
 test("unavailable market metrics do not show a zero delta, while a measured zero stays visible", () => {

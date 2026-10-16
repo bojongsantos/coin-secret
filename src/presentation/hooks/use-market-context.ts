@@ -4,7 +4,7 @@ import type { MarketContextPayload } from "@/core/domain/models";
 import { usePollingRead } from "@/presentation/hooks/use-polling-read";
 import { ReadFailure, responseReadFailure } from "@/shared/lib/read-failure";
 
-const MARKET_REQUEST_MS = 45_000;
+const MARKET_REQUEST_MS = 12_000;
 
 async function readMarketContext(_force: boolean, signal: AbortSignal): Promise<MarketContextPayload> {
   const response = await fetch("/api/market-context", {

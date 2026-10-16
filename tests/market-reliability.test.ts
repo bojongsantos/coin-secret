@@ -49,7 +49,20 @@ test("an already cancelled exchange read never reaches the provider", async () =
   assert.equal(calls, 0);
 });
 
-function contextService(mode: "fallback" | "timeout" | "errors", failure?: unknown, timeoutScale = 100) {
+function stalledRead<T>(signal: AbortSignal): Promise<T> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
+
+type ContextSpotRead = (symbol: string, signal: AbortSignal) => Promise<{ lastPrice: number; priceChangePercent: number }>;
+
+function contextService(mode: "fallback" | "timeout" | "errors", failure?: unknown, timeoutScale = 100, options: {
+  spot?: ContextSpotRead;
+  fallbackSpot?: ContextSpotRead;
+  optionalStalled?: boolean;
+} = {}) {
   const requests: string[] = [];
   const budgets: number[] = [];
   const warnings: Array<{ event: string; detail: { provider: string; elapsedMs: number; code: string } }> = [];
@@ -66,17 +79,22 @@ function contextService(mode: "fallback" | "timeout" | "errors", failure?: unkno
     },
     fetch: async (url: string, init: { signal: AbortSignal }) => {
       requests.push(url);
+      if (options.optionalStalled && (url.includes("coingecko") || url.includes("alternative.me"))) return stalledRead<Response>(init.signal);
       if (url.includes("coingecko")) return Response.json({ data: { market_cap_percentage: { btc: 58 }, market_cap_change_percentage_24h_usd: 1 } });
       if (url.includes("alternative.me")) return Response.json({ data: [{ value: "71" }] });
       if (mode === "errors") throw failure;
-      if (mode === "timeout") return new Promise<Response>((_, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
+      if (mode === "timeout") return stalledRead<Response>(init.signal);
       if (url.includes("binance")) return new Response("{}", { status: 451 });
       return Response.json({ result: { list: [{ fundingRate: "0.0001", openInterestValue: "9000000000" }] } });
     },
   }, {
+    "@/core/application/market-data/source-selection": sourceSelection,
     "@/core/domain/market/derivatives": derivatives,
     "@/shared/lib/format": format,
-    "@/infrastructure/market-data/market-data-provider": { marketData: { fetchTicker24h: async () => ({ lastPrice: 80000, priceChangePercent: 1 }) } },
+    "@/infrastructure/market-data/market-data-provider": { marketData: { sources: [
+      { exchange: "binance", marketData: { fetchTicker24h: options.spot ?? (async () => ({ lastPrice: 80000, priceChangePercent: 1 })) } },
+      ...(options.fallbackSpot ? [{ exchange: "bybit", marketData: { fetchTicker24h: options.fallbackSpot } }] : []),
+    ] } },
   });
   return { api, requests, budgets, warnings };
 }
@@ -106,14 +124,14 @@ test("all stalled futures sources finish within the shared budget and never fabr
   // Real compressed timers can exhaust the shared budget under CPU contention.
   await new Promise<void>((resolve) => setImmediate(resolve));
   for (let attempt = 1; attempt <= 3; attempt++) {
-    assert.equal(budgets.filter((ms) => ms === 2500).length, attempt);
+    assert.equal(budgets.filter((ms) => ms === 2500).length, 3 + attempt, "spot and optional feeds also have short deadlines");
     t.mock.timers.tick(2500);
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
   const payload = await pending;
   assert.equal(Date.now() - started, 7500);
   assert.ok(Date.now() - started < 8000, "provider deadlines should fit within the shared budget");
-  assert.equal(budgets.filter((ms) => ms === 2500).length, 3);
+  assert.equal(budgets.filter((ms) => ms === 2500).length, 6);
   assert.ok(budgets.includes(8000));
   assert.equal(payload.context.fundingRate.warning, true);
   assert.equal(payload.context.fundingRate.value, "—");
@@ -134,6 +152,122 @@ test("all stalled futures sources finish within the shared budget and never fabr
   assert.equal(expiredDiagnostic.source, null);
   assert.equal(expiredDiagnostic.providers.length, 1, "an exhausted shared budget prevents further provider attempts");
   assert.equal(expiredDiagnostic.providers[0].detail, "timeout");
+});
+
+test("stalled core venues are cancelled and settle before the browser request deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const signals: AbortSignal[] = [];
+  const stall: ContextSpotRead = (_symbol, signal) => { signals.push(signal); return stalledRead(signal); };
+  const { api, requests } = contextService("fallback", undefined, 1, { spot: stall, fallbackSpot: stall });
+  const started = Date.now();
+  const pending = api.getMarketContextPayload() as Promise<unknown>;
+  const rejected = assert.rejects(pending, /Core exchange ticker data is unavailable/);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(signals.length, 2);
+  t.mock.timers.tick(2500);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(signals.length, 4, "the second venue starts after the first venue deadline");
+  t.mock.timers.tick(2500);
+  await rejected;
+  assert.equal(Date.now() - started, 5000);
+  assert.ok(signals.every((signal) => signal.aborted));
+  assert.equal(requests.length, 2, "no futures reads begin without core prices");
+});
+
+test("a slow primary spot venue leaves time for a complete fallback price pair", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const primarySignals: AbortSignal[] = [];
+  const fallbackSymbols: string[] = [];
+  const { api } = contextService("fallback", undefined, 1, {
+    spot: (_symbol, signal) => { primarySignals.push(signal); return stalledRead(signal); },
+    fallbackSpot: async (symbol) => {
+      fallbackSymbols.push(symbol);
+      return { lastPrice: symbol === "BTCUSDT" ? 86000 : 2500, priceChangePercent: 2 };
+    },
+  });
+  const pending = api.getMarketContextPayload() as Promise<{ context: { btc: { value: string }; eth: { value: string } } }>;
+  t.mock.timers.tick(2500);
+  const payload = await pending;
+  assert.deepEqual(fallbackSymbols, ["BTCUSDT", "ETHUSDT"]);
+  assert.ok(primarySignals.every((signal) => signal.aborted));
+  assert.equal(payload.context.btc.value, format.formatCompact(86000));
+  assert.equal(payload.context.eth.value, format.formatCompact(2500));
+});
+
+test("a failed spot half cancels its sibling before selecting a new complete pair", async () => {
+  let cancelled = false;
+  const { api } = contextService("fallback", undefined, 1, {
+    spot: (symbol, signal) => {
+      if (symbol === "ETHUSDT") return Promise.reject(new Error("provider down"));
+      signal.addEventListener("abort", () => { cancelled = true; }, { once: true });
+      return stalledRead(signal);
+    },
+    fallbackSpot: async () => ({ lastPrice: 90000, priceChangePercent: 1 }),
+  });
+  await api.getMarketContextPayload();
+  assert.equal(cancelled, true);
+});
+
+test("stalled optional feeds do not postpone futures and return honest unavailable metrics", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const { api, requests } = contextService("fallback", undefined, 1, { optionalStalled: true });
+  const pending = api.getMarketContextPayload() as Promise<{
+    context: { dominance: { warning: boolean }; fundingRate: { warning: boolean } };
+    sentiment: { available: boolean };
+  }>;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(requests.some((url) => url.includes("bybit")), "futures finish while optional feeds are still pending");
+  t.mock.timers.tick(2500);
+  const payload = await pending;
+  assert.equal(payload.context.fundingRate.warning, false);
+  assert.equal(payload.context.dominance.warning, true);
+  assert.equal(payload.sentiment.available, false);
+});
+
+test("the overview deadline bounds futures after spot fallback consumes part of its budget", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const { api, requests } = contextService("timeout", undefined, 1, {
+    spot: (_symbol, signal) => stalledRead(signal),
+    fallbackSpot: async () => ({ lastPrice: 80000, priceChangePercent: 1 }),
+  });
+  const started = Date.now();
+  const pending = api.getMarketContextPayload() as Promise<{ context: { fundingRate: { warning: boolean }; openInterest: { warning: boolean } } }>;
+  for (const step of [2500, 2500, 2500, 500]) {
+    t.mock.timers.tick(step);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  const payload = await pending;
+  assert.equal(Date.now() - started, 8000);
+  assert.equal(payload.context.fundingRate.warning, true);
+  assert.equal(payload.context.openInterest.warning, true);
+  assert.equal(requests.length, 7, "the final futures venue receives only the remaining half second");
+  const diagnostic = api.getDerivativesDiagnostics() as { source: string | null; providers: Array<{ detail: string }> };
+  assert.equal(diagnostic.source, null);
+  assert.equal(diagnostic.providers.length, 3);
+  assert.ok(diagnostic.providers.every((row) => row.detail === "timeout"));
+});
+
+test("a rejected overview remains single-flight and clears the promise for the next retry", async () => {
+  let down = true;
+  let calls = 0;
+  const { api, requests } = contextService("fallback", undefined, 1, {
+    spot: async () => {
+      calls++;
+      if (down) throw new Error("provider down");
+      return { lastPrice: 80000, priceChangePercent: 1 };
+    },
+  });
+  const first = api.getMarketContextPayload() as Promise<unknown>;
+  assert.equal(api.getMarketContextPayload(), first);
+  await assert.rejects(first, /Core exchange ticker data is unavailable/);
+  down = false;
+  const retry = api.getMarketContextPayload() as Promise<unknown>;
+  assert.notEqual(retry, first);
+  await retry;
+  const reads = requests.length;
+  await api.getMarketContextPayload();
+  assert.equal(calls, 4);
+  assert.equal(requests.length, reads, "a recovered result uses the normal snapshot cache");
 });
 
 test("provider warnings expose only allowlisted failure codes and preserve response diagnostics", async () => {

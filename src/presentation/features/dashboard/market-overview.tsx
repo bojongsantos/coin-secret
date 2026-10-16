@@ -71,21 +71,23 @@ export function MarketOverview({
       refreshing={refreshing}
     >
       <DataStatus error={error} stale={stale} lastUpdated={lastUpdated} loading={loading} onRetry={onRefresh} />
-      {loading && !context && !sentiment ? (
-        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading market data">
-          {[0, 1, 2].map((item) => (
-            <div key={item} className="h-72 animate-pulse rounded-2xl border border-border bg-surface" />
-          ))}
-        </div>
-      ) : error && !context && !sentiment ? (
-        <p className="py-10 text-center text-[13px] text-muted-2">{t("data.unavailable")}</p>
-      ) : (
-        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
-          <MarketSentimentCard data={sentiment ?? sentimentFallback} />
-          <MarketContextCard data={context ?? marketFallback} />
-          <ConvictionScoreCard data={convictionFor(analysis)} />
-        </div>
-      )}
+      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
+        {loading && !context && !sentiment ? (
+          [0, 1].map((item) => (
+            <div key={item} aria-label="Loading market data" className="h-72 animate-pulse rounded-2xl border border-border bg-surface" />
+          ))
+        ) : error && !context && !sentiment ? (
+          <div className="cs-card flex min-h-72 items-center justify-center p-5 sm:col-span-2">
+            <p className="text-center text-[13px] text-muted-2">{t("data.unavailable")}</p>
+          </div>
+        ) : (
+          <>
+            <MarketSentimentCard data={sentiment ?? sentimentFallback} />
+            <MarketContextCard data={context ?? marketFallback} />
+          </>
+        )}
+        <ConvictionScoreCard data={convictionFor(analysis)} />
+      </div>
     </Panel>
   );
 }

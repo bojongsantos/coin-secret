@@ -144,6 +144,36 @@ test("Signals, Top Setups and Market Overview preserve their data during refresh
   });
 });
 
+test("market loading and failure do not hide independent chart confidence or invent market values", () => {
+  const api = load("src/presentation/features/dashboard/market-overview.tsx", {
+    ...ui(),
+    "@/core/domain/analysis/conviction": { buildConviction: ({ confidence }: { confidence: number }) => ({ score: confidence }) },
+    "@/presentation/features/dashboard/panel": { Panel: ({ children }: { children: unknown }) => jsx("section", { children }) },
+    "@/presentation/widgets/right-rail/conviction-score-card": {
+      ConvictionScoreCard: ({ data }: { data: { score: number } }) => jsx("confidence", { children: data.score ? `Confidence ${data.score}` : "Waiting for chart data" }),
+    },
+    "@/presentation/widgets/right-rail/market-context-card": { MarketContextCard: () => { throw new Error("Missing market context must not be fabricated"); } },
+    "@/presentation/widgets/right-rail/market-sentiment-card": { MarketSentimentCard: () => { throw new Error("Missing sentiment must not be fabricated"); } },
+    "@/config/market-fallbacks": {},
+  });
+  const props = { context: null, sentiment: null, analysis: { pattern: { confidence: 83 } } };
+  const pending = api.MarketOverview({ ...props, loading: true });
+  assert.match(textOf(pending, true), /Confidence 83/);
+  assert.equal(nodesOf(pending).filter(({ props }) => String(props.className).includes("animate-pulse")).length, 2);
+  assert.doesNotMatch(textOf(pending, true), /Data temporarily unavailable/);
+
+  let retries = 0;
+  const failed = api.MarketOverview({ ...props, loading: false, error: "Connection unavailable.", onRefresh() { retries++; } });
+  assert.match(textOf(failed, true), /Data temporarily unavailable.*Confidence 83/);
+  assert.equal(nodesOf(failed).filter(({ props }) => String(props.className).includes("animate-pulse")).length, 0);
+  (nodesOf(failed).find(({ type }) => type === "button")!.props.onClick as () => void)();
+  assert.equal(retries, 1);
+
+  const waiting = api.MarketOverview({ ...props, analysis: null, loading: true });
+  assert.match(textOf(waiting, true), /Waiting for chart data/);
+  assert.doesNotMatch(textOf(waiting, true), /Confidence \d/);
+});
+
 function chartHarness(options: { available?: boolean; deferKlines?: boolean } = {}) {
   let online = true;
   let available = options.available ?? false;

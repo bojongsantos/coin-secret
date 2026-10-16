@@ -70,7 +70,7 @@ ${t("metric.unavailableNote")}` : help}>
         >
           {value}
         </span>
-        {!hideDelta && <Delta value={change} direction={direction} />}
+        {!hideDelta && !warning && <Delta value={change} direction={direction} />}
       </div>
     </div>
   );

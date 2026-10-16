@@ -8,6 +8,7 @@ import * as failures from "@/shared/lib/read-failure";
 import * as sourceSelection from "@/core/application/market-data/source-selection";
 import * as exchanges from "@/core/domain/market/exchange";
 import * as timeframes from "@/core/domain/market/timeframe";
+import { marketFallback } from "@/config/market-fallbacks";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 function jsx(type: unknown, props: Record<string, unknown>): unknown {
@@ -172,6 +173,34 @@ test("market loading and failure do not hide independent chart confidence or inv
   const waiting = api.MarketOverview({ ...props, analysis: null, loading: true });
   assert.match(textOf(waiting, true), /Waiting for chart data/);
   assert.doesNotMatch(textOf(waiting, true), /Confidence \d/);
+});
+
+test("unavailable market metrics do not show a zero delta, while a measured zero stays visible", () => {
+  const deps = {
+    ...ui(),
+    "lucide-react": { Info: "info", ShieldAlert: "warning", ArrowDownRight: "down", ArrowUpRight: "up", Minus: "flat" },
+    "@/shared/i18n/messages": { domainMessageKey: () => undefined },
+    "@/presentation/ui/tooltip": { Tooltip: ({ children }: { children: unknown }) => children },
+  };
+  const api = load("src/presentation/widgets/right-rail/market-context-card.tsx", {
+    ...deps,
+    "@/presentation/ui/delta": load("src/presentation/ui/delta.tsx", deps),
+  });
+  for (const warning of [true, false]) {
+    const rendered = api.MarketContextCard({ data: {
+      ...marketFallback,
+      dominance: { ...marketFallback.dominance, value: warning ? "—" : "59.12%", warning },
+    } });
+    const dominance = nodesOf(rendered).find((node) => textOf(node).trim().startsWith("BTC Dominance"))!;
+    assert.ok(dominance, "the dominance metric must remain present");
+    if (warning) {
+      assert.match(textOf(dominance, true), /—/);
+      assert.doesNotMatch(textOf(dominance, true), /0\.00%/);
+      assert.ok(nodesOf(dominance).some(({ type }) => type === "warning"));
+    } else {
+      assert.match(textOf(dominance, true), /59\.12%.*0\.00%/);
+    }
+  }
 });
 
 function chartHarness(options: { available?: boolean; deferKlines?: boolean } = {}) {

@@ -36,6 +36,7 @@ import { useT } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import type { HistoryState } from "@/presentation/hooks/use-live-analysis";
 import { chartCandleUpdates } from "./chart-updates";
+import { chartTimeFormatters } from "./chart-time";
 import styles from "./chart-panel.module.css";
 
 function chartRenderScale(container: HTMLElement): number {
@@ -403,6 +404,17 @@ export function ChartPanel({
       timeScale: { borderColor: palette.axis },
     });
   }, [theme]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const chartLocale = locale === "id" ? "id-ID" : "en-US";
+    const { timeFormatter, tickMarkFormatter } = chartTimeFormatters(chartLocale);
+    chart.applyOptions({
+      localization: { locale: chartLocale, timeFormatter },
+      timeScale: { tickMarkFormatter },
+    });
+  }, [locale]);
 
   useEffect(() => {
     const chart = chartRef.current;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface TooltipProps {
   content: string;
@@ -28,8 +29,7 @@ export function Tooltip({ content, children }: TooltipProps) {
     const tip = tipRef.current;
     if (!trigger || !tip) return;
     const t = trigger.getBoundingClientRect();
-    const tw = tip.offsetWidth;
-    const th = tip.offsetHeight;
+    const { width: tw, height: th } = tip.getBoundingClientRect();
     let top = t.top - th - 8;
     if (top < 8) top = t.bottom + 8;
     let left = t.left + t.width / 2 - tw / 2;
@@ -38,8 +38,15 @@ export function Tooltip({ content, children }: TooltipProps) {
   }, []);
 
   useLayoutEffect(() => {
-    if (open) place();
-  }, [open, place]);
+    if (!open) return;
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, place, content]);
 
   // Close when tapping/clicking outside (touch + desktop fallback).
   useEffect(() => {
@@ -69,7 +76,8 @@ export function Tooltip({ content, children }: TooltipProps) {
       >
         {children}
       </button>
-      {open && (
+      {/* Viewport coordinates must not inherit the dashboard's CSS zoom. */}
+      {open && createPortal(
         <div
           ref={tipRef}
           role="tooltip"
@@ -79,7 +87,8 @@ export function Tooltip({ content, children }: TooltipProps) {
           style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0 }}
         >
           {content}
-        </div>
+        </div>,
+        document.body,
       )}
     </span>
   );

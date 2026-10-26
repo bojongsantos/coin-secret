@@ -49,6 +49,7 @@ export function createActiveSetupStore(
       select: {
         signature: true,
         updatedAt: true,
+        firstSeenAt: true,
         exchange: true,
         symbol: true,
         timeframe: true,
@@ -78,6 +79,7 @@ export function createActiveSetupStore(
       if (isBeyondScanReach(row.zoneBaseTime, row.timeframe as Timeframe)) continue;
       if (transactional) observed.set(row.signature, { updatedAt: row.updatedAt, status: row.status });
       bySymbol.set(row.symbol, {
+        publishedAt: row.firstSeenAt.getTime() / 1000,
         exchange: isMarketExchange(row.exchange) ? row.exchange : null,
         symbol: row.symbol,
         timeframe: row.timeframe as Timeframe,
@@ -191,6 +193,9 @@ export function createActiveSetupStore(
                 // know whether a setup was published before it filled, and no
                 // later observation can recover that.
                 firstStatus: setup.status,
+                // PostgreSQL NOW() inside the coordinated scan would use its
+                // transaction start, before market reads finished.
+                firstSeenAt: new Date(),
               }],
             });
           if (created.count === 0) {

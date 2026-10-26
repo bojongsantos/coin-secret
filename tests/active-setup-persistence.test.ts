@@ -59,7 +59,7 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
           && (!where.status || !where.status.notIn.includes(row.status))
           && (!where.zoneBaseTime || row.zoneBaseTime >= where.zoneBaseTime.gte)
           && (!where.OR || where.OR.some((condition) => condition.status?.in.includes(row.status) || condition.archivedAt && row.archivedAt)))
-          .map((row) => ({ ...row, signature: setupSignature(row), updatedAt: row.updatedAt ?? new Date(0) })),
+          .map((row) => ({ ...row, signature: setupSignature(row), firstSeenAt: new Date((row.publishedAt ?? 0) * 1000), updatedAt: row.updatedAt ?? new Date(0) })),
       updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; archivedAt: null; status: string | { notIn: string[] }; updatedAt?: Date }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
         const row = rows.get(where.signature);
         if (!row || row.archivedAt || (row.exchange ?? null) !== where.exchange
@@ -137,6 +137,17 @@ test("an unchanged observed setup can change dynamic status without imposing a l
   await store.persist([{ ...observed, status: "Filled" }]);
   assert.equal(f.rows.get(setupSignature(initial))?.status, "Filled");
   assert.equal(f.events.filter((event) => event.operation === "create.start").length, 0);
+});
+
+test("publication time is read from firstSeenAt and remains immutable across status updates", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const initial = { ...setup("BTCUSDT", recent), exchange: "binance" as const, publishedAt: recent + 100.123 };
+  const f = fixture([initial]);
+  const store = f.transaction();
+  const [observed] = await store.loadActive([initial.symbol]);
+  assert.equal(observed.publishedAt, initial.publishedAt);
+  await store.persist([{ ...observed, status: "Target 1 reached" }]);
+  assert.equal((await store.loadActive([initial.symbol]))[0].publishedAt, initial.publishedAt);
 });
 
 test("a fenced scan cannot overwrite a concurrently published row that was absent from its initial read", async () => {

@@ -39,7 +39,7 @@ function UnlockedSignals() {
 }
 
 export function SignalsClient() {
-  const { canAccess } = usePlan();
+  const { canAccess, authenticated } = usePlan();
   const { t } = useT();
 
   return (
@@ -67,8 +67,8 @@ export function SignalsClient() {
               </span>
               <h1 className="cs-heading-gradient text-[34px] font-bold tracking-tight">{t("signals.locked")}</h1>
               <p className="mt-2 text-xs text-muted">{t("signals.lockedBody")}</p>
-              <Link href="/pricing" className="cs-primary mt-6 inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-sm font-semibold text-white">
-                <Lock className="size-4" aria-hidden /> {t("common.unlockPro")}
+              <Link href={authenticated ? "/pricing" : "/login?next=%2Fsignals"} className="cs-primary mt-6 inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-sm font-semibold text-white">
+                <Lock className="size-4" aria-hidden /> {t(authenticated ? "common.unlockPro" : "account.signIn")}
               </Link>
             </section>
           </div>

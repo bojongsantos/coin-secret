@@ -225,6 +225,21 @@ test("unknown legacy provenance preserves the stored plan without lifecycle repl
   h.stop();
 });
 
+test("every initial, polling and websocket chart render preserves publication time", async () => {
+  const h = hookHarness();
+  const publishedAt = 1_799_999_000.123;
+  h.setPlan({ ...published("ZECUSDT"), publishedAt });
+  await h.flush();
+  await h.advance(4000);
+  h.sockets[0].update({ symbol: "ZECUSDT", candle: candle(h.engine.at(-1)!.candles.at(-1)!.time), ticker: ticker("ZECUSDT") });
+  await h.advance(400);
+  assert.ok(h.engine.length > 1);
+  for (const render of h.engine) {
+    assert.equal((render.setup as { publishedAt: number }).publishedAt, publishedAt);
+  }
+  h.stop();
+});
+
 test("an open socket is not live until actual current data arrives", async () => {
   const h = hookHarness(); await h.flush();
   const firstUpdate = h.view().lastUpdated;
@@ -274,7 +289,10 @@ test("polling retains the last successful timestamp when ticker fails and drains
 test("successful absent and mismatched plans have distinct explicit states", async () => {
   const missing = hookHarness(); missing.setPlan(null); await missing.flush();
   assert.equal(missing.view().setupState, "missing");
-  assert.equal(missing.engine.at(-1)?.options.publishedOnly, false);
+  assert.equal(missing.engine.at(-1)?.options.publishedOnly, true);
+  assert.equal(missing.engine.at(-1)?.setup, null);
+  await missing.advance(4000);
+  assert.ok(missing.engine.every(render => render.options.publishedOnly === true && render.setup === null));
   missing.stop();
   const mismatch = hookHarness(); mismatch.setPlan(published("ZECUSDT", "1H")); await mismatch.flush();
   assert.equal(mismatch.view().setupState, "mismatched");

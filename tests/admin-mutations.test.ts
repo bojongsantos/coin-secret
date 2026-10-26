@@ -30,15 +30,15 @@ test("pagination rejects invalid and excessive pages instead of uncontrolled dat
   assert.equal(page(new Request("https://coinsecret.io/api?page=2")).skip, 50);
   for (const raw of ["0", "-1", "1.5", "1000000", "x"]) assert.throws(() => page(new Request(`https://coinsecret.io/api?page=${raw}`)));
 });
-function fixture(options: { actorRole?: string; missing?: boolean; auditFails?: boolean } = {}) {
-  let state = { plan: "FREE", end: new Date(0), writes: 0, audits: 0 };
+function fixture(options: { actorRole?: string; missing?: boolean; auditFails?: boolean; targetPlan?: string } = {}) {
+  let state = { plan: options.targetPlan ?? "FREE", end: new Date(0) as Date | null, writes: 0, audits: 0 };
   const prisma = { $transaction: async (work: (tx: unknown) => Promise<unknown>, isolation: { isolationLevel: string }) => {
     assert.equal(isolation.isolationLevel, "Serializable");
     const draft = { ...state };
     const result = await work({
-      user: { findUnique: async ({ where }: { where: { id: string } }) => where.id === "actor" ? { role: options.actorRole ?? "ADMIN", emailVerified: true } : options.missing ? null : { role: "USER" }, count: async () => 2,
-        update: async ({ data }: { data: { plan: string } }) => { draft.plan = data.plan; draft.writes++; return { id: "target" }; } },
-      subscription: { upsert: async ({ update }: { update: { currentPeriodEnd: null; provider: string; cancelAtPeriodEnd: boolean } }) => { assert.equal(update.provider, "admin"); assert.equal(update.cancelAtPeriodEnd, false); draft.end = update.currentPeriodEnd as unknown as Date; } },
+      user: { findUnique: async ({ where }: { where: { id: string } }) => where.id === "actor" ? { role: options.actorRole ?? "ADMIN", emailVerified: true } : options.missing ? null : { role: "USER", plan: draft.plan }, count: async () => 2,
+        update: async ({ data }: { data: { plan?: string } }) => { if (data.plan) draft.plan = data.plan; draft.writes++; return { id: "target" }; } },
+      subscription: { upsert: async ({ update }: { update: { currentPeriodEnd: Date | null; provider: string; cancelAtPeriodEnd: boolean } }) => { assert.equal(update.provider, "admin"); assert.equal(update.cancelAtPeriodEnd, false); draft.end = update.currentPeriodEnd; } },
       session: { deleteMany: async () => ({ count: 0 }) },
       auditLog: { create: async () => { if (options.auditFails) throw new Error("audit failure"); draft.audits++; } },
     });
@@ -50,6 +50,22 @@ function fixture(options: { actorRole?: string; missing?: boolean; auditFails?: 
 test("manual Pro grant clears an expired period and persists its audit atomically", async () => {
   const f = fixture(); await f.change("actor", "target", { plan: "PREMIUM" }, null);
   assert.equal(f.state().plan, "PREMIUM"); assert.equal(f.state().end, null); assert.equal(f.state().audits, 1);
+});
+
+test("manual expiry changes persist the selected instant without changing the Pro plan", async () => {
+  const f = fixture({ targetPlan: "PREMIUM" });
+  await f.change("actor", "target", { currentPeriodEnd: "2026-11-01T09:00:00+07:00" }, null);
+  assert.equal(f.state().plan, "PREMIUM");
+  assert.equal(f.state().end?.toISOString(), "2026-11-01T02:00:00.000Z");
+  assert.equal(f.state().audits, 1);
+  await f.change("actor", "target", { currentPeriodEnd: null }, null);
+  assert.equal(f.state().end, null);
+});
+
+test("expiry on a Free account is refused before writing anything", async () => {
+  const f = fixture();
+  await assert.rejects(f.change("actor", "target", { currentPeriodEnd: "2026-11-01T02:00:00Z" }, null), (e: unknown) => (e as { status: number }).status === 400);
+  assert.equal(f.state().writes, 0);
 });
 test("audit failure rolls back both account and subscription changes", async () => {
   const f = fixture({ auditFails: true }); await assert.rejects(f.change("actor", "target", { plan: "PREMIUM" }, null)); assert.equal(f.state().plan, "FREE"); assert.equal(f.state().writes, 0);

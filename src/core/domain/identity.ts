@@ -8,4 +8,6 @@ export interface CurrentUserDto {
   role: UserRole;
   plan: SubscriptionPlan;
   emailVerified: boolean;
+  accessExpiresAt?: string | null;
+  accessSource?: string | null;
 }

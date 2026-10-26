@@ -8,7 +8,8 @@ import { adminMutationLimiter } from "@/infrastructure/admin/rate-limit";
 const patchSchema = z.object({
   role: z.enum(["USER", "ADMIN"]).optional(),
   plan: z.enum(["FREE", "PREMIUM"]).optional(),
-}).strict().refine((data) => data.role || data.plan, "Minimal satu perubahan diperlukan.");
+  currentPeriodEnd: z.iso.datetime({ offset: true }).nullable().optional(),
+}).strict().refine((data) => data.role || data.plan || data.currentPeriodEnd !== undefined, "Minimal satu perubahan diperlukan.");
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {

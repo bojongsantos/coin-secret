@@ -21,20 +21,57 @@ function load(path: string, dependencies: Record<string, unknown>, extra = {}) {
   return exports;
 }
 const http = load("src/shared/server/http.ts", { "server-only": {}, zod });
-function boundary() {
+function boundary(options: { status?: number; throws?: boolean; sessionThrows?: boolean } = {}) {
   const seen: unknown[] = [];
   const requests: Request[] = [];
+  const delegated: string[] = [];
+  const response = (method: string) => {
+    delegated.push(method);
+    if (options.throws) throw new Error("private database connection failure");
+    return new Response(null, { status: options.status ?? 204 });
+  };
   const route = load("src/app/api/auth/[...all]/route.ts", {
-    "better-auth/next-js": { toNextJsHandler: () => ({ GET: () => new Response(), POST: async (request: Request) => { requests.push(request); seen.push(await request.json()); return new Response(null, { status: 204 }); } }) },
+    "better-auth/next-js": { toNextJsHandler: () => ({ GET: () => response("GET"), POST: async (request: Request) => { requests.push(request); seen.push(await request.json()); return response("POST"); } }) },
     "node:crypto": { createHash },
     "@/core/application/rate-limit/fixed-window": { createFixedWindowLimiter },
     "@/infrastructure/auth/auth": { auth: {} },
-    "@/infrastructure/auth/active-session": { getActiveSession: async () => null },
+    "@/infrastructure/auth/active-session": { getActiveSession: async () => { if (options.sessionThrows) throw new Error("private session failure"); return null; } },
     "@/shared/server/http": http,
   });
-  return { post: route.POST as (request: Request) => Promise<Response>, seen, requests };
+  return { post: route.POST as (request: Request) => Promise<Response>, get: route.GET as (request: Request) => Promise<Response>, seen, requests, delegated };
 }
 const request = (path: string, body: string, headers: HeadersInit = {}) => new Request(`http://localhost:3000/api/auth/${path}`, { method: "POST", body, headers: { "content-type": "application/json", ...headers } });
+
+test("guest session polls need no database-backed auth handler", async () => {
+  const f = boundary({ throws: true });
+  for (const cookie of ["", "analytics=coinsecret; unrelated=session_token"]) {
+    const result = await f.get(new Request("http://localhost:3000/api/auth/get-session", { headers: { cookie } }));
+    assert.equal(result.status, 200);
+    assert.equal(await result.json(), null);
+    assert.equal(result.headers.get("cache-control"), "no-store");
+  }
+  assert.equal(f.delegated.length, 0);
+});
+
+test("auth infrastructure failures return a safe retryable response without changing credential errors", async () => {
+  for (const options of [{ status: 500 }, { throws: true }, { sessionThrows: true }]) {
+    const f = boundary(options);
+    const headers = { cookie: "__Secure-coinsecret.session_token=fixture" };
+    const get = await f.get(new Request("http://localhost:3000/api/auth/get-session", { headers }));
+    const post = await f.post(request("sign-in/email", JSON.stringify({ email: "test@example.invalid", password: "unchanged password" }), headers));
+    for (const response of [get, post]) {
+      assert.equal(response.status, 503);
+      assert.equal(response.headers.get("retry-after"), "30");
+      const body = await response.json();
+      assert.equal(body.code, "AUTH_SERVICE_UNAVAILABLE");
+      assert.doesNotMatch(JSON.stringify(body), /private|database|connection|session failure/);
+    }
+  }
+  for (const status of [401, 403, 429]) {
+    const f = boundary({ status });
+    assert.equal((await f.post(request("sign-in/email", "{}"))).status, status);
+  }
+});
 
 test("auth accepts framework-wrapped requests and preserves security context after its bounded read", async () => {
   const f = boundary();
@@ -93,7 +130,7 @@ test("production refuses demo authentication and reset while regular accounts re
   assert.equal((await f.post(request("request-password-reset", JSON.stringify({ email: "real@example.invalid" })))).status, 204);
 });
 
-function configuredAuth(sent: { email: string; html: string }[], throttle: (email: string, action: string) => Promise<number> = async () => 0) {
+function configuredAuth(sent: { email: string; html: string }[], throttle: (email: string, action: string) => Promise<number> = async () => 0, initializeRegistrationTrial: (id: string) => Promise<void> = async () => undefined) {
   return load("src/infrastructure/auth/auth.ts", {
     "server-only": {}, "better-auth": { betterAuth: (options: unknown) => options },
     "better-auth/api": { APIError, createAuthMiddleware }, zod,
@@ -103,12 +140,14 @@ function configuredAuth(sent: { email: string; html: string }[], throttle: (emai
     "@/infrastructure/auth/local-addresses": { localIPv4Addresses: () => [] },
     "@/shared/lib/trusted-origins": { resolveTrustedOrigins: () => ["http://localhost:3000"] },
     "@/infrastructure/auth/password-reset-throttle": { passwordResetThrottle: throttle },
+    "@/infrastructure/auth/registration-trial": { initializeRegistrationTrial },
   }).auth as Parameters<typeof betterAuth>[0];
 }
 
 test("actual auth configuration uses one 6-digit reset email, revokes sessions and retains verify-then-login", async () => {
   const sent: { email: string; html: string }[] = [];
-  const configured = configuredAuth(sent);
+  const trialUsers: string[] = [];
+  const configured = configuredAuth(sent, async () => 0, async (id) => { trialUsers.push(id); });
   const instance = betterAuth({ ...configured, database: memoryAdapter({ user: [], session: [], account: [], verification: [] }), secret: randomBytes(32).toString("base64"), rateLimit: { enabled: false } });
   const email = "verify-flow@example.invalid";
   const password = randomBytes(24).toString("base64");
@@ -116,6 +155,10 @@ test("actual auth configuration uses one 6-digit reset email, revokes sessions a
   const signup = await send("sign-up/email", { email, password, name: "Test" });
   assert.equal(signup.status, 200);
   assert.equal(signup.headers.get("set-cookie"), null);
+  assert.equal(trialUsers.length, 1, "new registrations initialize the trial before returning");
+  assert.equal((await send("sign-up/email", { email, password, name: "Retry" })).status, 200);
+  assert.equal(trialUsers.length, 2, "unverified registration retries repair the same original account");
+  assert.equal(trialUsers[0], trialUsers[1]);
   assert.equal((await send("sign-in/email", { email, password })).status, 403);
   const otp = sent.at(-1)?.html.match(/<strong>(\d{6})<\/strong>/)?.[1];
   assert.ok(otp);
@@ -125,6 +168,8 @@ test("actual auth configuration uses one 6-digit reset email, revokes sessions a
   const verified = await send("email-otp/verify-email", { email, otp });
   assert.equal(verified.status, 200);
   assert.equal(verified.headers.get("set-cookie"), null);
+  assert.equal(trialUsers.length, 3, "verification can also repair an interrupted trial grant");
+  assert.equal(trialUsers[0], trialUsers[2]);
   const login = await send("sign-in/email", { email, password });
   assert.equal(login.status, 200);
   assert.ok(login.headers.get("set-cookie"));
@@ -159,6 +204,28 @@ test("actual auth configuration uses one 6-digit reset email, revokes sessions a
   const wrong = lockedOtp === "000000" ? "111111" : "000000";
   for (let i = 0; i < 5; i++) assert.equal((await send("email-otp/reset-password", { email, otp: wrong, password: nextPassword })).status, 400);
   assert.equal((await send("email-otp/reset-password", { email, otp: lockedOtp, password: nextPassword })).status, 403, "Five wrong attempts invalidate the code");
+});
+
+test("trial infrastructure failure leaves email unverified and a fresh OTP can finish verification", async () => {
+  const sent: { email: string; html: string }[] = [];
+  let failTrial = false;
+  const configured = configuredAuth(sent, async () => 0, async () => { if (failTrial) throw new Error("Trial database unavailable"); });
+  const instance = betterAuth({ ...configured, database: memoryAdapter({ user: [], session: [], account: [], verification: [] }), secret: randomBytes(32).toString("base64"), rateLimit: { enabled: false }, logger: { disabled: true } });
+  const email = "trial-repair@example.invalid";
+  const password = randomBytes(24).toString("base64");
+  const send = (path: string, body: object) => instance.handler(request(path, JSON.stringify(body), { origin: "http://localhost:3000" }));
+  assert.equal((await send("sign-up/email", { email, password, name: "Test" })).status, 200);
+  const otp = sent.at(-1)!.html.match(/<strong>(\d{6})<\/strong>/)![1];
+  failTrial = true;
+  assert.equal((await send("email-otp/verify-email", { email, otp })).status, 500);
+  const context = await instance.$context;
+  assert.equal((await context.internalAdapter.findUserByEmail(email))?.user.emailVerified, false);
+  assert.equal((await send("sign-in/email", { email, password })).status, 403);
+  failTrial = false;
+  assert.equal((await send("email-otp/send-verification-otp", { email, type: "email-verification" })).status, 200);
+  const freshOtp = sent.at(-1)!.html.match(/<strong>(\d{6})<\/strong>/)![1];
+  assert.equal((await send("email-otp/verify-email", { email, otp: freshOtp })).status, 200);
+  assert.equal((await send("sign-in/email", { email, password })).status, 200);
 });
 
 test("reset recipient throttling cannot be bypassed by the general OTP sender or malformed inputs", async () => {

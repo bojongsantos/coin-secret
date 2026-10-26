@@ -8,13 +8,38 @@ import { HttpError, readBoundedJson } from "@/shared/server/http";
 const handler = toNextJsHandler(auth);
 const signInLimiter = createFixedWindowLimiter({ limit: 8, windowMs: 10 * 60_000 });
 
+function unavailable() {
+  return Response.json(
+    { code: "AUTH_SERVICE_UNAVAILABLE", message: "Sign-in is temporarily unavailable. Please try again shortly." },
+    { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "30" } },
+  );
+}
+
+async function delegate(request: Request, method: "GET" | "POST") {
+  try {
+    await expireInactiveSession(request);
+    const response = await handler[method](request);
+    if (response.status < 500) return response;
+  } catch {
+    // Never expose provider errors, connection strings or credentials.
+  }
+  console.error("[auth.request]", { status: 503, method });
+  return unavailable();
+}
+
 async function expireInactiveSession(request: Request) {
   if (request.headers.get("cookie")?.includes("coinsecret")) await getActiveSession(request.headers);
 }
 
 export async function GET(request: Request) {
-  await expireInactiveSession(request);
-  return handler.GET(request);
+  const cookie = request.headers.get("cookie") ?? "";
+  // An anonymous session read cannot authenticate anyone. Avoid the auth
+  // handler's database-backed rate-limit read/write on every guest poll.
+  if (new URL(request.url).pathname === "/api/auth/get-session" &&
+      !/(?:^|;\s*)(?:__Secure-)?coinsecret\.session_token=/.test(cookie)) {
+    return Response.json(null, { headers: { "Cache-Control": "no-store" } });
+  }
+  return delegate(request, "GET");
 }
 export async function POST(request: Request) {
   let body: unknown;
@@ -65,6 +90,5 @@ export async function POST(request: Request) {
       }
     }
   }
-  await expireInactiveSession(request);
-  return handler.POST(request);
+  return delegate(request, "POST");
 }

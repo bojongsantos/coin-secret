@@ -375,6 +375,7 @@ export const MESSAGES = {
   "auth.noAccount": { id: "Belum memiliki akun?", en: "No account yet?" },
   "auth.haveAccount": { id: "Sudah memiliki akun?", en: "Already have an account?" },
   "auth.failed": { id: "Autentikasi gagal.", en: "Authentication failed." },
+  "auth.unavailable": { id: "Layanan login sementara tidak tersedia. Silakan coba lagi sebentar.", en: "Sign-in is temporarily unavailable. Please try again shortly." },
 
   // ----------------------------------------------------------------- billing
   "billing.title": { id: "Akun & Tagihan", en: "Account & Bill" },
@@ -404,6 +405,8 @@ export const MESSAGES = {
     en: "/ month on the annual plan",
   },
   "billing.proActive": { id: "Pro aktif.", en: "Pro is active." },
+  "billing.trialActive": { id: "Trial Pro 7 hari aktif.", en: "Your 7-day Pro trial is active." },
+  "billing.accessUntil": { id: "Akses berakhir: {date}", en: "Access expires: {date}" },
   "billing.seePlans": { id: "Lihat paket", en: "See the plans" },
   "billing.history": { id: "Riwayat Pembayaran", en: "Payment History" },
   "billing.noPayments": { id: "Belum ada pembayaran.", en: "No payments yet." },

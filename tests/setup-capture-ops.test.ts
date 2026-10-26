@@ -166,6 +166,7 @@ function captureService(options: {
 } = {}) {
   const row = { id: "setup-1", symbol: "TESTUSDT", timeframe: "15m", direction: "long", exchange: "binance",
     firstStatus: "Limit Order", status: "Running", archivedAt: null as Date | null, resultAt: null as Date | null,
+    firstSeenAt: new Date(0),
     zoneBaseTime: 1000, entry: 100, stopLoss: 90, target1: 110, target2: 120, confidence: 75,
     riskReward: 2, zoneTop: 100, zoneBottom: 95 };
   let queries = 0;

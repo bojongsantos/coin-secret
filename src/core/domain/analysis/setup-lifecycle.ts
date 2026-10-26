@@ -92,6 +92,7 @@ export function traceSetupLifecycle(
   plan: SetupPlan,
   fromIndex: number,
   price: number,
+  publishedAt?: number,
 ): SetupLifecycle {
   const long = plan.direction === "long";
   let armedIndex: number | null = null;
@@ -107,6 +108,14 @@ export function traceSetupLifecycle(
   const baseIndex = Math.max(0, fromIndex);
   for (let i = baseIndex; i < candles.length; i++) {
     const candle = candles[i];
+
+    // OHLC cannot identify which part of a publication candle happened after
+    // the order became visible. Earlier bars may establish departure, never
+    // an entry or outcome. Only a bar opening after publication proves those.
+    if (publishedAt !== undefined && candle.time < publishedAt) {
+      if (i > baseIndex && (long ? candle.high > plan.entry : candle.low < plan.entry)) armedIndex = i;
+      continue;
+    }
 
     if (armedIndex === null) {
       // The base and departure bars cannot prove a subsequent entry fill.

@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       select: {
         id: true, name: true, email: true, emailVerified: true, role: true, plan: true, createdAt: true,
         _count: { select: { sessions: true, payments: true } },
-        subscription: { select: { status: true, currentPeriodEnd: true } },
+        subscription: { select: { status: true, provider: true, currentPeriodStart: true, currentPeriodEnd: true } },
       },
     });
     return Response.json({ users: users.slice(0, take), page, hasMore: users.length > take }, { headers: { "Cache-Control": "no-store" } });

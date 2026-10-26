@@ -10,10 +10,12 @@ async function healthWithDerivatives(
   userRole?: string,
   dbReachable = true,
   publicationStatus: "fresh" | "overdue" = "fresh",
+  authFails = false,
 ) {
   let databaseQueries = 0;
   let publicationReads = 0;
-  const exports: Record<string, () => Promise<Response>> = {};
+  let authReads = 0;
+  const exports: Record<string, (request: Request) => Promise<Response>> = {};
   const code = ts.transpileModule(readFileSync("src/app/api/health/route.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -23,20 +25,19 @@ async function healthWithDerivatives(
     require: (name: string) => {
       if (name.endsWith("/readiness")) return { assessReadiness: () => [] };
       if (name.endsWith("/gateway-factory")) return { selectedPaymentProvider: () => "nowpayments" };
-      if (name.endsWith("/current-user")) return { getCurrentUser: async () => (userRole ? { role: userRole } : null) };
+      if (name.endsWith("/current-user")) return { getCurrentUser: async () => {
+        authReads++;
+        if (authFails) throw new Error("Sensitive database details during admin lookup");
+        return userRole ? { role: userRole } : null;
+      } };
       if (name.endsWith("/signals-publication")) return { readSignalsPublication: async () => {
         publicationReads++;
         return { status: publicationStatus, verified: publicationStatus === "fresh", scannedAt: "2026-10-12T00:00:00.000Z", ageSeconds: 0 };
       } };
-      if (name.endsWith("/prisma")) return {
-        prisma: {
-          $queryRaw: async () => {
-            databaseQueries++;
-            if (!dbReachable) throw new Error("DB offline: sensitive connection detail");
-            return [{ 1: 1 }];
-          },
-        },
-      };
+      if (name.endsWith("/database/health")) return { readDatabaseHealth: async () => {
+        databaseQueries++;
+        return { status: dbReachable ? "ok" : "down", latencyMs: 1, checkedAt: "2026-10-26T14:00:00.000Z" };
+      } };
       if (name.endsWith("/market-context-service")) return {
         getDerivativesDiagnostics: () => ({ checkedAt: "2026-10-05T00:00:00.000Z", source: available ? "bybit" : null, providers: [
           { provider: "binance", status: "down", detail: "HTTP 451" },
@@ -54,20 +55,40 @@ async function healthWithDerivatives(
     },
     process: { env: {} },
   });
-  const response = await exports.GET();
+  const response = await exports.GET(new Request("https://coinsecret.io/api/health", {
+    headers: userRole ? { cookie: "coinsecret.session_token=test" } : {},
+  }));
+  const payload = await response.json();
   return {
-    results: (await response.json()).results as Array<{ id: string; status: string; detail: string }>,
+    results: payload.results as Array<{ id: string; status: string; detail: string }>,
+    configuration: payload.configuration,
+    status: response.status,
     databaseQueries,
     publicationReads,
+    authReads,
   };
 }
 
-test("anonymous visitors never trigger database pings", async () => {
-  const { results, databaseQueries, publicationReads } = await healthWithDerivatives(true, "normal", undefined, false);
-  assert.equal(results.some((r) => r.id === "database-live"), false);
-  assert.equal(databaseQueries, 0);
+test("public health reports a sanitized database outage without session or privileged reads", async () => {
+  const { results, databaseQueries, publicationReads, authReads, configuration, status } = await healthWithDerivatives(true, "normal", undefined, false);
+  assert.equal(results.find((r) => r.id === "database-live")?.status, "down");
+  assert.equal(databaseQueries, 1);
+  assert.equal(authReads, 0);
+  assert.equal(configuration, undefined);
+  assert.equal(status, 503);
   assert.equal(publicationReads, 0);
   assert.equal(results.some((r) => r.id === "signals-publication"), false);
+  assert.doesNotMatch(JSON.stringify(results), /sensitive|DATABASE_URL|prisma|postgresql/i);
+});
+
+test("health survives failing admin authentication and never exposes configuration to an unverified role", async () => {
+  const { results, configuration, status, authReads, publicationReads } = await healthWithDerivatives(true, "normal", "ADMIN", true, "fresh", true);
+  assert.equal(status, 503);
+  assert.equal(authReads, 1);
+  assert.equal(publicationReads, 0);
+  assert.equal(configuration, undefined);
+  assert.equal(results.find((r) => r.id === "authentication")?.status, "down");
+  assert.doesNotMatch(JSON.stringify(results), /sensitive/i);
 });
 
 test("Signals publication diagnostics are admin-only and report overdue durable data", async () => {

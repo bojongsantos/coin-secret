@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   CandlestickChart,
   Loader2,
@@ -14,6 +15,7 @@ import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
 import { formatCompact } from "@/shared/lib/format";
 import { StatusIcon } from "@/presentation/ui/status-icon";
 import { DataStatus } from "@/presentation/ui/data-status";
+import { usePlan } from "@/presentation/features/access/plan-provider";
 
 /** The chip stays dark so its status icon does not compete with confidence. */
 function StatusPill({ status, t, prominent = false }: { status: string; t: Translate; prominent?: boolean }) {
@@ -176,6 +178,8 @@ function Column({
   maxHeight: number;
   onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
 }) {
+  const { authenticated } = usePlan();
+  const pathname = usePathname();
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   const hiddenCount = Math.max(0, totalCount - hits.length);
   const dashboard = Boolean(onSelect);
@@ -234,11 +238,11 @@ function Column({
       </div>
       {hiddenCount > 0 && (
         <Link
-          href="/pricing"
+          href={authenticated ? "/pricing" : `/login?next=${encodeURIComponent(pathname)}`}
           className="cs-primary mt-4 flex items-center justify-center gap-2 rounded-full px-4 py-3 text-[13px] font-semibold text-white"
           title={t("zones.moreSetups", { count: hiddenCount })}
         >
-          <Lock className="size-3.5" aria-hidden /> {t("common.unlockPro")}
+          <Lock className="size-3.5" aria-hidden /> {t(authenticated ? "common.unlockPro" : "account.signIn")}
         </Link>
       )}
     </section>

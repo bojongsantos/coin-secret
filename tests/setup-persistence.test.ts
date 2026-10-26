@@ -189,7 +189,7 @@ test("a setup on a timeframe the scanner dropped is released", async () => {
   // The board is for what can be acted on now. When the scanned set shrinks,
   // setups left behind on the slower charts would otherwise sit there for days
   // with nothing ever refreshing them.
-  const candles = series(400, 26);
+  const candles = series(274, 2);
   const { port } = marketFor({}, candles);
   const held = store([
     {
@@ -213,6 +213,22 @@ test("a setup on a timeframe the scanner dropped is released", async () => {
   assert.ok(listed, "a replacement setup must be chosen");
   assert.notEqual(listed.timeframe, "1D", "the dropped timeframe must not be republished");
   assert.ok(SD_SETUP_TIMEFRAMES.includes(listed.timeframe));
+});
+
+test("first publication selects a still-waiting order rather than a historical fill", async () => {
+  const waiting = marketFor({}, series(274, 2));
+  const empty = store();
+  const result = await runSdScan(waiting.port, ["BTCUSDT"], { activeSetups: empty.port });
+  const hits = [...result.demand, ...result.supply];
+  assert.equal(hits.length, 1, "the fixture has a genuine pending setup");
+  assert.equal(hits[0].status, "Limit Order");
+  assert.equal(empty.writes[0].status, "Limit Order");
+
+  const alreadyFilled = marketFor({}, series(400, 26));
+  const historical = await runSdScan(alreadyFilled.port, ["BTCUSDT"]);
+  assert.ok([...historical.demand, ...historical.supply].some(hit => hit.status !== "Limit Order"));
+  const published = await runSdScan(alreadyFilled.port, ["BTCUSDT"], { activeSetups: store().port });
+  assert.ok([...published.demand, ...published.supply].every(hit => hit.status === "Limit Order"));
 });
 
 test("a finished setup releases the symbol for a new one", async () => {
@@ -426,8 +442,7 @@ test("a finished setup is never published again, on this pass or any later one",
 
   // Calibrate on the fixture rather than guessing: whatever this tape
   // publishes with nothing held is exactly what must not come back.
-  const { port: empty } = store([]);
-  const first = await runSdScan(market, ["BTCUSDT"], { activeSetups: empty });
+  const first = await runSdScan(market, ["BTCUSDT"]);
   const published = [...first.demand, ...first.supply][0];
   assert.ok(published, "the fixture must publish a setup to retire");
 

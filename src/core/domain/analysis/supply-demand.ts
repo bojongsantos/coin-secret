@@ -153,7 +153,7 @@ export function buildRiskTargets(
  * why it no longer takes a symbol or a timeframe: nothing about the answer may
  * depend on which caller is asking.
  */
-export function detectSupplyDemand(candles: Candle[]): SdResult {
+export function detectSupplyDemand(candles: Candle[], options: { pendingOnly?: boolean } = {}): SdResult {
   const zones: SdZone[] = [];
 
   // Average candle range used to detect an "impulse" (expansion) candle.
@@ -278,6 +278,9 @@ export function detectSupplyDemand(candles: Candle[]): SdResult {
 
     const status = computeSetupStatus(candles, zone, isLong, entry, stopLoss, target1, target2, price);
     if (isTerminalSetupStatus(status)) continue;
+    // First publication must precede the fill; a historical trade is not an
+    // order readers can still place. Stored plans are replayed separately.
+    if (options.pendingOnly && status !== "Limit Order") continue;
 
     const rawRr = Math.abs(target2 - entry) / Math.max(1e-9, Math.abs(entry - stopLoss));
     const riskReward = Math.min(9, Math.max(0.3, rawRr));
@@ -385,6 +388,8 @@ export function computeSetupStatus(
  * that these numbers stop changing once they are published.
  */
 export interface PublishedSetup {
+  /** Publication time in epoch seconds; earlier OHLC cannot prove a fill. */
+  publishedAt?: number;
   /** Null on old plans: their original feed cannot be recovered honestly. */
   exchange?: MarketExchange | null;
   /** Preserved when exchange provenance is unknown and lifecycle cannot be replayed. */
@@ -516,6 +521,7 @@ export function readPublishedSetup(
         },
         baseIndex,
         price,
+        published.publishedAt,
       ).status;
   if (!status || ![...ACTIVE_SETUP_STATUSES, ...TERMINAL_SETUP_STATUSES].includes(status as Status)) {
     return { status: null, setup: null };

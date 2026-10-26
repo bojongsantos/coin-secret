@@ -37,7 +37,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         ? await authClient.signUp.email({ name: name.trim(), email: email.trim(), password })
         : await authClient.signIn.email({ email: email.trim(), password });
       if (result.error) {
-        setError(result.error.message ?? t("auth.failed"));
+        setError(result.error.status >= 500 || result.error.code === "AUTH_SERVICE_UNAVAILABLE"
+          ? t("auth.unavailable") : result.error.message ?? t("auth.failed"));
         if (mode === "login" && result.error.code === "EMAIL_NOT_VERIFIED") {
           setVerificationEmail(email.trim());
         }
@@ -51,7 +52,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       router.replace(safeRedirectPath(params.get("next")));
       router.refresh();
     } catch {
-      setError(t("auth.failed"));
+      setError(t("auth.unavailable"));
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,15 @@
 import type { SubscriptionPlan } from "@/core/domain/identity";
 
+export const REGISTRATION_TRIAL_DAYS = 7;
+
+/** One trial per new registration; logging in again never restarts it. */
+export function registrationTrialPeriod(createdAt: Date) {
+  return {
+    currentPeriodStart: createdAt,
+    currentPeriodEnd: new Date(createdAt.getTime() + REGISTRATION_TRIAL_DAYS * 86_400_000),
+  };
+}
+
 /**
  * Whether a stored Premium plan has run past its paid period.
  *

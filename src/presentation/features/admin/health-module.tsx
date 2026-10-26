@@ -28,7 +28,7 @@ export function HealthModule() {
     setError(null);
     try {
       const res = await fetch("/api/health", { cache: "no-store" });
-      if (!res.ok) throw new Error(`Health API HTTP ${res.status}`);
+      if (!res.ok && res.status !== 503) throw new Error(`Health API HTTP ${res.status}`);
       const payload = (await res.json()) as {
         results?: HealthResult[];
         configuration?: CapabilityReport[];

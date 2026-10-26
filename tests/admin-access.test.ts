@@ -45,6 +45,13 @@ test("a hand-set plan gets the matching subscription state", () => {
   assert.equal(subscriptionStatusForPlan("FREE"), "INACTIVE");
 });
 
+test("manual expiry accepts date-only changes and rejects invalid or Free-plan dates", () => {
+  assert.equal(rejectUserChange(ADMIN, OTHER, { currentPeriodEnd: "2026-11-01T09:00:00+07:00" }), null);
+  assert.equal(rejectUserChange(ADMIN, OTHER, { currentPeriodEnd: null }), null);
+  assert.equal(rejectUserChange(ADMIN, OTHER, { currentPeriodEnd: "not a date" }), "INVALID_EXPIRY");
+  assert.equal(rejectUserChange(ADMIN, OTHER, { plan: "FREE", currentPeriodEnd: "2026-11-01T09:00:00Z" }), "EXPIRY_REQUIRES_PREMIUM");
+});
+
 test("a paid period that has run out ends the plan", () => {
   const now = new Date("2026-08-19T12:00:00.000Z");
   const lapsed = new Date("2026-08-18T12:00:00.000Z");

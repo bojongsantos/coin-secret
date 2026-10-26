@@ -444,6 +444,7 @@ function captureQueue(kind: "entry" | "result", busy = false) {
   const rows = Array.from({ length: 26 }, (_, index) => ({
     id: String(index).padStart(3, "0"), symbol: `${index < 24 ? "BAD" : "GOOD"}${index}USDT`,
     firstStatus: kind === "entry" ? "Limit Order" : "Filled", status: "Running",
+    firstSeenAt: new Date(0),
     resultCheckedAt: null as Date | null, resultAt: null as Date | null,
     snapshots: new Set<string>(kind === "result" ? ["ENTRY"] : []),
     timeframe: "15m", direction: "long", zoneBaseTime: 1000, exchange: "binance" as string | null,

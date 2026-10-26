@@ -23,6 +23,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [entitlements, setEntitlements] = useState<Partial<Record<FeatureKey, boolean>>>({});
   const [sessionExpired, setSessionExpired] = useState(false);
   const [sessionEpoch, setSessionEpoch] = useState(0);
+  const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
   const sessionGeneration = useRef(0);
   const syncRequest = useRef(0);
   const knownAuthenticated = useRef(false);
@@ -33,6 +34,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     setAuthenticated(false);
     setPlanState("free");
     setEntitlements({});
+    setAccessExpiresAt(null);
     setSessionExpired(true);
   }, []);
   useSessionActivity(authenticated, expire, sessionEpoch);
@@ -45,7 +47,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw new Error("Unable to read account access");
         return response.json();
       })
-      .then((data: { authenticated?: boolean; plan?: Plan; access?: Partial<Record<FeatureKey, boolean>> } | null) => {
+      .then((data: { authenticated?: boolean; plan?: Plan; access?: Partial<Record<FeatureKey, boolean>>; accessExpiresAt?: string | null } | null) => {
         if (generation !== sessionGeneration.current || request !== syncRequest.current) return;
         if (knownAuthenticated.current && !data?.authenticated) {
           expire();
@@ -55,6 +57,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         setAuthenticated(data?.authenticated ?? false);
         setPlanState(data?.plan ?? "free");
         setEntitlements(data?.access ?? {});
+        setAccessExpiresAt(data?.plan === "premium" ? data.accessExpiresAt ?? null : null);
         if (data?.authenticated) setSessionExpired(false);
       })
       .catch(() => {
@@ -68,6 +71,20 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     sync();
   }, [pathname, sync]);
+
+  useEffect(() => {
+    if (!accessExpiresAt) return;
+    let timer: number;
+    const check = () => {
+      const remaining = Date.parse(accessExpiresAt) - Date.now();
+      if (remaining > 0) { timer = window.setTimeout(check, Math.min(remaining, 2_147_483_647)); return; }
+      setPlanState("free");
+      setEntitlements({});
+      sync();
+    };
+    timer = window.setTimeout(check, Math.max(0, Math.min(Date.parse(accessExpiresAt) - Date.now(), 2_147_483_647)));
+    return () => window.clearTimeout(timer);
+  }, [accessExpiresAt, sync]);
 
   useEffect(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, sync);

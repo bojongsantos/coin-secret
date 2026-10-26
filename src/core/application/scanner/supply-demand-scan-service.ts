@@ -47,6 +47,7 @@ function betterCandidate(a: SdScanHit, b: SdScanHit): SdScanHit {
 }
 
 export interface SdScanHit {
+  publishedAt?: number;
   exchange?: MarketExchange | null;
   symbol: string;
   base: string;
@@ -95,6 +96,7 @@ export function signalBucket(hit: Pick<SdScanHit, "direction">): "demand" | "sup
 /** Turns a detected or stored setup into a table row. */
 function toHit(
   input: {
+    publishedAt?: number;
     exchange?: MarketExchange | null;
     symbol: string;
     timeframe: Timeframe;
@@ -244,6 +246,7 @@ export async function runSdScan(
             const hit = toHit(
               {
                 symbol,
+                publishedAt: held.publishedAt,
                 exchange,
                 timeframe: held.timeframe,
                 zoneType: setup.zone.type,
@@ -295,7 +298,7 @@ export async function runSdScan(
                   });
           if (candles.length === 0) continue;
 
-          const sd: SdResult = detectSupplyDemand(candles);
+          const sd: SdResult = detectSupplyDemand(candles, { pendingOnly: options.activeSetups !== undefined });
           const setup = sd.setup;
           if (!setup) continue;
           if (retired.has(zoneKey(symbol, timeframe, setup.direction, setup.zone.baseTime))) continue;

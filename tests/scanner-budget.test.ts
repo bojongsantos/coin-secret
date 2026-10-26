@@ -9,9 +9,10 @@ import type { Candle } from "@/core/domain/models";
 
 function candles(): Candle[] {
   let price = 100;
-  let seed = 26;
+  // A still-waiting order: first publication must not inherit an older fill.
+  let seed = 2;
   const next = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-  return Array.from({ length: 400 }, (_, index) => {
+  return Array.from({ length: 274 }, (_, index) => {
     const open = price;
     price = Math.max(1, price + (index % 17 === 0 ? (next() - 0.5) * 12 : (next() - 0.5) * 1.2));
     return { time: 1_700_000_000 + index * 900, open, high: Math.max(open, price) + next() * 0.4,

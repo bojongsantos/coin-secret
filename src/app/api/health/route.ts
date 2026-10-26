@@ -2,7 +2,7 @@ import { assessReadiness, type CapabilityReport } from "@/core/domain/ops/readin
 import { selectedPaymentProvider } from "@/infrastructure/billing/gateway-factory";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { getDerivativesDiagnostics, getMarketContextPayload } from "@/infrastructure/market-data/market-context-service";
-import { prisma } from "@/infrastructure/database/prisma";
+import { readDatabaseHealth } from "@/infrastructure/database/health";
 import { readSignalsPublication } from "@/infrastructure/monitoring/signals-publication";
 
 /** Names of the variables that currently hold a non-empty value. */
@@ -79,16 +79,25 @@ async function checkDerivatives(includeDiagnostics: boolean): Promise<HealthResu
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   // Which keys are absent tells an attacker which flows are unguarded or
   // unavailable, so the configuration report is for admins only. The external
   // service checks reveal nothing private and stay public.
-  const user = await getCurrentUser();
+  const database = await readDatabaseHealth();
+  let authUnavailable = false;
+  // Public health probes do not need session/rate-limit database work. When the
+  // database is down, admin detection cannot succeed and must not hide health.
+  const user = database.status === "ok" && request.headers.get("cookie")?.includes("coinsecret")
+    ? await getCurrentUser().catch(() => { authUnavailable = true; return null; }) : null;
   const isAdmin = user?.role === "ADMIN";
   const configuration: CapabilityReport[] | undefined =
     isAdmin ? assessReadiness(configuredKeys(), selectedPaymentProvider()) : undefined;
 
-  let dbResult: HealthResult | null = null;
+  const dbResult: HealthResult = {
+    id: "database-live", name: "Application Database", endpoint: "application database",
+    status: database.status, latencyMs: database.latencyMs,
+    detail: database.status === "ok" ? "Available" : "Temporarily unavailable",
+  };
   let signalsResult: HealthResult | null = null;
   if (isAdmin) {
     const signalsStart = performance.now();
@@ -99,29 +108,6 @@ export async function GET() {
       detail: publication.scannedAt === null ? `Durable board ${publication.status}`
         : `${publication.status} · Last scan ${publication.scannedAt} · Age ${publication.ageSeconds}s · Overdue after 45m`,
     };
-    const dbStart = performance.now();
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      const latencyMs = Math.round(performance.now() - dbStart);
-      dbResult = {
-        id: "database-live",
-        name: "PostgreSQL Database",
-        endpoint: "prisma $queryRaw",
-        status: "ok",
-        latencyMs,
-        detail: `Connected · ${latencyMs}ms`,
-      };
-    } catch {
-      const latencyMs = Math.round(performance.now() - dbStart);
-      dbResult = {
-        id: "database-live",
-        name: "PostgreSQL Database",
-        endpoint: "prisma $queryRaw",
-        status: "down",
-        latencyMs,
-        detail: "Database connection failed",
-      };
-    }
   }
 
   const results = await Promise.all([
@@ -137,13 +123,17 @@ export async function GET() {
     ]),
   ]);
 
-  if (dbResult) {
-    results.unshift(dbResult);
-  }
+  results.unshift(dbResult);
+  if (authUnavailable) results.unshift({
+    id: "authentication", name: "Account Access", endpoint: "application authentication",
+    status: "down", latencyMs: 0, detail: "Temporarily unavailable",
+  });
   if (signalsResult) results.unshift(signalsResult);
 
+  const healthy = results.every((result) => result.status === "ok");
   return Response.json(
-    { results, configuration, checkedAt: new Date().toISOString() },
-    { headers: { "Cache-Control": "no-store" } },
+    { results, configuration, checkedAt: new Date().toISOString(), databaseCheckedAt: database.checkedAt },
+    { status: healthy ? 200 : 503,
+      headers: { "Cache-Control": "no-store", ...(!healthy ? { "Retry-After": "30" } : {}) } },
   );
 }

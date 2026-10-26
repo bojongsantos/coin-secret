@@ -69,6 +69,7 @@ function parseSetup(payload: unknown, symbol: string): ChartPublishedSetup | nul
     || typeof setup.confidence !== "number" || !Number.isFinite(setup.confidence) || setup.confidence < 0 || setup.confidence > 100
     || (setup.zoneTop as number) < (setup.zoneBottom as number)
     || (setup.exchange != null && !isMarketExchange(setup.exchange))
+    || (setup.publishedAt !== undefined && (typeof setup.publishedAt !== "number" || !Number.isFinite(setup.publishedAt) || setup.publishedAt <= 0))
     || (setup.status !== undefined && typeof setup.status !== "string")) {
     throw new SyntaxError("Invalid setup response");
   }
@@ -372,7 +373,9 @@ export function useLiveAnalysis(
         ticker,
         publishedRef.current,
         locale,
-        { publishedOnly: currentSetupState !== "missing" || !verified, evaluateLifecycle: verified && currentSetupState === "published", computePerformance: false },
+        // An absent published order permits candle/zone analysis, never a
+        // retrospective local fill or target presented as a trading plan.
+        { publishedOnly: true, evaluateLifecycle: verified && currentSetupState === "published", computePerformance: false },
       );
       setAnalysis({ ...result, chartData: { ...result.chartData, candles } });
     }

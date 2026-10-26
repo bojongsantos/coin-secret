@@ -43,6 +43,8 @@ function ui() {
   const deps: Record<string, unknown> = {
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/link": { default: "link" },
+    "next/navigation": { usePathname: () => "/dashboard" },
+    "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated: false }) },
     "lucide-react": { CandlestickChart: "icon", Clock3: "clock", Loader2: "loader", Lock: "lock", RefreshCw: "refresh" },
     "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) => translate("en", key, vars), locale: "en" }) },
     "@/presentation/ui/coin-icon": { CoinIcon: "coin" },
@@ -71,6 +73,18 @@ test("a partial scan does not declare an empty side complete", () => {
   const rendered = textOf(api.SignalsBoard({ demand: [], supply: [], loading: false, error: null, failedCount: 4, onRefresh() {} }));
   assert.match(rendered, /Data temporarily unavailable/);
   assert.doesNotMatch(rendered, /0 setups|No zone on this side/);
+});
+
+test("locked dashboard rows send guests to sign in and authenticated Free users to Pro pricing", () => {
+  for (const authenticated of [false, true]) {
+    const api = load("src/presentation/features/signals/signals-board.tsx", {
+      ...ui(), "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated }) },
+    });
+    const rendered = api.SignalsBoard({ demand: [], supply: [], demandTotal: 4, loading: false, error: null, onRefresh() {} });
+    const action = nodesOf(rendered).find(({ type }) => type === "link");
+    assert.equal(action?.props.href, authenticated ? "/pricing" : "/login?next=%2Fdashboard");
+    assert.match(textOf(action), authenticated ? /Unlock Pro/ : /Sign in/);
+  }
 });
 
 test("Top Setups distinguishes failed fetching from a successful empty scan", () => {

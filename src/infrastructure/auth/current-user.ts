@@ -13,7 +13,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUserDto | null> => 
   if (!session) return null;
   const record = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, email: true, emailVerified: true, role: true, plan: true, subscription: { select: { currentPeriodEnd: true } } },
+    select: { id: true, name: true, email: true, emailVerified: true, role: true, plan: true, subscription: { select: { currentPeriodEnd: true, provider: true } } },
   });
   if (!record || !record.emailVerified || (process.env.NODE_ENV === "production" && record.email.toLowerCase().endsWith(".local"))) return null;
   // Reading an account must not rewrite it. The previous version downgraded an
@@ -27,7 +27,10 @@ export const getCurrentUser = cache(async (): Promise<CurrentUserDto | null> => 
     record.subscription?.currentPeriodEnd,
     new Date(),
   );
-  return { id: record.id, name: record.name, email: record.email, emailVerified: record.emailVerified, role: record.role as UserRole, plan };
+  return { id: record.id, name: record.name, email: record.email, emailVerified: record.emailVerified, role: record.role as UserRole, plan,
+    accessExpiresAt: record.subscription?.currentPeriodEnd?.toISOString() ?? null,
+    accessSource: record.subscription?.provider ?? null,
+  };
 });
 
 export async function requireUser(): Promise<CurrentUserDto> {

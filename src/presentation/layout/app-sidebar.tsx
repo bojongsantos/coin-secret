@@ -166,10 +166,10 @@ export function AppSidebar() {
               </p>
               {!pro && (
                 <Link
-                  href="/pricing"
+                  href={authenticated ? "/pricing" : `/login?next=${encodeURIComponent(pathname)}`}
                   className="mt-3 block rounded-lg bg-gradient-to-r from-accent-blue to-accent px-3 py-2 text-center text-[12px] font-bold text-white transition-opacity hover:opacity-90"
                 >
-                  {t("common.unlockPro")}
+                  {t(authenticated ? "common.unlockPro" : "account.signIn")}
                 </Link>
               )}
             </div>

@@ -18,7 +18,7 @@ export async function GET() {
       const allowed = grant?.enabled ?? (gate ? (plan === "premium" ? gate.premium : gate.free) : hasFeature(plan, feature));
       return [feature, allowed];
     }));
-    return Response.json({ authenticated: Boolean(user), plan, access });
+    return Response.json({ authenticated: Boolean(user), plan, access, accessExpiresAt: user?.accessExpiresAt ?? null }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return apiError(error);
   }

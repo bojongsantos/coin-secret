@@ -3,9 +3,10 @@ import type { SubscriptionPlan, UserRole } from "@/core/domain/identity";
 export interface UserChange {
   role?: UserRole;
   plan?: SubscriptionPlan;
+  currentPeriodEnd?: string | null;
 }
 
-export type UserChangeRejection = "EMPTY_CHANGE" | "SELF_DEMOTION" | null;
+export type UserChangeRejection = "EMPTY_CHANGE" | "SELF_DEMOTION" | "INVALID_EXPIRY" | "EXPIRY_REQUIRES_PREMIUM" | null;
 
 /**
  * Why an admin may not apply this change, or null when it is allowed.
@@ -22,8 +23,10 @@ export function rejectUserChange(
   targetId: string,
   change: UserChange,
 ): UserChangeRejection {
-  if (change.role === undefined && change.plan === undefined) return "EMPTY_CHANGE";
+  if (change.role === undefined && change.plan === undefined && change.currentPeriodEnd === undefined) return "EMPTY_CHANGE";
   if (actorId === targetId && change.role === "USER") return "SELF_DEMOTION";
+  if (change.currentPeriodEnd != null && !Number.isFinite(Date.parse(change.currentPeriodEnd))) return "INVALID_EXPIRY";
+  if (change.plan === "FREE" && change.currentPeriodEnd != null) return "EXPIRY_REQUIRES_PREMIUM";
   return null;
 }
 

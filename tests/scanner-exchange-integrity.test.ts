@@ -6,11 +6,11 @@ import { runSdScan } from "@/core/application/scanner/supply-demand-scan-service
 import { runScanner } from "@/core/application/scanner/scanner-service";
 import type { Candle, MarketTicker } from "@/core/domain/models";
 
-function tape(): Candle[] {
+function tape(seed = 26, count = 400): Candle[] {
   let price = 100;
-  let rng = 26;
+  let rng = seed;
   const next = () => { rng = (rng * 1103515245 + 12345) % 2147483648; return rng / 2147483648; };
-  return Array.from({ length: 400 }, (_, index) => {
+  return Array.from({ length: count }, (_, index) => {
     const open = price;
     price = Math.max(1, price + (index % 17 === 0 ? (next() - 0.5) * 12 : (next() - 0.5) * 1.2));
     return { time: 1_700_000_000 + index * 900, open, high: Math.max(open, price) + next() * 0.4,
@@ -20,13 +20,13 @@ function tape(): Candle[] {
 const candles = tape();
 const ticker = (lastPrice: number): MarketTicker => ({ symbol: "BTCUSDT", lastPrice, priceChange: 1,
   priceChangePercent: 1, quoteVolume: 100, volume: 1, highPrice: lastPrice, lowPrice: lastPrice });
-function source(exchange: "binance" | "bybit", price: number, fail?: "batch" | "candles" | "hourly") {
+function source(exchange: "binance" | "bybit", price: number, fail?: "batch" | "candles" | "hourly", history = candles) {
   const reads: string[] = [];
   const marketData: MarketDataPort = {
     fetchKlines: async (query) => {
       reads.push(query.timeframe);
       if (fail === "candles" || fail === "hourly" && query.timeframe === "1H") throw new Error("venue unavailable");
-      return candles;
+      return history;
     },
     fetchTickers24h: async () => {
       if (fail === "batch") throw new Error("venue batch unavailable");
@@ -50,7 +50,7 @@ function store(initial: ActiveSetup[] = []) {
 
 test("new scanner fallback selects one exchange for ticker, every timeframe and the committed plan", async () => {
   const binance = source("binance", 100, "candles");
-  const bybit = source("bybit", 200);
+  const bybit = source("bybit", 200, undefined, tape(2, 274));
   const persisted = store();
   const result = await runSdScan(gateway([binance, bybit]), ["BTCUSDT"], persisted);
   const published = [...result.demand, ...result.supply][0];

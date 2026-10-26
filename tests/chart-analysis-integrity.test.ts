@@ -56,6 +56,19 @@ test("an unavailable published plan never silently becomes the local detector's 
   assert.equal(result.pattern.shape?.setup, undefined);
 });
 
+test("an absent published order does not display a retrospective local fill or target", () => {
+  const tape = Array.from({ length: 50 }, (_, seed) => series(400, seed + 1)).find((history) => {
+    const status = detectSupplyDemand(history).setup?.status;
+    return status && ["Filled", "Running", "Target 1 reached"].includes(status);
+  });
+  assert.ok(tape, "the fixture must offer a historical fill or target");
+  const result = analyze(null, { publishedOnly: true }, tape, { ...ticker, lastPrice: tape.at(-1)!.close });
+  assert.deepEqual(result.levels, []);
+  assert.equal(result.pattern.shape?.setup, undefined);
+  assert.equal(result.pattern.name, "No Zone Setup");
+  assert.equal(result.chartData.candles, tape, "market candles remain available without claiming an order");
+});
+
 test("missing published base history suppresses a different detector-generated trading plan", () => {
   const missing = { ...held, zoneBaseTime: candles[0].time - 900 };
   assert.deepEqual(readPublishedSetup(candles, missing, ticker.lastPrice), { status: null, setup: null });

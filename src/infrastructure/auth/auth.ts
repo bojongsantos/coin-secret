@@ -9,6 +9,7 @@ import { sendTransactionalEmail } from "@/infrastructure/email/email-service";
 import { localIPv4Addresses } from "@/infrastructure/auth/local-addresses";
 import { resolveTrustedOrigins } from "@/shared/lib/trusted-origins";
 import { passwordResetThrottle } from "@/infrastructure/auth/password-reset-throttle";
+import { initializeRegistrationTrial } from "@/infrastructure/auth/registration-trial";
 import { z } from "zod";
 
 const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
@@ -39,6 +40,9 @@ export const auth = betterAuth({
     lanAddresses: development ? localIPv4Addresses() : [],
   }),
   database: prismaAdapter(prisma, { provider: "postgresql" }),
+  databaseHooks: {
+    user: { create: { after: async (user) => initializeRegistrationTrial(user.id) } },
+  },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path.startsWith("/reset-password/")) throw new APIError("NOT_FOUND", { message: "Not found." });
@@ -67,11 +71,17 @@ export const auth = betterAuth({
     requireEmailVerification: true,
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
+    // A failed post-create trial hook can leave an unverified auth user behind.
+    // Registration retry repairs it using the original date, never a new week.
+    onExistingUserSignUp: async ({ user }) => {
+      if (!user.emailVerified) await initializeRegistrationTrial(user.id);
+    },
   },
   emailVerification: {
     sendOnSignUp: true,
     sendOnSignIn: false,
     autoSignInAfterVerification: false,
+    beforeEmailVerification: async (user) => initializeRegistrationTrial(user.id),
   },
   plugins: [emailOTP({
     overrideDefaultEmailVerification: true,

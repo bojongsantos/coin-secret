@@ -213,6 +213,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       },
       baseIndex,
       history[history.length - 1].close,
+      setup.firstSeenAt.getTime() / 1000,
     );
 
     // Marked as looked at whatever the answer, so the queue moves on.
@@ -330,7 +331,7 @@ async function resolveResults(now: Date): Promise<number> {
       continue;
     }
 
-    const life = traceSetupLifecycle(history, plan, baseIndex, history[history.length - 1].close);
+    const life = traceSetupLifecycle(history, plan, baseIndex, history[history.length - 1].close, setup.firstSeenAt.getTime() / 1000);
 
     // Not finished, or finished the wrong way. Either way there is no proof to
     // publish; the stop is what the loop below records so the sweep moves on.

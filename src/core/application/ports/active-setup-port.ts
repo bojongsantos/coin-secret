@@ -11,6 +11,8 @@ import type { MarketExchange } from "@/core/domain/market/exchange";
  * belongs to the reader until price finishes it.
  */
 export interface ActiveSetup {
+  /** Immutable first publication, in epoch seconds (including milliseconds). */
+  publishedAt?: number;
   /** Null means a legacy setup whose original price feed was never recorded. */
   exchange?: MarketExchange | null;
   symbol: string;

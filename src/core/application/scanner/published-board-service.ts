@@ -17,6 +17,7 @@ const exchange = z.enum(["binance", "bybit"]);
 const finite = z.number().finite();
 const price = finite.positive();
 const hitSchema = z.object({
+  publishedAt: finite.positive().optional(),
   exchange,
   symbol: z.string(), base: z.string(), timeframe: z.enum(["15m", "1H"]),
   zoneType: z.enum(["demand", "supply"]), strength: z.string(),
@@ -90,7 +91,7 @@ function currentBoard(result: SdScanResult, active: ActiveSetup[]): SdScanResult
       || setup.exchange !== hit.exchange
       || (["entry", "target1", "target2", "stopLoss", "zoneTop", "zoneBottom", "confidence"] as const)
         .some((field) => setup[field] !== hit[field])) return [];
-    return [{ ...hit, status: setup.status }];
+    return [{ ...hit, status: setup.status, ...(setup.publishedAt === undefined ? {} : { publishedAt: setup.publishedAt }) }];
   });
   const demand = filter(result.demand);
   const supply = filter(result.supply);

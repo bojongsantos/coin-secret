@@ -88,7 +88,10 @@ export function AccountModule({ user }: { user: CurrentUserDto }) {
           </div>
           <p className="mt-2 text-[13px] text-muted">{t("billing.proPitch")}</p>
           {pro ? (
-            <p className="mt-4 text-[13px] font-semibold text-positive">{t("billing.proActive")}</p>
+            <div className="mt-4 text-[13px]">
+              <p className="font-semibold text-positive">{t(user.accessSource === "trial" ? "billing.trialActive" : "billing.proActive")}</p>
+              {user.accessExpiresAt && <p className="mt-1 text-muted">{t("billing.accessUntil", { date: new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(user.accessExpiresAt)) })}</p>}
+            </div>
           ) : (
             <Link
               href="/pricing"

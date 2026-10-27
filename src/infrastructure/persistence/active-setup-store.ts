@@ -42,12 +42,14 @@ export function createActiveSetupStore(
   async loadActive(symbols: string[], signal?: AbortSignal): Promise<ActiveSetup[]> {
     if (symbols.length === 0) return [];
     const rows = await readRows("active", () => database.trackedSetup.findMany({
-      where: { symbol: { in: symbols }, archivedAt: null, status: { notIn: TERMINAL } },
-      // Newest first, so the de-duplication below keeps the current one when a
-      // symbol somehow carries more than one live row.
-      orderBy: { updatedAt: "desc" },
+      where: { symbol: { in: symbols } },
+      // Capture checks also update old rows. Only publication order identifies
+      // the current plan; a later check must never bring an older one back.
+      orderBy: [{ firstSeenAt: "desc" }, { id: "desc" }],
+      distinct: ["symbol"],
       select: {
         signature: true,
+        archivedAt: true,
         updatedAt: true,
         firstSeenAt: true,
         exchange: true,
@@ -69,6 +71,9 @@ export function createActiveSetupStore(
     const bySymbol = new Map<string, ActiveSetup>();
     for (const row of rows) {
       if (bySymbol.has(row.symbol)) continue;
+      // Select the latest publication before excluding closed rows. Filtering
+      // them in SQL would expose an older unfinished plan for the same coin.
+      if (row.archivedAt || TERMINAL.includes(row.status)) continue;
       // A row written before the column existed cannot be re-read: its zone
       // has no identity, so it is left to the archive and a fresh setup is
       // chosen instead of pinning the reader to a plan we cannot locate.

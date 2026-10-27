@@ -17,6 +17,7 @@ function setup(symbol: string, zoneBaseTime = 1000, status = "Running"): ActiveS
 }
 
 interface StoredSetup extends ActiveSetup {
+  id?: string;
   archivedAt?: Date | null;
   archiveReason?: string | null;
   updatedAt?: Date;
@@ -52,14 +53,33 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
     "@/core/domain/analysis/setup-signature": { setupSignature },
     "@/shared/lib/async": { mapConcurrent },
     "@/infrastructure/database/prisma": { prisma: { trackedSetup: {
-      findMany: async ({ where }: { where: { symbol: { in: string[] }; archivedAt?: null; status?: { notIn: string[] };
-        zoneBaseTime?: { gte: number }; OR?: Array<{ status?: { in: string[] }; archivedAt?: { not: null } }> } }) =>
-        [...rows.values()].filter((row) => where.symbol.in.includes(row.symbol)
+      findMany: async ({ where, orderBy, distinct }: { where: { symbol: { in: string[] }; archivedAt?: null; status?: { notIn: string[] };
+        zoneBaseTime?: { gte: number }; OR?: Array<{ status?: { in: string[] }; archivedAt?: { not: null } }> };
+        orderBy?: Record<string, "asc" | "desc"> | Array<Record<string, "asc" | "desc">>; distinct?: string[] }) => {
+        const selected = [...rows.values()].filter((row) => where.symbol.in.includes(row.symbol)
           && (where.archivedAt !== null || !row.archivedAt)
           && (!where.status || !where.status.notIn.includes(row.status))
           && (!where.zoneBaseTime || row.zoneBaseTime >= where.zoneBaseTime.gte)
           && (!where.OR || where.OR.some((condition) => condition.status?.in.includes(row.status) || condition.archivedAt && row.archivedAt)))
-          .map((row) => ({ ...row, signature: setupSignature(row), firstSeenAt: new Date((row.publishedAt ?? 0) * 1000), updatedAt: row.updatedAt ?? new Date(0) })),
+          .map((row) => ({ ...row, id: row.id ?? setupSignature(row), signature: setupSignature(row), firstSeenAt: new Date((row.publishedAt ?? 0) * 1000), updatedAt: row.updatedAt ?? new Date(0) }));
+        const clauses = Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : [];
+        selected.sort((a, b) => {
+          for (const clause of clauses) for (const [field, direction] of Object.entries(clause)) {
+            const left = a[field as keyof typeof a];
+            const right = b[field as keyof typeof b];
+            const compared = String(left instanceof Date ? left.toISOString() : left).localeCompare(String(right instanceof Date ? right.toISOString() : right));
+            if (compared) return direction === "asc" ? compared : -compared;
+          }
+          return 0;
+        });
+        const seen = new Set<string>();
+        return distinct ? selected.filter(row => {
+          const key = distinct.map(field => String(row[field as keyof typeof row])).join("|");
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }) : selected;
+      },
       updateMany: ({ where, data }: { where: { signature: string; exchange: string | null; archivedAt: null; status: string | { notIn: string[] }; updatedAt?: Date }; data: Pick<ActiveSetup, "status" | "zoneBaseTime"> }) => query(where.signature, "update", () => {
         const row = rows.get(where.signature);
         if (!row || row.archivedAt || (row.exchange ?? null) !== where.exchange
@@ -148,6 +168,35 @@ test("publication time is read from firstSeenAt and remains immutable across sta
   assert.equal(observed.publishedAt, initial.publishedAt);
   await store.persist([{ ...observed, status: "Target 1 reached" }]);
   assert.equal((await store.loadActive([initial.symbol]))[0].publishedAt, initial.publishedAt);
+});
+
+test("capture updates cannot switch the current coin back to an older publication", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  const older = { ...setup("BTCUSDT", recent, "Target 1 reached"), exchange: "binance" as const, publishedAt: recent + 100, updatedAt: new Date() };
+  const current = { ...setup("BTCUSDT", recent + 900, "Running"), exchange: "binance" as const, publishedAt: recent + 1000, entry: 200, updatedAt: new Date(0) };
+  const f = fixture([older, current]);
+  for (const store of [f.store, f.transaction(), f.transaction()]) {
+    const [held] = await store.loadActive([current.symbol]);
+    assert.equal(setupSignature(held), setupSignature(current));
+    assert.equal(held.entry, 200);
+    assert.equal(held.publishedAt, current.publishedAt);
+    assert.equal(held.status, "Running");
+    f.rows.get(setupSignature(older))!.updatedAt = new Date(Date.now() + 3600000);
+  }
+  assert.equal(f.rows.size, 2, "checking an older plan preserves its archive record");
+});
+
+test("finishing or archiving the current publication cannot resurrect an older active plan", async () => {
+  const recent = Math.floor(Date.now() / 1000) - 9000;
+  for (const status of ["Target 2 reached", "Invalidated (SL hit)", "Missed", "archived"]) {
+    const older = { ...setup("BTCUSDT", recent), exchange: "binance" as const, publishedAt: recent + 100 };
+    const current = { ...setup("BTCUSDT", recent + 900, status === "archived" ? "Running" : status), exchange: "binance" as const,
+      publishedAt: recent + 1000, archivedAt: status === "archived" ? new Date() : null };
+    const f = fixture([older, current]);
+    assert.equal((await f.store.loadActive([current.symbol])).length, 0, status);
+    assert.equal(f.rows.get(setupSignature(older))?.status, "Running", "do not rewrite historical outcomes to hide them");
+    assert.equal(f.rows.size, 2);
+  }
 });
 
 test("a fenced scan cannot overwrite a concurrently published row that was absent from its initial read", async () => {

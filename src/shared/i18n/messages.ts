@@ -347,8 +347,8 @@ export const MESSAGES = {
     en: "Carry on to the CoinSecret dashboard.",
   },
   "auth.signUpBlurb": {
-    id: "Verifikasi email terlebih dahulu untuk mengaktifkan akun Free.",
-    en: "Verify your email first to activate your Free account.",
+    id: "Verifikasi email terlebih dahulu untuk mengaktifkan akun Anda.",
+    en: "Verify your email first to activate your account.",
   },
   "auth.verifyEmailNotice": {
     id: "Jika alamat ini dapat didaftarkan, kode verifikasi telah dikirim. Periksa kotak masuk dan spam sebelum login.",

@@ -178,12 +178,13 @@ function Column({
   maxHeight: number;
   onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
 }) {
-  const { authenticated } = usePlan();
+  const { authenticated, canAccess } = usePlan();
   const pathname = usePathname();
   const max = Math.max(1, ...hits.map((hit) => hit.volume24h));
   const hiddenCount = Math.max(0, totalCount - hits.length);
   const dashboard = Boolean(onSelect);
-  const showBlurredPreview = hiddenCount > 0 && dashboard && hits.length > 0;
+  const restricted = !canAccess("signals");
+  const showBlurredPreview = restricted && dashboard && hits.length > 0;
   return (
     <section className="cs-card flex min-w-0 flex-col p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
@@ -236,11 +237,11 @@ function Column({
           </div>
         )}
       </div>
-      {hiddenCount > 0 && (
+      {restricted && (
         <Link
           href={authenticated ? "/pricing" : `/login?next=${encodeURIComponent(pathname)}`}
           className="cs-primary mt-4 flex items-center justify-center gap-2 rounded-full px-4 py-3 text-[13px] font-semibold text-white"
-          title={t("zones.moreSetups", { count: hiddenCount })}
+          title={hiddenCount > 0 ? t("zones.moreSetups", { count: hiddenCount }) : undefined}
         >
           <Lock className="size-3.5" aria-hidden /> {t(authenticated ? "common.unlockPro" : "account.signIn")}
         </Link>

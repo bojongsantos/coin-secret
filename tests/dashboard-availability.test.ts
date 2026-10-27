@@ -44,7 +44,7 @@ function ui() {
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/link": { default: "link" },
     "next/navigation": { usePathname: () => "/dashboard" },
-    "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated: false }) },
+    "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated: false, canAccess: () => false }) },
     "lucide-react": { CandlestickChart: "icon", Clock3: "clock", Loader2: "loader", Lock: "lock", RefreshCw: "refresh" },
     "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) => translate("en", key, vars), locale: "en" }) },
     "@/presentation/ui/coin-icon": { CoinIcon: "coin" },
@@ -78,13 +78,43 @@ test("a partial scan does not declare an empty side complete", () => {
 test("locked dashboard rows send guests to sign in and authenticated Free users to Pro pricing", () => {
   for (const authenticated of [false, true]) {
     const api = load("src/presentation/features/signals/signals-board.tsx", {
-      ...ui(), "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated }) },
+      ...ui(), "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated, canAccess: () => false }) },
     });
     const rendered = api.SignalsBoard({ demand: [], supply: [], demandTotal: 4, loading: false, error: null, onRefresh() {} });
     const action = nodesOf(rendered).find(({ type }) => type === "link");
     assert.equal(action?.props.href, authenticated ? "/pricing" : "/login?next=%2Fdashboard");
     assert.match(textOf(action), authenticated ? /Unlock Pro/ : /Sign in/);
   }
+});
+
+test("both dashboard columns keep access prompts with zero, one or three setups and no withheld rows", () => {
+  for (const authenticated of [false, true]) {
+    for (const count of [0, 1, 3]) {
+      const api = load("src/presentation/features/signals/signals-board.tsx", {
+        ...ui(), "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated, canAccess: () => false }) },
+      });
+      const hits = Array.from({ length: count }, (_, index) => ({ symbol: `COIN${index}USDT`, base: `COIN${index}`, direction: "long", confidence: 80, exchange: "binance", volume24h: 100, change24h: 1, timeframe: "15m", status: "active" }));
+      const rendered = api.SignalsBoard({ demand: hits, supply: hits, loading: false, error: null, onRefresh() {}, onSelect() {} });
+      const nodes = nodesOf(rendered);
+      const actions = nodes.filter(({ type }) => type === "link");
+      assert.equal(actions.length, 2);
+      for (const action of actions) {
+        assert.equal(action.props.href, authenticated ? "/pricing" : "/login?next=%2Fdashboard");
+        assert.match(textOf(action), authenticated ? /Unlock Pro/ : /Sign in/);
+        assert.equal(action.props.title, undefined, "do not invent withheld results");
+      }
+      assert.equal(nodes.filter(({ props }) => String(props.className).includes("blur-[3px]")).length, count > 0 ? 2 : 0);
+    }
+  }
+});
+
+test("full Signals access including an active trial has no locked previews or upgrade prompts", () => {
+  const api = load("src/presentation/features/signals/signals-board.tsx", {
+    ...ui(), "@/presentation/features/access/plan-provider": { usePlan: () => ({ authenticated: true, canAccess: () => true }) },
+  });
+  const hit = { symbol: "BTCUSDT", base: "BTC", direction: "long", confidence: 80, volume24h: 100, change24h: 1, timeframe: "15m", status: "active" };
+  const rendered = api.SignalsBoard({ demand: [hit], supply: [hit], demandTotal: 4, supplyTotal: 4, loading: false, error: null, onRefresh() {}, onSelect() {} });
+  assert.ok(nodesOf(rendered).every(({ type, props }) => type !== "link" && !String(props.className).includes("blur-[3px]")));
 });
 
 test("Top Setups distinguishes failed fetching from a successful empty scan", () => {

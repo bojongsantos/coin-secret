@@ -2,6 +2,7 @@ import { requireAdmin } from "@/infrastructure/auth/current-user";
 import { prisma } from "@/infrastructure/database/prisma";
 import { apiError } from "@/shared/server/http";
 import { adminPage } from "@/shared/server/admin-request";
+import { storedEmailRisk } from "@/infrastructure/auth/registration-email";
 
 export async function GET(request: Request) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
         subscription: { select: { status: true, provider: true, currentPeriodStart: true, currentPeriodEnd: true } },
       },
     });
-    return Response.json({ users: users.slice(0, take), page, hasMore: users.length > take }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ users: users.slice(0, take).map(user => ({ ...user, emailRisk: storedEmailRisk(user.email) })), page, hasMore: users.length > take }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiError(error);
   }

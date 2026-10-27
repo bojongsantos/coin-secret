@@ -35,14 +35,14 @@ function fixture(options: { plan?: string; existing?: boolean; failUpdate?: bool
   return { initialize: exports.initializeRegistrationTrial as (id: string) => Promise<void>, state: () => state, createdAt };
 }
 
-test("new registrations receive exactly seven days and expire at the boundary", async () => {
+test("new registrations receive exactly fourteen days and expire at the boundary", async () => {
   const f = fixture(); await f.initialize("new-user");
   assert.equal(f.state().plan, "PREMIUM");
   const current = f.state().subscription!;
   assert.equal(current.provider, "trial");
   assert.equal((current.currentPeriodStart as Date).getTime(), f.createdAt.getTime());
   const end = current.currentPeriodEnd as Date;
-  assert.equal(end.getTime() - f.createdAt.getTime(), 7 * 86_400_000);
+  assert.equal(end.getTime() - f.createdAt.getTime(), 14 * 86_400_000);
   assert.equal(subscriptionRules.effectivePlan("PREMIUM", end, new Date(end.getTime() - 1)), "PREMIUM");
   assert.equal(subscriptionRules.effectivePlan("PREMIUM", end, end), "FREE");
 });
@@ -52,12 +52,12 @@ test("registration retries and email verification keep the original trial end", 
   await f.initialize("same-user"); const end = f.state().subscription!.currentPeriodEnd;
   await f.initialize("same-user");
   assert.equal(f.state().subscription!.currentPeriodEnd, end);
-  assert.equal((end as Date).getTime(), f.createdAt.getTime() + 7 * 86_400_000);
+  assert.equal((end as Date).getTime(), f.createdAt.getTime() + 14 * 86_400_000);
   assert.equal(f.state().writes, 1);
 });
 
 test("trial repair never overwrites paid, manual, or expired registration access", async () => {
-  for (const options of [{ plan: "PREMIUM" }, { existing: true }, { createdAt: new Date(Date.now() - 8 * 86_400_000) }]) {
+  for (const options of [{ plan: "PREMIUM" }, { existing: true }, { createdAt: new Date(Date.now() - 15 * 86_400_000) }]) {
     const f = fixture(options); const before = f.state(); await f.initialize("existing-user");
     assert.deepEqual(f.state(), before);
     assert.equal(f.state().writes, 0);

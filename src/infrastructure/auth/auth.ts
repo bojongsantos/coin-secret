@@ -10,6 +10,7 @@ import { localIPv4Addresses } from "@/infrastructure/auth/local-addresses";
 import { resolveTrustedOrigins } from "@/shared/lib/trusted-origins";
 import { passwordResetThrottle } from "@/infrastructure/auth/password-reset-throttle";
 import { initializeRegistrationTrial } from "@/infrastructure/auth/registration-trial";
+import { registrationEmailIssue } from "@/infrastructure/auth/registration-email";
 import { z } from "zod";
 
 const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
@@ -46,6 +47,14 @@ export const auth = betterAuth({
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path.startsWith("/reset-password/")) throw new APIError("NOT_FOUND", { message: "Not found." });
+      if (ctx.path === "/sign-up/email") {
+        const email = typeof ctx.body?.email === "string" ? ctx.body.email.trim().toLowerCase() : "";
+        if (email.length > 254 || !z.email().safeParse(email).success) throw new APIError("BAD_REQUEST", { message: "Invalid email address." });
+        const issue = await registrationEmailIssue(email);
+        if (issue === "unavailable") throw new APIError("SERVICE_UNAVAILABLE", { code: "EMAIL_CHECK_UNAVAILABLE", message: "Email provider verification is temporarily unavailable. Please try again." });
+        if (issue) throw new APIError("BAD_REQUEST", { code: "EMAIL_DOMAIN_NOT_ALLOWED", message: issue === "disposable" ? "Temporary email addresses are not accepted. Use a permanent email address." : "Use a real email address from a domain that can receive mail." });
+        ctx.body.email = email;
+      }
       const action = ctx.path === "/email-otp/request-password-reset" ||
         (ctx.path === "/email-otp/send-verification-otp" && ctx.body?.type === "forget-password")
         ? "send" : ctx.path === "/email-otp/reset-password" ? "verify" : null;
@@ -72,7 +81,7 @@ export const auth = betterAuth({
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
     // A failed post-create trial hook can leave an unverified auth user behind.
-    // Registration retry repairs it using the original date, never a new week.
+    // Registration retry repairs it using the original date, never a new trial.
     onExistingUserSignUp: async ({ user }) => {
       if (!user.emailVerified) await initializeRegistrationTrial(user.id);
     },

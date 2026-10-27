@@ -10,6 +10,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { emailOTP } from "better-auth/plugins";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createFixedWindowLimiter } from "@/core/application/rate-limit/fixed-window";
+import * as subscriptionRules from "@/core/domain/access/subscription";
 
 function load(path: string, dependencies: Record<string, unknown>, extra = {}) {
   const exports: Record<string, unknown> = {};
@@ -130,7 +131,7 @@ test("production refuses demo authentication and reset while regular accounts re
   assert.equal((await f.post(request("request-password-reset", JSON.stringify({ email: "real@example.invalid" })))).status, 204);
 });
 
-function configuredAuth(sent: { email: string; html: string }[], throttle: (email: string, action: string) => Promise<number> = async () => 0, initializeRegistrationTrial: (id: string) => Promise<void> = async () => undefined) {
+function configuredAuth(sent: { email: string; html: string }[], throttle: (email: string, action: string) => Promise<number> = async () => 0, initializeRegistrationTrial: (id: string) => Promise<void> = async () => undefined, registrationEmailIssue: (email: string) => Promise<string | null> = async () => null) {
   return load("src/infrastructure/auth/auth.ts", {
     "server-only": {}, "better-auth": { betterAuth: (options: unknown) => options },
     "better-auth/api": { APIError, createAuthMiddleware }, zod,
@@ -141,6 +142,7 @@ function configuredAuth(sent: { email: string; html: string }[], throttle: (emai
     "@/shared/lib/trusted-origins": { resolveTrustedOrigins: () => ["http://localhost:3000"] },
     "@/infrastructure/auth/password-reset-throttle": { passwordResetThrottle: throttle },
     "@/infrastructure/auth/registration-trial": { initializeRegistrationTrial },
+    "@/infrastructure/auth/registration-email": { registrationEmailIssue },
   }).auth as Parameters<typeof betterAuth>[0];
 }
 
@@ -204,6 +206,29 @@ test("actual auth configuration uses one 6-digit reset email, revokes sessions a
   const wrong = lockedOtp === "000000" ? "111111" : "000000";
   for (let i = 0; i < 5; i++) assert.equal((await send("email-otp/reset-password", { email, otp: wrong, password: nextPassword })).status, 400);
   assert.equal((await send("email-otp/reset-password", { email, otp: lockedOtp, password: nextPassword })).status, 403, "Five wrong attempts invalidate the code");
+});
+
+test("registration email policy rejects blocked or uncheckable domains before creating users, trials or mail", async () => {
+  const sent: { email: string; html: string }[] = [];
+  const checked: string[] = [];
+  let trials = 0;
+  const configured = configuredAuth(sent, async () => 0, async () => { trials++; }, async email => {
+    checked.push(email);
+    return email.endsWith("@example.com") ? "reserved" : email.endsWith("@maxxspace.com") ? "disposable" : email.endsWith("@dnsfail.co.id") ? "unavailable" : null;
+  });
+  const instance = betterAuth({ ...configured, database: memoryAdapter({ user: [], session: [], account: [], verification: [] }), secret: randomBytes(32).toString("base64"), rateLimit: { enabled: false }, logger: { disabled: true } });
+  const context = await instance.$context;
+  const password = randomBytes(24).toString("base64");
+  for (const [email, status] of [["test@example.com", 400], ["test@maxxspace.com", 400], ["test@dnsfail.co.id", 503]] as const) {
+    const response = await instance.handler(request("sign-up/email", JSON.stringify({ email, password, name: "Test" }), { origin: "http://localhost:3000" }));
+    assert.equal(response.status, status);
+    assert.equal(await context.internalAdapter.findUserByEmail(email), null);
+  }
+  assert.equal(sent.length, 0); assert.equal(trials, 0);
+  const accepted = await instance.handler(request("sign-up/email", JSON.stringify({ email: "Permanent@Gmail.com", password, name: "Test" }), { origin: "http://localhost:3000" }));
+  assert.equal(accepted.status, 200); assert.equal(accepted.headers.get("set-cookie"), null);
+  assert.equal(checked.at(-1), "permanent@gmail.com"); assert.equal(trials, 1);
+  assert.equal((await context.internalAdapter.findUserByEmail("permanent@gmail.com"))?.user.emailVerified, false);
 });
 
 test("trial infrastructure failure leaves email unverified and a fresh OTP can finish verification", async () => {
@@ -281,6 +306,7 @@ test("unverified login offers verification without sending mail or creating a se
     "@/presentation/ui/brand-logo": { BrandLockup: "brand", BRAND_NAME: "CoinSecret" },
     "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: string) => key }) },
     "@/presentation/ui/password-field": { PasswordField: "password" },
+    "@/core/domain/access/subscription": subscriptionRules,
   }, { URLSearchParams }).AuthForm as (props: { mode: string }) => unknown;
   const render = () => { cursor = 0; return nodes(component({ mode: "login" })); };
   const input = render().find((view) => view.type === "input" && view.props.type === "email")!;

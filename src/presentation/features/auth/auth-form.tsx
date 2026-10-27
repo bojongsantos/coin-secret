@@ -9,6 +9,7 @@ import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 import { BrandLockup, BRAND_NAME } from "@/presentation/ui/brand-logo";
 import { useT } from "@/presentation/hooks/use-translate";
 import { PasswordField } from "@/presentation/ui/password-field";
+import { REGISTRATION_TRIAL_DAYS } from "@/core/domain/access/subscription";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const { t } = useT();
@@ -66,6 +67,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         </Link>
         <h1 className="text-xl font-bold">{t(mode === "login" ? "auth.signInTitle" : "auth.signUpTitle")}</h1>
         <p className="mt-1 text-sm text-muted">{t(mode === "login" ? "auth.signInBlurb" : "auth.signUpBlurb")}</p>
+        {mode === "register" && <p className="mt-3 text-sm text-accent-blue">{t("auth.trialHint", { days: REGISTRATION_TRIAL_DAYS })}</p>}
         <form onSubmit={submit} className="mt-6 space-y-4">
           {mode === "register" && <label className="block text-xs font-semibold">{t("auth.name")}<input required minLength={2} maxLength={80} value={name} onChange={(e) => setName(e.target.value)} className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:border-accent/60 focus:outline-none" /></label>}
           <label className="block text-xs font-semibold">{t("auth.email")}<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:border-accent/60 focus:outline-none" /></label>

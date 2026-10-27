@@ -1,6 +1,6 @@
 import type { SubscriptionPlan } from "@/core/domain/identity";
 
-export const REGISTRATION_TRIAL_DAYS = 7;
+export const REGISTRATION_TRIAL_DAYS = 14;
 
 /** One trial per new registration; logging in again never restarts it. */
 export function registrationTrialPeriod(createdAt: Date) {

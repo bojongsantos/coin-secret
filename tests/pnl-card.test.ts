@@ -148,9 +148,7 @@ test("a clip path id survives a ticker that is not a plain word", () => {
 });
 
 test("logos are looked for at Binance first, then the older source", () => {
-  // Measured across the whole watchlist: Binance answered for 193 of 193 and
-  // the older source for 138. The 55 it missed included PEPE, TRUMP, ORDI and
-  // IOTA, every one of which showed two grey letters where a logo belonged.
+  // Most assets retain the existing CDN order; known placeholders are excluded separately.
   const sources = coinIconSources("PEPEUSDT");
   assert.equal(sources.length, 2, "one CDN is a single point of failure");
   assert.match(sources[0], /^https:\/\/bin\.bnbstatic\.com\/static\/assets\/logos\/PEPE\.png$/);
@@ -159,4 +157,10 @@ test("logos are looked for at Binance first, then the older source", () => {
   // The pair suffix never reaches the URL, in either case.
   for (const url of coinIconSources("btcusdt")) assert.ok(!/usdt/i.test(url), url);
   assert.deepEqual(coinIconSources(""), []);
+});
+
+test("1INCH skips the Binance image that returns a black placeholder with HTTP 200", () => {
+  for (const symbol of ["1INCH", "1INCHUSDT", "1inchusdt"]) {
+    assert.deepEqual(coinIconSources(symbol), ["https://assets.coincap.io/assets/icons/1inch@2x.png"]);
+  }
 });

@@ -1,7 +1,7 @@
 import { tradableSignalSymbols } from "@/config/symbol-filters";
 
 /**
- * The board as it comes off the exchange's volume ranking.
+ * The curated board, initially seeded from the exchange's volume ranking.
  *
  * Kept whole so the source of the list stays obvious; the filter below is what
  * the app actually scans.
@@ -12,6 +12,7 @@ const RANKED_BOARD = [
   "BNBUSDT",
   "XRPUSDT",
   "SOLUSDT",
+  "HYPEUSDT",
   "TRXUSDT",
   "DOGEUSDT",
   "USDSUSDT",

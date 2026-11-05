@@ -5,6 +5,8 @@ import type { ActiveSetupPort } from "@/core/application/ports/active-setup-port
 import type { MarketDataPort } from "@/core/application/ports/market-data-port";
 import { rankTopSetups, runSdScan } from "@/core/application/scanner/supply-demand-scan-service";
 import { visibleSignalsFor } from "@/core/domain/analysis/signal-display";
+import { planFor, resolveFeatureAccess } from "@/core/domain/access/entitlement-rules";
+import { effectivePlan } from "@/core/domain/access/subscription";
 import type { Candle } from "@/core/domain/models";
 
 function candles(): Candle[] {
@@ -23,8 +25,42 @@ function candles(): Candle[] {
 const ticker = (symbol: string, index = 0) => ({ symbol, lastPrice: 100, priceChange: 1, priceChangePercent: 1,
   highPrice: 101, lowPrice: 99, quoteVolume: 1000 + index, volume: 10 });
 
-test("all 193 default symbols retain their rankings and access filtering within the cold market budget", async (t) => {
-  assert.equal(DEFAULT_WATCHLIST.length, 193);
+test("HYPE participates in the shared scan and follows each account's signal allowance", async () => {
+  assert.ok(DEFAULT_WATCHLIST.includes("HYPEUSDT"), "HYPE must not depend on a paid custom-symbol request");
+  assert.equal(new Set(DEFAULT_WATCHLIST).size, DEFAULT_WATCHLIST.length);
+  const queried: string[] = [];
+  const tape = candles();
+  const scan = await runSdScan({
+    fetchKlines: async ({ symbol, timeframe }) => { queried.push(`${symbol}:${timeframe}`); return tape; },
+    fetchTicker24h: async (symbol) => ticker(symbol),
+    fetchTickers24h: async (symbols) => symbols.map(ticker),
+  }, DEFAULT_WATCHLIST);
+  assert.deepEqual(queried.filter((key) => key.startsWith("HYPEUSDT:")).sort(), ["HYPEUSDT:15m", "HYPEUSDT:1H"]);
+  const all = [...scan.demand, ...scan.supply];
+  const hype = all.find((hit) => hit.symbol === "HYPEUSDT");
+  assert.ok(hype, "a qualifying HYPE fixture reaches the shared board");
+  const board = { demand: [...all.filter((hit) => hit.symbol !== "HYPEUSDT").slice(0, 3), hype], supply: [] };
+  const now = new Date("2026-11-05T00:00:00Z");
+  const cohorts = [
+    { name: "guest", plan: "FREE", end: null, full: false },
+    { name: "Free user", plan: "FREE", end: null, full: false },
+    { name: "active trial", plan: "PREMIUM", end: new Date("2026-11-06T00:00:00Z"), full: true },
+    { name: "expired trial", plan: "PREMIUM", end: now, full: false },
+    { name: "Pro user", plan: "PREMIUM", end: new Date("2026-12-01T00:00:00Z"), full: true },
+    { name: "admin with Pro", plan: "PREMIUM", end: null, full: true },
+  ] as const;
+  for (const cohort of cohorts) {
+    const plan = planFor(effectivePlan(cohort.plan, cohort.end, now));
+    const full = resolveFeatureAccess({ plan, feature: "signals" });
+    assert.equal(full, cohort.full, cohort.name);
+    const visible = visibleSignalsFor(board, full);
+    assert.equal(visible.demandTotal, 4, cohort.name);
+    assert.equal(visible.demand.some((hit) => hit.symbol === "HYPEUSDT"), cohort.full, cohort.name);
+  }
+});
+
+test("all 194 default symbols retain their rankings and access filtering within the cold market budget", async (t) => {
+  assert.equal(DEFAULT_WATCHLIST.length, 194);
   const tape = candles();
   const baselinePort: MarketDataPort = {
     fetchKlines: async () => tape,
@@ -74,10 +110,10 @@ test("all 193 default symbols retain their rankings and access filtering within 
   const result = await pending;
   assert.equal(Date.now() - started, 28_000, "metadata runs together, then a lazy batch and 16 symbols share each market wave");
   assert.equal(peak, 16);
-  assert.equal(klineCalls, 386);
+  assert.equal(klineCalls, 388);
   assert.equal(signals.size, 1, "tickers and every candle read share the scan deadline");
   assert.ok([...signals][0] instanceof AbortSignal);
-  assert.equal(result.market.length, 193);
+  assert.equal(result.market.length, 194);
   assert.deepEqual(result.errors, []);
   assert.deepEqual(rankTopSetups(result, 5), rankTopSetups(expected, 5));
   assert.deepEqual(visibleSignalsFor(result, true), visibleSignalsFor(expected, true));

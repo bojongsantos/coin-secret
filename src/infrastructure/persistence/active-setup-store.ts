@@ -11,7 +11,7 @@ import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import { isMarketExchange } from "@/core/domain/market/exchange";
 import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
-import { prisma } from "@/infrastructure/database/prisma";
+import { marketReadPrisma, prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { readSetupRows } from "@/infrastructure/database/setup-read";
 import { mapConcurrent } from "@/shared/lib/async";
@@ -27,7 +27,9 @@ import { mapConcurrent } from "@/shared/lib/async";
 export function createActiveSetupStore(
   database: Pick<Prisma.TransactionClient, "trackedSetup"> = prisma,
   transactional = false,
+  readDatabase: Pick<Prisma.TransactionClient, "trackedSetup"> = database,
 ): ActiveSetupPort {
+  const reads = transactional ? database : readDatabase;
   const observed = new Map<string, { updatedAt: Date; status: string }>();
   const readRows: typeof readSetupRows = transactional
     ? async (_read, work, signal) => {
@@ -41,7 +43,7 @@ export function createActiveSetupStore(
   return {
   async loadActive(symbols: string[], signal?: AbortSignal): Promise<ActiveSetup[]> {
     if (symbols.length === 0) return [];
-    const rows = await readRows("active", () => database.trackedSetup.findMany({
+    const rows = await readRows("active", () => reads.trackedSetup.findMany({
       where: { symbol: { in: symbols } },
       // Capture checks also update old rows. Only publication order identifies
       // the current plan; a later check must never bring an older one back.
@@ -110,7 +112,7 @@ export function createActiveSetupStore(
     // slowest timeframe scanned can never be re-detected and does not need
     // remembering here.
     const oldest = Math.floor(Date.now() / 1000) - ZONE_SCAN_WINDOW * TIMEFRAME_SECONDS["1H"];
-    const rows = await readRows("retired", () => database.trackedSetup.findMany({
+    const rows = await readRows("retired", () => reads.trackedSetup.findMany({
       where: {
         symbol: { in: symbols },
         zoneBaseTime: { gte: oldest },
@@ -230,7 +232,7 @@ export function createActiveSetupStore(
   };
 }
 
-export const activeSetupStore = createActiveSetupStore();
+export const activeSetupStore = createActiveSetupStore(prisma, false, marketReadPrisma);
 
 const TERMINAL = ["Target 2 reached", "Invalidated (SL hit)", "Missed"];
 

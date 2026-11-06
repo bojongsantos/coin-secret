@@ -15,6 +15,9 @@ function connectionFailure(error: unknown): string | null {
   // preserves them. Match only known driver text, never arbitrary timeouts.
   if (code !== undefined) return null;
   const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  // Only the isolated SELECT pool has this timeout. pg-pool removes the failed
+  // connection before rejecting, so the one retry uses a fresh socket.
+  if (message === "Query read timeout") return "response-timeout";
   if (message.includes("Connection terminated due to connection timeout")) return "connect-timeout";
   if (message.includes("timeout exceeded when trying to connect")) return "pool-timeout";
   if (["Connection terminated unexpectedly", "Client has encountered a connection error and is not queryable", "Client was closed and is not queryable"].some((text) => message.includes(text))) {

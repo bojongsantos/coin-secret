@@ -43,7 +43,7 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
     }
   }
   const exports: { activeSetupStore?: ActiveSetupPort;
-    createActiveSetupStore?: (database: unknown, transactional: boolean) => ActiveSetupPort } = {};
+    createActiveSetupStore?: (database: unknown, transactional: boolean, readDatabase?: unknown) => ActiveSetupPort } = {};
   const dependencies: Record<string, unknown> = {
     "server-only": {},
     "@/core/domain/analysis/setup-lifecycle": lifecycle,
@@ -115,6 +115,21 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
   return { store: exports.activeSetupStore!, factory: exports.createActiveSetupStore!,
     transaction: () => exports.createActiveSetupStore!(database, true), rows, events, peak: () => peak };
 }
+
+test("standalone SELECTs use the isolated read client while transaction SELECTs remain fenced", async () => {
+  const f = fixture();
+  const calls: string[] = [];
+  const writer = { trackedSetup: { findMany: async () => { calls.push("transaction"); return []; } } };
+  const reader = { trackedSetup: { findMany: async () => { calls.push("read-only"); return []; } } };
+  const standalone = f.factory(writer, false, reader);
+  await standalone.loadActive(["BTCUSDT"]);
+  await standalone.loadRetiredZones(["BTCUSDT"]);
+  assert.deepEqual(calls, ["read-only", "read-only"]);
+  const transaction = f.factory(writer, true, reader);
+  await transaction.loadActive(["BTCUSDT"]);
+  await transaction.loadRetiredZones(["BTCUSDT"]);
+  assert.deepEqual(calls, ["read-only", "read-only", "transaction", "transaction"]);
+});
 
 test("a capture advancing a scanned Running setup to Target 1 cannot be overwritten by the fenced scan", async () => {
   const recent = Math.floor(Date.now() / 1000) - 9000;

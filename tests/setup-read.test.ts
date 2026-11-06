@@ -36,6 +36,7 @@ test("installed PrismaPg connection failures retry one fresh SELECT and preserve
     [new Error("Connection terminated due to connection timeout"), "connect-timeout"],
     [new Error("timeout exceeded when trying to connect"), "pool-timeout"],
     [new Error("Connection terminated unexpectedly"), "connection-lost"],
+    [new Error("Query read timeout"), "response-timeout"],
     [Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }), "connection-lost"],
   ]) {
     const f = fixture();

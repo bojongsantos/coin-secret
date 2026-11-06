@@ -1,6 +1,6 @@
 import "server-only";
 import type { SignalsSnapshotPort } from "@/core/application/ports/signals-snapshot-port";
-import { prisma } from "@/infrastructure/database/prisma";
+import { marketReadPrisma, prisma } from "@/infrastructure/database/prisma";
 import { readSetupRows } from "@/infrastructure/database/setup-read";
 import { createActiveSetupStore } from "@/infrastructure/persistence/active-setup-store";
 
@@ -19,7 +19,7 @@ export const signalsSnapshotStore: SignalsSnapshotPort = {
     }, { maxWait: 10_000, timeout: 65_000 });
   },
   async load(signal) {
-    const row = await readSetupRows("snapshot", () => prisma.appSetting.findUnique({
+    const row = await readSetupRows("snapshot", () => marketReadPrisma.appSetting.findUnique({
       where: { key: SNAPSHOT_KEY }, select: { value: true },
     }), signal);
     return row?.value;

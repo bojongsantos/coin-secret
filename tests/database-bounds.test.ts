@@ -6,11 +6,11 @@ import { runInNewContext } from "node:vm";
 import { Client, Pool, type PoolConfig } from "pg";
 import ts from "typescript";
 
-function adapterConfig(): PoolConfig {
-  let config: PoolConfig | undefined;
+function adapterConfig(marketRead = false): PoolConfig {
+  const configs: PoolConfig[] = [];
   const dependencies: Record<string, unknown> = {
     "server-only": {},
-    "@prisma/adapter-pg": { PrismaPg: class { constructor(value: PoolConfig) { config = value; } } },
+    "@prisma/adapter-pg": { PrismaPg: class { constructor(value: PoolConfig) { configs.push(value); } } },
     "@/generated/prisma/client": { PrismaClient: class {} },
   };
   runInNewContext(ts.transpileModule(readFileSync("src/infrastructure/database/prisma.ts", "utf8"), {
@@ -19,9 +19,17 @@ function adapterConfig(): PoolConfig {
     exports: {}, process: { env: { DATABASE_URL: "postgresql://test-user:test-password@127.0.0.1/test-database", NODE_ENV: "production" } },
     require: (name: string) => dependencies[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
   });
-  assert.ok(config);
+  const config = configs[marketRead ? 1 : 0];
+  assert.ok(config, "standalone market reads must have their own native adapter");
   return config;
 }
+
+test("standalone market reads have a native response deadline isolated from write transactions", () => {
+  assert.equal(adapterConfig(true).query_timeout, 10_000);
+  const client = new Client(adapterConfig(true)) as unknown as { getStartupConf(): Record<string, unknown> };
+  assert.equal(client.getStartupConf().options, "-c default_transaction_read_only=on");
+  assert.equal(adapterConfig(false).query_timeout, undefined);
+});
 
 test("database wait limits reach native pg startup parameters without replacing server cancellation with a promise race", () => {
   const config = adapterConfig();

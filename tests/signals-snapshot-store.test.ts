@@ -53,10 +53,10 @@ function fixture() {
   runInNewContext(ts.transpileModule(readFileSync("src/infrastructure/persistence/signals-snapshot-store.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, {
-    exports,
+    exports, performance, console,
     require: (name: string) => {
       if (name === "server-only") return {};
-      if (name === "@/infrastructure/database/prisma") return { prisma: database };
+      if (name === "@/infrastructure/database/prisma") return { signalsWritePrisma: database };
       if (name === "@/infrastructure/database/setup-read") return { readSetupRows: async () => { throw new Error("unexpected standalone read"); } };
       if (name === "@/infrastructure/persistence/active-setup-store") return {
         createActiveSetupStore: (transaction: Transaction, transactional: boolean): ActiveSetupPort => {

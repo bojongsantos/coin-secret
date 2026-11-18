@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 import { Client, Pool, type PoolConfig } from "pg";
 import ts from "typescript";
 
-function adapterConfig(marketRead = false): PoolConfig {
+function adapterConfig(mode: "app" | "read" | "write" = "app"): PoolConfig {
   const configs: PoolConfig[] = [];
   const dependencies: Record<string, unknown> = {
     "server-only": {},
@@ -19,16 +19,25 @@ function adapterConfig(marketRead = false): PoolConfig {
     exports: {}, process: { env: { DATABASE_URL: "postgresql://test-user:test-password@127.0.0.1/test-database", NODE_ENV: "production" } },
     require: (name: string) => dependencies[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
   });
-  const config = configs[marketRead ? 1 : 0];
+  const config = configs[["app", "read", "write"].indexOf(mode)];
   assert.ok(config, "standalone market reads must have their own native adapter");
   return config;
 }
 
 test("standalone market reads have a native response deadline isolated from write transactions", () => {
-  assert.equal(adapterConfig(true).query_timeout, 10_000);
-  const client = new Client(adapterConfig(true)) as unknown as { getStartupConf(): Record<string, unknown> };
+  assert.equal(adapterConfig("read").query_timeout, 10_000);
+  const client = new Client(adapterConfig("read")) as unknown as { getStartupConf(): Record<string, unknown> };
   assert.equal(client.getStartupConf().options, "-c default_transaction_read_only=on");
-  assert.equal(adapterConfig(false).query_timeout, undefined);
+  assert.equal(adapterConfig().query_timeout, undefined);
+});
+
+test("a scan writer uses a fresh connection and PostgreSQL closes an abandoned idle transaction", () => {
+  const config = adapterConfig("write");
+  assert.equal(config.maxUses, 1);
+  assert.equal(config.query_timeout, undefined);
+  const client = new Client(config) as unknown as { getStartupConf(): Record<string, unknown> };
+  assert.equal(client.getStartupConf().idle_in_transaction_session_timeout, "45000");
+  assert.equal(adapterConfig().maxUses, undefined);
 });
 
 test("database wait limits reach native pg startup parameters without replacing server cancellation with a promise race", () => {

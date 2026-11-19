@@ -8,8 +8,24 @@ import { withSerializationRetry } from "@/infrastructure/billing/transaction-ret
 import { HttpError } from "@/shared/server/http";
 
 function serialize(row: NewsArticle): Article {
-  return { ...row, publishedAt: row.publishedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+  return {
+    id: row.id,
+    version: row.version,
+    title: row.title,
+    slug: row.slug,
+    summary: row.summary,
+    body: row.body,
+    category: row.category,
+    coverUrl: row.coverUrl,
+    coverAlt: row.coverAlt,
+    seoTitle: row.seoTitle,
+    seoDescription: row.seoDescription,
+    status: row.status,
+    authorName: row.authorName,
+    publishedAt: row.publishedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 export const publishedArticle = cache(async (slug: string) => {
   const row = await prisma.newsArticle.findFirst({ where: { slug, status: "PUBLISHED", publishedAt: { lte: new Date() } } });

@@ -30,6 +30,8 @@ const noindexPaths = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Hostinger exposes host CPUs beyond the container's available thread quota.
+  experimental: { cpus: 2 },
   // The hosting scheduler runs this script from the standalone deployment.
   outputFileTracingIncludes: {
     "/api/cron/setup-capture": ["./scripts/setup-capture-cron.mjs"],

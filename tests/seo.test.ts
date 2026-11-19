@@ -2,7 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import robots from "@/app/robots";
-import sitemap from "@/app/sitemap";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
+import type { MetadataRoute } from "next";
+
+function loadSitemap() {
+  const exports: { default?: () => Promise<MetadataRoute.Sitemap> } = {};
+  runInNewContext(ts.transpileModule(readFileSync("src/app/sitemap.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText, { exports, require: () => ({ articleSitemap: async () => [{ slug: "published-news", updatedAt: new Date("2026-11-19T00:00:00Z") }] }) });
+  if (!exports.default) throw new Error("Sitemap not exported");
+  return exports.default;
+}
 
 test("robots.txt produces a valid configuration without throwing", () => {
   const config = robots();
@@ -15,16 +27,18 @@ test("robots.txt produces a valid configuration without throwing", () => {
   assert.ok(!disallowed.includes("/admin/") && !disallowed.includes("/account/"), "crawlers must reach page-level noindex directives");
 });
 
-test("the sitemap lists only pages an anonymous visitor can read", () => {
-  const entries = sitemap();
-  assert.equal(entries.length, 2, "only approved public pages are submitted");
+test("the sitemap lists public routes and published article URLs with genuine modification dates", async () => {
+  const entries = await loadSitemap()();
+  assert.equal(entries.length, 4);
   const urls = entries.map((entry) => entry.url);
   assert.ok(urls.includes("https://coinsecret.io/"), "landing page must be indexed");
   assert.ok(urls.includes("https://coinsecret.io/pricing"), "pricing must be indexed");
   for (const legal of ["terms", "privacy", "refund", "support"]) {
     assert.ok(!urls.includes(`https://coinsecret.io/${legal}`), `${legal} waits for publishing approval`);
   }
-  assert.ok(entries.every((entry) => entry.lastModified === undefined), "do not claim a content update on every request");
+  assert.ok(urls.includes("https://coinsecret.io/news"));
+  assert.ok(urls.includes("https://coinsecret.io/news/published-news"));
+  assert.ok(entries.filter((entry) => !entry.url.includes("/news/")).every((entry) => entry.lastModified === undefined), "do not claim a content update on every request");
   // /patterns is an internal redirect to /signals (session-gated) and must stay out
   assert.equal(
     urls.some((url) => url.includes("/patterns")),

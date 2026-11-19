@@ -14,10 +14,12 @@ import {
   ImageIcon,
   Menu,
   X,
+  Newspaper,
 } from "lucide-react";
 import { BrandLockup } from "@/presentation/ui/brand-logo";
 
 const NAV = [
+  { id: "news", label: "News & Articles", href: "/admin/news", icon: Newspaper },
   { id: "overview", label: "Overview", href: "/admin", icon: LayoutDashboard },
   { id: "users", label: "Users", href: "/admin/users", icon: Users },
   { id: "payments", label: "Payments", href: "/admin/payments", icon: CreditCard },

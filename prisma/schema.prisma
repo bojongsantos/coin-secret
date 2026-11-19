@@ -57,6 +57,7 @@ model User {
   payments       Payment[]
   featureGrants  UserFeatureGrant[]
   auditEvents    AuditLog[] @relation("AuditActor")
+  articles       NewsArticle[]
 }
 
 model Session {
@@ -254,6 +255,35 @@ model AppSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+enum NewsArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model NewsArticle {
+  id             String @id @default(cuid())
+  slug           String @unique
+  title          String
+  summary        String @default("")
+  body           String @default("")
+  category       String @default("News")
+  coverUrl       String @default("")
+  coverAlt       String @default("")
+  seoTitle       String @default("")
+  seoDescription String @default("")
+  status         NewsArticleStatus @default(DRAFT)
+  authorName     String
+  authorId       String?
+  author         User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  publishedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  version        Int @default(1)
+
+  @@index([status, publishedAt, id])
 }
 
 model AuditLog {

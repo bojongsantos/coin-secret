@@ -37,7 +37,7 @@ const SECONDARY: Item[] = [
   { href: "/account", label: "nav.account", icon: UserCog },
   { href: "#", label: "nav.alphaReport", icon: Telescope, soon: true },
   { href: "#", label: "nav.tokenUnlock", icon: Lock, soon: true },
-  { href: "#", label: "nav.news", icon: Newspaper, soon: true },
+  { href: "/news", label: "nav.news", icon: Newspaper, soon: false },
 ];
 
 /**

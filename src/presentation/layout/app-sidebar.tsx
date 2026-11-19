@@ -29,7 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "signals", label: "nav.signals", href: "/signals", icon: "signals" },
   { id: "alpha", label: "nav.alphaReport", href: "#", icon: "alpha-report", soon: true },
   { id: "unlock", label: "nav.tokenUnlock", href: "#", soon: true },
-  { id: "news", label: "nav.news", href: "#", icon: "news", soon: true },
+  { id: "news", label: "nav.news", href: "/news", icon: "news", soon: false },
   { id: "pricing", label: "nav.pricing", href: "/pricing", icon: "pricing" },
 ];
 

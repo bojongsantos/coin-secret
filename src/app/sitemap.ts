@@ -14,7 +14,14 @@ const PUBLIC_ROUTES: Array<{ path: string; priority: number; changeFrequency: "d
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const articles = await articleSitemap();
+  // A database outage must not take the whole sitemap down: the static public
+  // routes stay valid, so article URLs degrade to an empty list instead.
+  let articles: Awaited<ReturnType<typeof articleSitemap>> = [];
+  try {
+    articles = await articleSitemap();
+  } catch {
+    articles = [];
+  }
   return [...PUBLIC_ROUTES.map((route) => ({
     url: `https://coinsecret.io${route.path}`,
     changeFrequency: route.changeFrequency,

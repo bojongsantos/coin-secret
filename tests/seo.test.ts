@@ -7,14 +7,15 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import type { MetadataRoute } from "next";
 
-function loadSitemap() {
+function loadSitemap(articleSitemap: () => Promise<Array<{ slug: string; updatedAt: Date }>>) {
   const exports: { default?: () => Promise<MetadataRoute.Sitemap> } = {};
   runInNewContext(ts.transpileModule(readFileSync("src/app/sitemap.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText, { exports, require: () => ({ articleSitemap: async () => [{ slug: "published-news", updatedAt: new Date("2026-11-19T00:00:00Z") }] }) });
+  }).outputText, { exports, require: () => ({ articleSitemap }) });
   if (!exports.default) throw new Error("Sitemap not exported");
   return exports.default;
 }
+const loadSitemapWithArticle = () => loadSitemap(async () => [{ slug: "published-news", updatedAt: new Date("2026-11-19T00:00:00Z") }]);
 
 test("robots.txt produces a valid configuration without throwing", () => {
   const config = robots();
@@ -28,7 +29,7 @@ test("robots.txt produces a valid configuration without throwing", () => {
 });
 
 test("the sitemap lists public routes and published article URLs with genuine modification dates", async () => {
-  const entries = await loadSitemap()();
+  const entries = await loadSitemapWithArticle()();
   assert.equal(entries.length, 4);
   const urls = entries.map((entry) => entry.url);
   assert.ok(urls.includes("https://coinsecret.io/"), "landing page must be indexed");
@@ -53,4 +54,11 @@ test("the sitemap lists public routes and published article URLs with genuine mo
       `${pathname} is behind a session and must not be advertised`,
     );
   }
+});
+
+test("a database outage keeps the static public routes in the sitemap", async () => {
+  const entries = await loadSitemap(async () => { throw new Error("database unavailable"); })();
+  const urls = [...entries.map((entry) => entry.url)];
+  assert.deepEqual(urls, ["https://coinsecret.io/", "https://coinsecret.io/pricing", "https://coinsecret.io/news"],
+    "article lookups must degrade to an empty list instead of failing the whole sitemap");
 });

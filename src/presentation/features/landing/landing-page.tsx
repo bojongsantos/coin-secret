@@ -64,7 +64,7 @@ const FEATURES = [
   { id: "signals", icon: "/icons/landing/signals.png", live: true },
   { id: "alpha", icon: "/icons/landing/alpha-report.png", live: false },
   { id: "unlock", icon: "/icons/landing/token-unlock.png", live: false },
-  { id: "news", icon: "/icons/landing/news.png", live: false },
+  { id: "news", icon: "/icons/landing/news.png", live: true },
 ] as const;
 
 function Socials({ className = "" }: { className?: string }) {
@@ -386,6 +386,7 @@ export function LandingPage({ quotes }: { quotes: Record<BillingPeriod, BillingQ
             <a href="#pricing" className="transition-colors hover:text-white">
               {t("nav.pricing")}
             </a>
+            <Link href="/news" className="transition-colors hover:text-white">{t("nav.news")}</Link>
           </nav>
           <Socials />
         </div>

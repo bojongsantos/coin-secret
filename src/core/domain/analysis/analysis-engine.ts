@@ -13,7 +13,7 @@ import {
   readPublishedSetup,
   type PublishedSetup,
 } from "@/core/domain/analysis/supply-demand";
-import { traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
+import { isTerminalSetupStatus, traceSetupLifecycle } from "@/core/domain/analysis/setup-lifecycle";
 import { formatPrice } from "@/shared/lib/format";
 import { DEFAULT_LOCALE, type Locale } from "@/core/domain/i18n/locale";
 import { say, type ReasoningKey } from "@/core/domain/analysis/reasoning-copy";
@@ -230,7 +230,7 @@ export function buildReasoning(candles: Candle[], ctx: ReasoningContext): Reason
       title: line("section.summary"),
       points: [
         summaryZone
-          ? line("summary.zoneActive", {
+          ? line(isTerminalSetupStatus(status ?? "") ? "summary.zoneClosed" : "summary.zoneActive", {
               zone: line(summaryZone === "demand" ? "word.demand" : "word.supply"),
               pair: ctx.pair ?? line("word.asset"),
               direction: line(isLong ? "word.long" : "word.short"),
@@ -355,6 +355,8 @@ export interface AnalysisOptions {
   evaluateLifecycle?: boolean;
   /** Live charts do not display the historical backtest probability. */
   computePerformance?: boolean;
+  /** Keep a specifically published plan readable with its terminal outcome. */
+  showPublishedOutcome?: boolean;
 }
 
 export function buildAnalysisResult(
@@ -382,7 +384,9 @@ export function buildAnalysisResult(
   const analyzedAt = now.toISOString();
 
   const detected = detectSupplyDemand(candles);
-  const reading = published ? readPublishedSetup(candles, published, price, options) : null;
+  const reading = published ? readPublishedSetup(candles, published, price, {
+    evaluateLifecycle: options.evaluateLifecycle, includeTerminal: options.showPublishedOutcome,
+  }) : null;
   // A missing or finished published plan never silently becomes a different
   // detector-generated plan while the client is waiting for the server.
   const sd = reading?.setup

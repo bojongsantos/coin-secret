@@ -1,4 +1,5 @@
 import { normalizeUsdtSymbol } from "@/core/domain/market/symbol";
+import { isSetupSignatureForSymbol } from "@/core/domain/analysis/setup-signature";
 import { activeSetupStore } from "@/infrastructure/persistence/active-setup-store";
 import { apiError, HttpError } from "@/shared/server/http";
 
@@ -23,6 +24,13 @@ export async function GET(request: Request) {
     const rawSymbol = url.searchParams.get("symbol");
     if (!rawSymbol) return Response.json({ setup: null }, { headers: { "Cache-Control": "no-store" } });
     const symbol = normalizeUsdtSymbol(rawSymbol);
+    const signature = url.searchParams.get("signature");
+    if (signature !== null && !isSetupSignatureForSymbol(signature, symbol)) {
+      throw new HttpError(400, "Invalid selected setup.", "INVALID_SETUP_SIGNATURE");
+    }
+    if (signature !== null && !activeSetupStore.loadPublished) {
+      throw new HttpError(503, "Selected setup unavailable.", "SETUP_STORE_UNAVAILABLE");
+    }
 
     // Returned whatever timeframe the caller happens to be showing. A setup
     // belongs to one chart and cannot be drawn on another, but withholding it
@@ -30,7 +38,10 @@ export async function GET(request: Request) {
     // ninety published setups invisible: the chart opened on 15m, the plan
     // lived on 1H, and the page said "No Zone Setup" about a symbol the board
     // was listing. The client reads `timeframe` and moves the chart to it.
-    const [published] = await activeSetupStore.loadActive([symbol]);
+    const signal = AbortSignal.timeout(25_000);
+    const published = signature === null
+      ? (await activeSetupStore.loadActive([symbol], signal))[0]
+      : await activeSetupStore.loadPublished?.(symbol, signature, signal);
     if (!published) return Response.json({ setup: null }, { headers: { "Cache-Control": "no-store" } });
 
     return Response.json(

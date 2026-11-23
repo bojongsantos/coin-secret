@@ -41,6 +41,23 @@ export function createActiveSetupStore(
     }
     : readSetupRows;
   return {
+  async loadPublished(symbol: string, signature: string, signal?: AbortSignal): Promise<ActiveSetup | null> {
+    const row = await readRows("active", () => reads.trackedSetup.findFirst({
+      where: { symbol, signature, archivedAt: null },
+      select: { firstSeenAt: true, exchange: true, symbol: true, timeframe: true, direction: true,
+        entry: true, target1: true, target2: true, stopLoss: true, confidence: true,
+        zoneTop: true, zoneBottom: true, zoneBaseTime: true, status: true },
+    }), signal);
+    if (!row) return null;
+    return {
+      publishedAt: row.firstSeenAt.getTime() / 1000,
+      exchange: isMarketExchange(row.exchange) ? row.exchange : null,
+      symbol: row.symbol, timeframe: row.timeframe as Timeframe, direction: row.direction as SetupDirection,
+      entry: row.entry, target1: row.target1, target2: row.target2, stopLoss: row.stopLoss,
+      confidence: row.confidence, zoneTop: row.zoneTop, zoneBottom: row.zoneBottom,
+      zoneBaseTime: row.zoneBaseTime, status: row.status,
+    };
+  },
   async loadActive(symbols: string[], signal?: AbortSignal): Promise<ActiveSetup[]> {
     if (symbols.length === 0) return [];
     const rows = await readRows("active", () => reads.trackedSetup.findMany({

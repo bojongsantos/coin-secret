@@ -16,6 +16,8 @@ import {
 } from "@/core/application/market-data/history-plan";
 import { buildAnalysisResult } from "@/core/domain/analysis/analysis-engine";
 import type { PublishedSetup } from "@/core/domain/analysis/supply-demand";
+import { isTerminalSetupStatus } from "@/core/domain/analysis/setup-lifecycle";
+import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import { isMarketExchange, type MarketExchange } from "@/core/domain/market/exchange";
 import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
 import { applyRecentCandles, olderThan, upsertLatestCandle } from "@/core/domain/market/candles";
@@ -56,7 +58,7 @@ export type ChartConnectionState = "live" | "polling" | "reconnecting" | "delaye
 export type ChartSetupState = "loading" | "published" | "missing" | "unavailable" | "mismatched" | "legacy";
 type ChartPublishedSetup = PublishedSetup & { symbol: string; timeframe: Timeframe; status?: string };
 
-function parseSetup(payload: unknown, symbol: string): ChartPublishedSetup | null {
+function parseSetup(payload: unknown, symbol: string, selectedSignature?: string): ChartPublishedSetup | null {
   if (!payload || typeof payload !== "object" || !("setup" in payload)) throw new SyntaxError("Missing setup response");
   const value = (payload as { setup: unknown }).setup;
   if (value === null) return null;
@@ -73,7 +75,9 @@ function parseSetup(payload: unknown, symbol: string): ChartPublishedSetup | nul
     || (setup.status !== undefined && typeof setup.status !== "string")) {
     throw new SyntaxError("Invalid setup response");
   }
-  return value as ChartPublishedSetup;
+  const parsed = value as ChartPublishedSetup;
+  if (selectedSignature && setupSignature(parsed) !== selectedSignature) throw new SyntaxError("Mismatched setup publication");
+  return parsed;
 }
 
 export interface HistoryState {
@@ -114,6 +118,7 @@ export function useLiveAnalysis(
   timeframe: Timeframe,
   range: HistoryRange,
   enabled = true,
+  selectedSignature?: string,
 ): LiveAnalysis {
   // The analysis writes prose, so it needs the reader's language. The render
   // loop below closes over it and the effect lists it as a dependency, so a
@@ -155,7 +160,7 @@ export function useLiveAnalysis(
   // Resetting while rendering (React's documented "adjust state when a prop
   // changes" pattern) clears the previous market in the same commit, so the
   // old candles never flash under the new header.
-  const viewKey = `${symbol}|${timeframe}|${range}|${enabled}|${reloadVersion}`;
+  const viewKey = `${symbol}|${timeframe}|${range}|${enabled}|${reloadVersion}|${selectedSignature ?? ""}`;
   const [renderedKey, setRenderedKey] = useState(viewKey);
   if (viewKey !== renderedKey) {
     setRenderedKey(viewKey);
@@ -185,6 +190,7 @@ export function useLiveAnalysis(
     let setupFailures = 0;
     let setupRetryAt = 0;
     let currentSetupState: ChartSetupState = "loading";
+    let lastTerminalNotified = "";
     let selectedData: MarketDataPort | null = null;
     let selectedExchange: MarketExchange | null = null;
     let publishedExchange: MarketExchange | undefined;
@@ -264,9 +270,10 @@ export function useLiveAnalysis(
         let nextDelay = PUBLISHED_REFRESH_MS;
         try {
           const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(SETUP_TIMEOUT_MS)]);
-          const response = await fetch(`/api/setup?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store", signal });
+          const selectionQuery = selectedSignature ? `&signature=${encodeURIComponent(selectedSignature)}` : "";
+          const response = await fetch(`/api/setup?symbol=${encodeURIComponent(symbol)}${selectionQuery}`, { cache: "no-store", signal });
           if (!response.ok) throw responseReadFailure(response.status, "Trading plan", response.headers.get("Retry-After"));
-          const setup = parseSetup(await response.json(), symbol);
+          const setup = parseSetup(await response.json(), symbol, selectedSignature);
           if (cancelled) return;
           setupFailures = 0;
           setupRetryAt = 0;
@@ -285,9 +292,14 @@ export function useLiveAnalysis(
         } catch (caught) {
           if (cancelled || controller.signal.aborted) return;
           const failure = normalizeReadFailure(caught, "Trading plan");
-          publishedRef.current = null;
-          publishedExchange = undefined;
-          setPublishedTimeframe(null);
+          // A transient metadata failure must not erase the last verified plan.
+          // Its levels remain visible, but unavailable state disables lifecycle replay.
+          const retain = failure.retryable && !(caught instanceof SyntaxError) && publishedRef.current?.symbol === symbol;
+          if (!retain) {
+            publishedRef.current = null;
+            publishedExchange = undefined;
+            setPublishedTimeframe(null);
+          }
           currentSetupState = "unavailable";
           setSetupState(currentSetupState);
           setSetupError(failure.message);
@@ -375,9 +387,17 @@ export function useLiveAnalysis(
         locale,
         // An absent published order permits candle/zone analysis, never a
         // retrospective local fill or target presented as a trading plan.
-        { publishedOnly: true, evaluateLifecycle: verified && currentSetupState === "published", computePerformance: false },
+        { publishedOnly: true, showPublishedOutcome: true, evaluateLifecycle: verified && currentSetupState === "published", computePerformance: false },
       );
       setAnalysis({ ...result, chartData: { ...result.chartData, candles } });
+      const plan = publishedRef.current;
+      if (plan && verified && currentSetupState === "published" && isTerminalSetupStatus(result.pattern.status)) {
+        const signature = `${setupSignature(plan)}:${plan.publishedAt ?? ""}`;
+        if (signature !== lastTerminalNotified) {
+          lastTerminalNotified = signature;
+          window.dispatchEvent(new Event("coinsecret:signals-refresh"));
+        }
+      }
     }
 
     /** Repaints at most once per throttle window, never dropping the last frame. */
@@ -414,7 +434,7 @@ export function useLiveAnalysis(
       // Ask for the selected range, not a fixed page, so a short range never
       // arrives padded with history the user did not ask to see.
       const wanted = estimateRangeCandles(range, timeframe);
-      const recentLimit = Math.min(HISTORY_PAGE_SIZE, wanted ?? HISTORY_PAGE_SIZE);
+      const recentLimit = publishedRef.current ? HISTORY_PAGE_SIZE : Math.min(HISTORY_PAGE_SIZE, wanted ?? HISTORY_PAGE_SIZE);
       try {
         const snapshot = await loadMarketSnapshot(marketDataSources, {
           symbol, timeframe, limit: recentLimit, signal: controller.signal,
@@ -708,7 +728,7 @@ export function useLiveAnalysis(
     };
     // `locale` re-runs the effect so the prose is rewritten the moment the
     // language changes, rather than at the next tick.
-  }, [symbol, timeframe, range, locale, enabled, reloadVersion]);
+  }, [symbol, timeframe, range, locale, enabled, reloadVersion, selectedSignature]);
 
   return {
     analysis: enabled ? analysis : null, loading: enabled && loading, error: enabled ? error : null,

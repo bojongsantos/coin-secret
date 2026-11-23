@@ -1,4 +1,15 @@
 import type { SetupDirection, Timeframe } from "@/core/domain/models";
+import { TIMEFRAME_SECONDS } from "@/core/domain/market/timeframe";
+
+export function isSetupSignatureForSymbol(value: string, symbol: string): boolean {
+  if (value.length > 160) return false;
+  const parts = value.split("|");
+  const [selectedSymbol, timeframe, direction, baseTime] = parts;
+  return parts.length === 4 && selectedSymbol === symbol && typeof timeframe === "string"
+    && Object.hasOwn(TIMEFRAME_SECONDS, timeframe) && (direction === "long" || direction === "short")
+    && typeof baseTime === "string" && Number.isSafeInteger(Number(baseTime)) && Number(baseTime) > 0
+    && String(Number(baseTime)) === baseTime;
+}
 
 /**
  * Stable identity for a setup.

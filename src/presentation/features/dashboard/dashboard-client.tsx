@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { rangeForTimeframe } from "@/core/application/market-data/history-plan";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import type { Timeframe } from "@/core/domain/models";
+import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import { AnalysisView } from "@/presentation/features/analysis/analysis-view";
 import { ChartDataStatus } from "@/presentation/features/analysis/chart-data-status";
 import { MarketOverview } from "@/presentation/features/dashboard/market-overview";
@@ -23,6 +24,7 @@ export function DashboardClient() {
   const { context, sentiment, loading: marketLoading, refresh: refreshMarket, error: marketError, stale: marketStale, lastUpdated: marketUpdated } = useMarketContext(true);
 
   const [symbol, setSymbol] = useState<string | null>(null);
+  const [selectedSignature, setSelectedSignature] = useState<string | undefined>(undefined);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
   const range = rangeForTimeframe(timeframe);
 
@@ -35,6 +37,7 @@ export function DashboardClient() {
     timeframe,
     range,
     Boolean(activeSymbol),
+    symbol ? selectedSignature : top[0]?.hit.zoneBaseTime ? setupSignature(top[0].hit) : undefined,
   );
 
   // Move the chart to the interval the published plan was measured on, unless
@@ -50,11 +53,12 @@ export function DashboardClient() {
     setTimeframe(next);
   };
 
-  const pick = (value: string, setupTimeframe?: Timeframe) => {
+  const pick = (value: string, setupTimeframe?: Timeframe, signature?: string) => {
     const normalized = normalizeUsdtSymbol(value);
     if (!isValidBinanceSymbol(normalized)) return;
     if (normalized !== activeSymbol || setupTimeframe) setChosenFor(null);
     setSymbol(normalized);
+    setSelectedSignature(signature);
     // The scan reports which interval it found the setup on. Landing on a
     // different one shows an empty plan for a symbol the strip just called a
     // setup, which reads as a bug rather than as a different timeframe.

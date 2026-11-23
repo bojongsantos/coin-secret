@@ -1,13 +1,14 @@
 import { AnalysisClient } from "@/presentation/features/analysis/analysis-client";
 import { isValidBinanceSymbol, normalizeUsdtSymbol } from "@/core/domain/market/symbol";
 import { isTimeframe } from "@/core/domain/market/timeframe";
+import { isSetupSignatureForSymbol } from "@/core/domain/analysis/setup-signature";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalysisPage({
   searchParams,
 }: {
-  searchParams: Promise<{ symbol?: string | string[]; tf?: string | string[] }>;
+  searchParams: Promise<{ symbol?: string | string[]; tf?: string | string[]; setup?: string | string[] }>;
 }) {
   const params = await searchParams;
   const raw = Array.isArray(params.symbol) ? params.symbol[0] : params.symbol;
@@ -21,5 +22,7 @@ export default async function AnalysisPage({
   const rawTf = Array.isArray(params.tf) ? params.tf[0] : params.tf;
   const timeframe = isTimeframe(rawTf) ? rawTf : "15m";
 
-  return <AnalysisClient initialSymbol={symbol} initialTimeframe={timeframe} />;
+  const rawSetup = Array.isArray(params.setup) ? params.setup[0] : params.setup;
+  const signature = rawSetup && isSetupSignatureForSymbol(rawSetup, symbol) ? rawSetup : undefined;
+  return <AnalysisClient initialSymbol={symbol} initialTimeframe={timeframe} initialSignature={signature} />;
 }

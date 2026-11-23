@@ -13,6 +13,7 @@ function find(node: unknown, type: string): UiNode | undefined {
 }
 
 function harness(path: string) {
+  const calls: unknown[][] = [];
   const state: unknown[] = [];
   let cursor = 0;
   let dirty = false;
@@ -31,7 +32,7 @@ function harness(path: string) {
     "@/presentation/hooks/use-translate": { useT: () => ({ t: (key: string) => key }) },
     "@/presentation/hooks/use-market-context": { useMarketContext: () => ({}) },
     "@/presentation/hooks/use-scanner": { useDashboardSignals: () => ({ top: [{ hit: { symbol: "BTCUSDT" } }], result: null }) },
-    "@/presentation/hooks/use-live-analysis": { useLiveAnalysis: (symbol: string) => ({ analysis: {}, publishedTimeframe: symbol === "BTCUSDT" ? "1H" : "15m" }) },
+    "@/presentation/hooks/use-live-analysis": { useLiveAnalysis: (...args: unknown[]) => { calls.push(args); return { analysis: {}, publishedTimeframe: args[0] === "BTCUSDT" ? "1H" : "15m" }; } },
   };
   for (const [module, name] of [
     ["features/analysis/analysis-view", "AnalysisView"], ["features/analysis/chart-data-status", "ChartDataStatus"],
@@ -51,8 +52,25 @@ function harness(path: string) {
     }
     throw new Error("Chart selection did not settle");
   };
-  return { render, props };
+  return { render, props, calls };
 }
+
+test("dashboard chart requests the exact setup selected in a screener row", () => {
+  const page = harness("src/presentation/features/dashboard/dashboard-client.tsx");
+  const tree = page.render();
+  const signature = "HYPEUSDT|15m|long|1795437000";
+  (find(tree, "SignalsBoard")!.props.onSelect as (coin: string, tf: string, signature: string) => void)("HYPEUSDT", "15m", signature);
+  page.render();
+  assert.equal(page.calls.at(-1)?.[0], "HYPEUSDT");
+  assert.equal(page.calls.at(-1)?.[4], signature);
+});
+
+test("standalone analysis retains the publication identity from its screener link", () => {
+  const page = harness("src/presentation/features/analysis/analysis-client.tsx");
+  page.props.initialSignature = "ZECUSDT|15m|short|1795437000";
+  page.render();
+  assert.equal(page.calls.at(-1)?.[4], page.props.initialSignature);
+});
 
 test("a dashboard selection clears the previous coin's manual timeframe override", () => {
   const page = harness("src/presentation/features/dashboard/dashboard-client.tsx");
@@ -74,4 +92,14 @@ test("standalone navigation resets manual interval choice for the next coin", ()
   assert.equal(find(tree, "AnalysisView")!.props.timeframe, "4H");
   page.props.initialSymbol = "BTCUSDT";
   assert.equal(find(page.render(), "AnalysisView")!.props.timeframe, "1H");
+});
+
+test("another publication of the same coin resets the previous manual interval", () => {
+  const page = harness("src/presentation/features/analysis/analysis-client.tsx");
+  page.props.initialSignature = "ZECUSDT|15m|short|1795437000";
+  const tree = page.render();
+  (find(tree, "AnalysisView")!.props.onTimeframeChange as (value: string) => void)("4H");
+  assert.equal(find(page.render(), "AnalysisView")!.props.timeframe, "4H");
+  page.props.initialSignature = "ZECUSDT|15m|short|1795437900";
+  assert.equal(find(page.render(), "AnalysisView")!.props.timeframe, "15m");
 });

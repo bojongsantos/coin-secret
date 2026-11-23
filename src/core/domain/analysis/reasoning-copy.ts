@@ -34,6 +34,10 @@ const COPY = {
   "word.asset": { id: "aset ini", en: "this asset" },
 
   // ---------------------------------------------------------------- summary
+  "summary.zoneClosed": {
+    id: "Setup {direction} pada zona {zone} {pair} sudah berakhir.",
+    en: "The {direction} setup on {pair}'s {zone} zone has ended.",
+  },
   "summary.zoneActive": {
     id: "Zona {zone} aktif pada {pair}. Arah setup {direction}.",
     en: "A {zone} zone is active on {pair}. The setup is {direction}.",

@@ -13,6 +13,8 @@ import * as timeframes from "@/core/domain/market/timeframe";
 import * as recovery from "@/core/application/market-data/live-recovery";
 import * as sources from "@/core/application/market-data/source-selection";
 import * as failures from "@/shared/lib/read-failure";
+import * as lifecycle from "@/core/domain/analysis/setup-lifecycle";
+import * as signatures from "@/core/domain/analysis/setup-signature";
 
 const candle = (time: number): Candle => ({ time, open: 100, high: 103, low: 99, close: 101, volume: 10 });
 const ticker = (symbol: string) => ({ symbol, lastPrice: 101, priceChange: 1, priceChangePercent: 1, highPrice: 103, lowPrice: 99, quoteVolume: 1000, volume: 10 });
@@ -54,6 +56,8 @@ function hookHarness() {
   let online = true;
   let symbol = "ZECUSDT";
   let timeframe: Timeframe = "15m";
+  let selectedSignature: string | undefined;
+  let analysisStatus = "Running";
   let dirty = true;
   let cursor = 0;
   let result!: LiveAnalysis;
@@ -73,6 +77,8 @@ function hookHarness() {
   const timers = new Map<number, { at: number; interval?: number; callback: () => void }>();
   const listeners = new Map<string, Set<() => void>>();
   const reads: Array<{ exchange: string; query?: KlineQuery; symbol: string }> = [];
+  const planUrls: string[] = [];
+  const dispatched: string[] = [];
   const engine: Array<{ symbol: string; timeframe: string; exchange: string; candles: Candle[]; ticker: ReturnType<typeof ticker>; setup: unknown; options: Record<string, unknown> }> = [];
   const sockets: Array<{ update: (value: { symbol: string; candle?: Candle; ticker?: ReturnType<typeof ticker> }) => void; status: (value: string) => void; stopped: boolean }> = [];
   const addEventListener = (name: string, callback: () => void) => { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name)!.add(callback); };
@@ -111,7 +117,7 @@ function hookHarness() {
   runInNewContext(ts.transpileModule(readFileSync("src/presentation/hooks/use-live-analysis.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, {
-    exports, Date: ClockDate, Error, DOMException, AbortController,
+    exports, Date: ClockDate, Error, DOMException, AbortController, Event,
     AbortSignal: { any: AbortSignal.any, timeout: (ms: number) => { const controller = new AbortController(); schedule(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms); return controller.signal; } },
     require: (name: string) => ({
       react: {
@@ -127,7 +133,9 @@ function hookHarness() {
       "@/core/domain/market/exchange": exchanges,
       "@/core/domain/market/timeframe": timeframes,
       "@/core/domain/market/candles": candleOperations,
-      "@/core/domain/analysis/analysis-engine": { buildAnalysisResult: (requested: string, _base: string, _quote: string, interval: string, exchange: string, candles: Candle[], latestTicker: ReturnType<typeof ticker>, setup: unknown, _locale: unknown, options: Record<string, unknown>) => { engine.push({ symbol: requested, timeframe: interval, exchange, candles, ticker: latestTicker, setup, options }); return { pair: { symbol: requested }, chartData: { candles } }; } },
+      "@/core/domain/analysis/setup-lifecycle": lifecycle,
+      "@/core/domain/analysis/setup-signature": signatures,
+      "@/core/domain/analysis/analysis-engine": { buildAnalysisResult: (requested: string, _base: string, _quote: string, interval: string, exchange: string, candles: Candle[], latestTicker: ReturnType<typeof ticker>, setup: unknown, _locale: unknown, options: Record<string, unknown>) => { engine.push({ symbol: requested, timeframe: interval, exchange, candles, ticker: latestTicker, setup, options }); return { pair: { symbol: requested }, pattern: { status: analysisStatus }, chartData: { candles } }; } },
       "@/infrastructure/market-data/market-data-provider": { marketDataSources: sourceList },
       "@/infrastructure/market-data/binance-stream-client": { subscribeBinanceMarket: (_symbol: string, _timeframe: string, update: (value: unknown) => void, status: (value: string) => void) => { const socket = { update, status, stopped: false }; sockets.push(socket); return () => { socket.stopped = true; }; } },
       "@/presentation/hooks/use-ui-preference": { useLocale: () => ({ locale: "en" }) },
@@ -135,10 +143,11 @@ function hookHarness() {
     } as Record<string, unknown>)[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
     document: { visibilityState: "visible", addEventListener, removeEventListener },
     navigator: { get onLine() { return online; } },
-    window: { addEventListener, removeEventListener },
+    window: { addEventListener, removeEventListener, dispatchEvent: (event: Event) => { dispatched.push(event.type); for (const callback of listeners.get(event.type) ?? []) callback(); return true; } },
     setTimeout: (callback: () => void, delay: number) => schedule(callback, delay), clearTimeout: (id: number) => timers.delete(id),
     setInterval: (callback: () => void, delay: number) => schedule(callback, delay, delay), clearInterval: (id: number) => timers.delete(id),
     fetch: async (_url: string, options: { signal: AbortSignal }) => {
+      planUrls.push(_url);
       setupReads++;
       const loader = nextSetup;
       nextSetup = null;
@@ -150,13 +159,15 @@ function hookHarness() {
   function render() {
     for (let pass = 0; dirty && pass < 10; pass++) {
       dirty = false; cursor = 0;
-      result = (exports.useLiveAnalysis as (symbol: string, timeframe: Timeframe, range: string) => LiveAnalysis)(symbol, timeframe, "month");
+      result = (exports.useLiveAnalysis as (symbol: string, timeframe: Timeframe, range: string, enabled: boolean, signature?: string) => LiveAnalysis)(symbol, timeframe, "month", true, selectedSignature);
     }
     for (const effect of effects.splice(0)) { effect.previous?.(); (slots[effect.index] as { cleanup?: () => void }).cleanup = effect.run(); }
   }
   const flush = async () => { for (let item = 0; item < 30; item++) { render(); await Promise.resolve(); } render(); };
   return {
-    reads, sockets, engine, timers, flush,
+    reads, sockets, engine, timers, flush, planUrls, dispatched,
+    signature: (value: string) => { selectedSignature = value; dirty = true; render(); },
+    status: (value: string) => { analysisStatus = value; },
     view: () => result,
     setupReads: () => setupReads,
     historyReads: () => historyReads,
@@ -222,6 +233,90 @@ test("unknown legacy provenance preserves the stored plan without lifecycle repl
   assert.equal(h.engine.at(-1)?.options.evaluateLifecycle, false);
   assert.equal(h.engine.at(-1)?.options.publishedOnly, true);
   assert.equal((h.engine.at(-1)?.setup as { status: string }).status, "Running");
+  h.stop();
+});
+
+test("a retryable plan refresh failure keeps the verified same-market plan with an explicit unavailable state", async () => {
+  const h = hookHarness();
+  const original = published("ZECUSDT", "15m", "bybit");
+  h.setPlan(original); await h.flush();
+  h.setupResponse(async () => new Response("{}", { status: 503 }));
+  h.view().retry(); await h.flush(); await h.advance(400);
+  assert.equal(h.view().setupState, "unavailable");
+  assert.ok(h.view().setupError);
+  assert.equal(h.view().publishedTimeframe, "15m");
+  assert.equal((h.engine.at(-1)?.setup as typeof original)?.entry, original.entry);
+  assert.equal(h.engine.at(-1)?.options.evaluateLifecycle, false);
+  assert.ok(h.reads.every(row => row.exchange === "bybit"));
+  await h.advance(2000);
+  assert.equal(h.view().setupState, "published");
+  assert.equal(h.view().setupError, null);
+  h.stop();
+});
+
+test("definitive absence, denied access and malformed replacements clear a previously verified plan", async () => {
+  for (const response of [Response.json({ setup: null }), new Response("{}", { status: 403 }), Response.json({ setup: published("OTHERUSDT") })]) {
+    const h = hookHarness(); await h.flush();
+    assert.ok(h.engine.at(-1)?.setup);
+    h.setupResponse(async () => response); h.view().retry(); await h.flush(); await h.advance(400);
+    assert.equal(h.engine.at(-1)?.setup, null);
+    assert.equal(h.view().publishedTimeframe, null);
+    h.stop();
+  }
+});
+
+test("short visible ranges still request the full replay window for a published plan", async () => {
+  const h = hookHarness(); await h.flush();
+  assert.equal(h.reads.find(row => row.query)?.query?.limit, 1000);
+  assert.ok(h.engine.every(render => render.options.showPublishedOutcome === true));
+  h.stop();
+  const missing = hookHarness(); missing.setPlan(null); await missing.flush();
+  assert.equal(missing.reads.find(row => row.query)?.query?.limit, 100);
+  missing.stop();
+});
+
+test("selecting a different publication for the same symbol resets the chart and ignores the late old response", async () => {
+  const h = hookHarness(); h.signature("ZECUSDT|15m|long|1799998200"); await h.flush();
+  assert.equal(new URL(h.planUrls[0], "https://coinsecret.io").searchParams.get("signature"), "ZECUSDT|15m|long|1799998200");
+  const late = deferred<unknown>(); let previousSignal!: AbortSignal;
+  h.setupResponse(signal => { previousSignal = signal; return late.promise; }); h.view().retry(); await h.flush();
+  h.setPlan({ ...published("ZECUSDT"), entry: 105, zoneBaseTime: 1_799_999_100 });
+  h.signature("ZECUSDT|15m|long|1799999100");
+  assert.equal(h.view().analysis, null);
+  assert.equal(h.view().publishedTimeframe, null);
+  await h.flush();
+  assert.equal(previousSignal.aborted, true);
+  assert.equal(new URL(h.planUrls.at(-1)!, "https://coinsecret.io").searchParams.get("signature"), "ZECUSDT|15m|long|1799999100");
+  late.resolve(Response.json({ setup: published("ZECUSDT") })); await h.flush();
+  assert.equal((h.engine.at(-1)?.setup as { entry: number }).entry, 105);
+  h.stop();
+});
+
+test("a same-symbol response for a different selected zone is rejected instead of showing the wrong trading plan", async () => {
+  const h = hookHarness(); h.signature("ZECUSDT|15m|long|1799998200"); await h.flush();
+  assert.ok(h.engine.at(-1)?.setup);
+  h.setupResponse(async () => Response.json({ setup: { ...published("ZECUSDT"), zoneBaseTime: 1_799_999_100 } }));
+  h.view().retry(); await h.flush(); await h.advance(400);
+  assert.equal(h.view().setupState, "unavailable");
+  assert.equal(h.view().publishedTimeframe, null);
+  assert.equal(h.engine.at(-1)?.setup, null);
+  h.stop();
+});
+
+test("confirmed terminal plan outcomes refresh the screener once per publication", async () => {
+  const h = hookHarness(); await h.flush();
+  h.status("Missed");
+  const socket = h.sockets[0];
+  const time = h.engine.at(-1)!.candles.at(-1)!.time;
+  socket.update({ symbol: "ZECUSDT", candle: candle(time), ticker: ticker("ZECUSDT") });
+  await h.flush(); await h.advance(400);
+  assert.deepEqual(h.dispatched, ["coinsecret:signals-refresh"]);
+  socket.update({ symbol: "ZECUSDT", candle: candle(time), ticker: ticker("ZECUSDT") });
+  await h.flush(); await h.advance(400);
+  assert.equal(h.dispatched.length, 1);
+  h.setPlan({ ...published("ZECUSDT"), zoneBaseTime: 1_799_999_100 });
+  h.view().retry(); await h.flush(); await h.advance(400);
+  assert.equal(h.dispatched.length, 2);
   h.stop();
 });
 

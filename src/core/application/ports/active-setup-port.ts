@@ -41,6 +41,8 @@ export interface RetiredZone {
 export interface ActiveSetupPort {
   /** Setups still in play for these symbols, at most one per symbol. */
   loadActive(symbols: string[], signal?: AbortSignal): Promise<ActiveSetup[]>;
+  /** Exact selected publication, including a closed result; never a replacement plan. */
+  loadPublished?(symbol: string, signature: string, signal?: AbortSignal): Promise<ActiveSetup | null>;
   /**
    * Zones these symbols have already finished, recent enough that the
    * detector can still see them.

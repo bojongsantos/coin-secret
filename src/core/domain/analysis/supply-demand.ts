@@ -497,9 +497,11 @@ export function readPublishedSetup(
   candles: Candle[],
   published: PublishedSetup,
   price: number,
-  options: { evaluateLifecycle?: boolean } = {},
+  options: { evaluateLifecycle?: boolean; includeTerminal?: boolean } = {},
 ): PublishedReading {
-  const baseIndex = publishedBaseIndex(candles, published.zoneBaseTime);
+  const recordedOutcome = options.includeTerminal && published.status && isTerminalSetupStatus(published.status) ? published.status : null;
+  const foundBaseIndex = publishedBaseIndex(candles, published.zoneBaseTime);
+  const baseIndex = foundBaseIndex < 0 && recordedOutcome ? 0 : foundBaseIndex;
   // Without the bar the zone formed on, the tape that made this plan is not
   // here to replay, and a guess at where to start is what put a finished setup
   // on the board. Callers fetch `publishedScanLimit` bars so this is rare;
@@ -509,7 +511,7 @@ export function readPublishedSetup(
   // A replay is only meaningful on contiguous candles from the plan's feed.
   // Unknown legacy provenance or a recovering gap keeps the last recorded
   // status instead of inventing an outcome from a different tape.
-  const status = options.evaluateLifecycle === false
+  let status = recordedOutcome ?? (options.evaluateLifecycle === false
     ? published.status
     : traceSetupLifecycle(
         candles,
@@ -523,12 +525,12 @@ export function readPublishedSetup(
         baseIndex,
         price,
         published.publishedAt,
-      ).status;
+      ).status);
   if (!status || ![...ACTIVE_SETUP_STATUSES, ...TERMINAL_SETUP_STATUSES].includes(status as Status)) {
     return { status: null, setup: null };
   }
-  if (options.evaluateLifecycle !== false && status === "Limit Order" && (published.direction === "long" ? price <= published.entry : price >= published.entry)) return { status: "Missed", setup: null };
-  if (isTerminalSetupStatus(status)) return { status: status as Status, setup: null };
+  if (options.evaluateLifecycle !== false && status === "Limit Order" && (published.direction === "long" ? price <= published.entry : price >= published.entry)) status = "Missed";
+  if (isTerminalSetupStatus(status) && !options.includeTerminal) return { status: status as Status, setup: null };
 
   const isLong = published.direction === "long";
   const zone: SdZone = {
@@ -540,7 +542,7 @@ export function readPublishedSetup(
     baseTime: published.zoneBaseTime,
     touches: 1,
     strength: "tested",
-    active: true,
+    active: !isTerminalSetupStatus(status),
     confidence: published.confidence,
     narrowness: 0,
   };

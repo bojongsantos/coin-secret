@@ -3,6 +3,7 @@
 import { CandlestickChart, Loader2 } from "lucide-react";
 import type { TopSetup } from "@/core/application/scanner/supply-demand-scan-service";
 import type { Timeframe } from "@/core/domain/models";
+import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import { useT } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { formatPrice, priceDecimals } from "@/shared/lib/format";
@@ -32,7 +33,7 @@ export function TopSetupsStrip({
   lastUpdated?: string | null;
   onRetry?: () => void;
   activeSymbol: string | null;
-  onSelect: (symbol: string, timeframe: Timeframe) => void;
+  onSelect: (symbol: string, timeframe: Timeframe, signature: string) => void;
 }) {
   const { t } = useT();
 
@@ -69,7 +70,7 @@ export function TopSetupsStrip({
                 key={`${hit.symbol}-${hit.timeframe}-${index}`}
                 type="button"
                 title={hit.exchange === null ? t("chart.sourceUnverified") : undefined}
-                onClick={() => onSelect(hit.symbol, hit.timeframe)}
+                onClick={() => onSelect(hit.symbol, hit.timeframe, setupSignature(hit))}
                 aria-hidden={index >= setups.length}
                 tabIndex={index >= setups.length ? -1 : 0}
                 className={`group flex w-[208px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-[border-color,background-color,box-shadow] duration-200 hover:shadow-lg hover:shadow-black/20 focus-visible:shadow-lg ${

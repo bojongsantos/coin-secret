@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import type { ScanResult } from "@/core/application/scanner/scanner-service";
 import type { SdScanResult, TopSetup } from "@/core/application/scanner/supply-demand-scan-service";
 import { AUTH_STATE_CHANGED_EVENT } from "@/infrastructure/auth/auth-client";
@@ -64,6 +64,13 @@ function usePollingScan<T extends ScanResult | SignalsApiPayload>(path: string, 
     read, updatedAt: scanUpdatedAt, refreshDelay: scanRefreshDelay,
   });
   const data: ScanResult | SignalsApiPayload | null = state.data;
+  const refreshSignals = state.refresh;
+  useEffect(() => {
+    if (path !== "/api/signals" || !enabled) return;
+    const refresh = () => refreshSignals();
+    window.addEventListener("coinsecret:signals-refresh", refresh);
+    return () => window.removeEventListener("coinsecret:signals-refresh", refresh);
+  }, [path, enabled, refreshSignals]);
   const board = data && "result" in data ? data : null;
   return { ...state, loading: state.loading || board?.refreshing === true, stale: state.stale || board?.stale === true };
 }

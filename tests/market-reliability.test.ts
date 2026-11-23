@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { getEventListeners } from "node:events";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import * as signatures from "@/core/domain/analysis/setup-signature";
 import * as derivatives from "@/core/domain/market/derivatives";
 import * as format from "@/shared/lib/format";
 import * as readFailures from "@/shared/lib/read-failure";
@@ -16,7 +17,7 @@ function load(path: string, globals: Record<string, unknown>, dependencies: Reco
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, {
     exports, Response, Date, Error, DOMException, AbortSignal, AbortController, performance, setTimeout, clearTimeout,
-    require: (name: string) => name === "server-only" ? {} : dependencies[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
+    require: (name: string) => name === "server-only" ? {} : dependencies[name] ?? (name === "@/core/domain/analysis/setup-signature" ? signatures : undefined) ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
     ...globals,
   });
   return exports;

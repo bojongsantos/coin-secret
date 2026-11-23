@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { SdScanHit } from "@/core/application/scanner/supply-demand-scan-service";
+import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import { useT, type Translate } from "@/presentation/hooks/use-translate";
 import { CoinIcon } from "@/presentation/ui/coin-icon";
 import { statusMessageKey, type MessageKey } from "@/shared/i18n/messages";
@@ -107,16 +108,16 @@ function SetupRow({
   hit: SdScanHit;
   max: number;
   t: Translate;
-  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"], signature: string) => void;
 }) {
   const prominent = Boolean(onSelect);
   return onSelect ? (
-    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe)} className={`${ROW_CLASS} py-3 transition-[background-color,transform] duration-200 hover:-translate-y-px`}>
+    <button type="button" onClick={() => onSelect(hit.symbol, hit.timeframe, setupSignature(hit))} className={`${ROW_CLASS} py-3 transition-[background-color,transform] duration-200 hover:-translate-y-px`}>
       <SetupRowContent hit={hit} max={max} t={t} prominent={prominent} />
     </button>
   ) : (
     <Link
-      href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}`}
+      href={`/analysis?symbol=${encodeURIComponent(hit.symbol)}&tf=${encodeURIComponent(hit.timeframe)}&setup=${encodeURIComponent(setupSignature(hit))}`}
       target="_blank"
       rel="noopener noreferrer"
       className={ROW_CLASS}
@@ -176,7 +177,7 @@ function Column({
   unavailable: boolean;
   t: Translate;
   maxHeight: number;
-  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"], signature: string) => void;
 }) {
   const { authenticated, canAccess } = usePlan();
   const pathname = usePathname();
@@ -283,7 +284,7 @@ export function SignalsBoard({
   /** How tall each column may grow before it scrolls on its own. */
   maxHeight?: number;
   /** Dashboard rows select the chart in place; the standalone page omits this and opens analysis separately. */
-  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"]) => void;
+  onSelect?: (symbol: string, timeframe: SdScanHit["timeframe"], signature: string) => void;
 }) {
   const { t } = useT();
   return (

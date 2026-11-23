@@ -90,6 +90,22 @@ test("terminal published plans do not revive through another detected setup", ()
   }
 });
 
+test("a selected published plan keeps its levels and final status after cancellation", () => {
+  const result = analyze({ ...held, status: "Missed" }, { publishedOnly: true, showPublishedOutcome: true, evaluateLifecycle: false });
+  assert.equal(result.pattern.status, "Missed");
+  assert.equal(result.pattern.confidence, held.confidence);
+  assert.equal(result.levels.find(level => level.id === "entry")?.price, held.entry);
+  assert.equal(result.levels.find(level => level.id === "sl")?.price, held.stopLoss);
+});
+
+test("a selected closed plan remains readable when its base has left chart history", () => {
+  const plan = { ...held, status: "Target 2 reached", zoneBaseTime: candles[0].time - 900 };
+  const result = analyze(plan, { publishedOnly: true, showPublishedOutcome: true });
+  assert.equal(result.pattern.status, "Target 2 reached");
+  assert.equal(result.levels.length, 4);
+  assert.deepEqual(readPublishedSetup(candles, plan, ticker.lastPrice), { status: null, setup: null });
+});
+
 test("an unverified feed cannot change the stored plan's status or levels through another feed's wick", () => {
   const plan: PublishedSetup = {
     direction: "long", entry: 100, target1: 110, target2: 120, stopLoss: 90,

@@ -22,16 +22,19 @@ import { Reveal } from "@/presentation/ui/reveal";
 export function AnalysisClient({
   initialSymbol,
   initialTimeframe,
+  initialSignature,
 }: {
   initialSymbol: string;
   initialTimeframe: Timeframe;
+  initialSignature?: string;
 }) {
   const { t } = useT();
   const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
-  const [viewSymbol, setViewSymbol] = useState(initialSymbol);
+  const selectionKey = `${initialSymbol}|${initialSignature ?? ""}`;
+  const [viewSymbol, setViewSymbol] = useState(selectionKey);
   const [chosen, setChosen] = useState(false);
-  if (viewSymbol !== initialSymbol) {
-    setViewSymbol(initialSymbol);
+  if (viewSymbol !== selectionKey) {
+    setViewSymbol(selectionKey);
     setTimeframe(initialTimeframe);
     setChosen(false);
   }
@@ -40,6 +43,8 @@ export function AnalysisClient({
     initialSymbol,
     timeframe,
     range,
+    true,
+    initialSignature,
   );
 
   // Move the chart to the interval the published plan was measured on, unless

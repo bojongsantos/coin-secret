@@ -24,7 +24,7 @@ test("a transient signals outage retains the last verified board as stale and ac
       }];
     },
     useRef: () => trigger,
-    useEffect: (callback: () => void) => { if (!started) effect = callback; },
+    useEffect: (callback: () => void) => { if (!started) effect ??= callback; },
   };
   const dependencies: Record<string, unknown> = {
     react,

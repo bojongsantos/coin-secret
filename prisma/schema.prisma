@@ -300,3 +300,12 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
 }
+
+model NewsImage {
+  id        String   @id @default(uuid())
+  data      Bytes
+  width     Int
+  height    Int
+  bytes     Int
+  createdAt DateTime @default(now())
+}

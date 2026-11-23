@@ -11,7 +11,7 @@ export function ArticleView({ article }: { article: Pick<Article, "title" | "sum
       <span>{article.authorName}</span>
       {article.publishedAt && <time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta" })}</time>}
     </div>
-    {article.coverUrl && <img src={article.coverUrl} alt={article.coverAlt} width={1200} height={675} referrerPolicy="no-referrer" className="mt-8 aspect-video w-full rounded-2xl border border-border object-cover" />}
+    {article.coverUrl && <div className="mt-8 aspect-video w-full overflow-hidden rounded-2xl border border-border bg-surface"><img src={article.coverUrl} alt={article.coverAlt} width={1200} height={675} decoding="async" referrerPolicy="no-referrer" className="h-full w-full object-contain" /></div>}
     <div className="mt-9 border-t border-border pt-9"><ArticleContent body={article.body} /></div>
   </article>;
 }

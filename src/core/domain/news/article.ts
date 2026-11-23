@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { safeArticleLink } from "./content";
+import { safeArticleImageUrl } from "./content";
 
 export const articleStatus = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
 export const articleFields = z.object({
@@ -8,7 +8,7 @@ export const articleFields = z.object({
   summary: z.string().trim().max(500),
   body: z.string().trim().max(100_000),
   category: z.string().trim().min(1).max(60),
-  coverUrl: z.union([z.literal(""), z.url().max(2000).refine(safeArticleLink, "Use an HTTPS image URL without credentials.")]),
+  coverUrl: z.union([z.literal(""), z.string().max(2000).refine(safeArticleImageUrl, "Upload an image or use an HTTPS image URL without credentials.")]),
   coverAlt: z.string().trim().max(180),
   seoTitle: z.string().trim().max(70),
   seoDescription: z.string().trim().max(180),

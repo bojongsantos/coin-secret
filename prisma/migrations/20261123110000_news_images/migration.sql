@@ -1,0 +1,9 @@
+CREATE TABLE "NewsImage" (
+  "id" TEXT NOT NULL,
+  "data" BYTEA NOT NULL,
+  "width" INTEGER NOT NULL,
+  "height" INTEGER NOT NULL,
+  "bytes" INTEGER NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "NewsImage_pkey" PRIMARY KEY ("id")
+);

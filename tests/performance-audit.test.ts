@@ -36,9 +36,8 @@ test("performance waits for departure before treating an entry touch as a fill",
   candles[38] = candle(38, 100, 101.3, 97.1, 101.1);
   candles[39] = candle(39, 101.1, 101.3, 100, 100.5);
   const setup = detectSupplyDemand(candles).setup;
-  assert.ok(setup);
-  assert.equal(setup.status, "Limit Order");
-  candles.push(candle(40, 100.5, setup.target2 + 1, setup.entry - 0.1, 101));
+  assert.equal(setup, null, "an unformed buy limit above price is not an actionable order");
+  candles.push(candle(40, 100.5, 110, 100, 101));
   while (candles.length < 53) candles.push(candle(candles.length, 100, 101, 99.5, 100));
   assert.equal(buildPerformance(candles).totalTrades, 0, "departure reaching targets is not a filled trade");
 });

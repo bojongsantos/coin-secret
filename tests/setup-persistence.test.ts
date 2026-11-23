@@ -164,15 +164,14 @@ test("a held setup is re-read on its own timeframe, not the fast one", async () 
       symbol: "BTCUSDT",
       timeframe: "1H",
       direction: "long",
-      // Far above anything the fixture trades at, so price never closes clear
-      // of the entry: the setup is still forming and cannot be terminal.
-      entry: 10_000,
-      target1: 11_000,
-      target2: 12_000,
-      stopLoss: 9_000,
+      // Entry is below this market, with targets beyond the loaded tape.
+      entry: 50,
+      target1: 1_000,
+      target2: 2_000,
+      stopLoss: 1,
       confidence: 70,
-      zoneTop: 10_000,
-      zoneBottom: 9_500,
+      zoneTop: 50,
+      zoneBottom: 45,
       zoneBaseTime: hourly[10].time,
       status: "Limit Order",
     },
@@ -312,15 +311,14 @@ test("the chart shows the published plan, not one it re-chose", async () => {
 
   const published: PublishedSetup = {
     direction: "long",
-    // Above everything this market trades at, so price never closes clear of
-    // it: the order is still waiting, which is as non-terminal as it gets.
-    entry: 10_000,
-    target1: 11_000,
-    target2: 12_000,
-    stopLoss: 9_000,
+    // A valid buy limit remains below market until price returns to it.
+    entry: 50,
+    target1: 1_000,
+    target2: 2_000,
+    stopLoss: 1,
     confidence: 64,
-    zoneTop: 10_000,
-    zoneBottom: 9_500,
+    zoneTop: 50,
+    zoneBottom: 45,
     zoneBaseTime: candles[10].time,
   };
 
@@ -335,7 +333,7 @@ test("the chart shows the published plan, not one it re-chose", async () => {
   assert.notEqual(withPlan.pattern.name, "No Zone Setup", "the published plan must be drawn");
   assert.equal(withPlan.pattern.confidence, 64, "and with its own confidence");
   const entry = withPlan.levels.find((l) => l.id === "entry");
-  assert.equal(entry?.price, 10_000, "the chart must draw the published entry");
+  assert.equal(entry?.price, 50, "the chart must draw the published entry");
 });
 
 test("a published plan price has finished lets the chart move on", async () => {
@@ -372,13 +370,13 @@ test("the opportunities board reads the same published plan", async () => {
       symbol: "BTCUSDT",
       timeframe: "1H",
       direction: "long",
-      entry: 10_000,
-      target1: 11_000,
-      target2: 12_000,
-      stopLoss: 9_000,
+      entry: 50,
+      target1: 1_000,
+      target2: 2_000,
+      stopLoss: 1,
       confidence: 64,
-      zoneTop: 10_000,
-      zoneBottom: 9_500,
+      zoneTop: 50,
+      zoneBottom: 45,
       zoneBaseTime: candles[10].time,
       status: "Limit Order",
     },
@@ -387,7 +385,7 @@ test("the opportunities board reads the same published plan", async () => {
   const withStore = await runScanner(port, ["BTCUSDT"], { activeSetups: held.port });
   const row = withStore.opportunities[0];
   assert.ok(row, "the published plan must be listed");
-  assert.equal(row.entry, 10_000, "and it must be the published entry");
+  assert.equal(row.entry, 50, "and it must be the published entry");
   assert.equal(row.confidence, 64);
   assert.equal(row.setup, "long");
   assert.equal(row.timeframe, "1H", "reported on the chart it lives on");

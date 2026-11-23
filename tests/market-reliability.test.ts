@@ -773,7 +773,7 @@ test("hidden initial polling does not falsely report offline, but visible offlin
 
 test("offline cancellation drains one in-flight read before reconnect and retains only allowed snapshots", async () => {
   for (const [path, hook, payload, retain] of [
-    ["src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload, false],
+    ["src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload, true],
     ["src/presentation/hooks/use-market-context.ts", "useMarketContext", marketPayload, true],
   ] as const) {
     const harness = pollingHook(path, hook, payload);
@@ -860,7 +860,7 @@ test("market refresh is single-flight, labels a retained snapshot stale after ti
   assert.equal(harness.revision(), revision, "cancelled work must not write state after unmount");
 });
 
-test("signals wait is bounded, clears setups after failure, and cancels on unmount", async () => {
+test("signals wait is bounded, retains stale setups after failure, and cancels on unmount", async () => {
   const harness = pollingHook("src/presentation/hooks/use-scanner.ts", "useDashboardSignals", signalsPayload);
   harness.runTimer();
   await settlePolling();
@@ -872,9 +872,9 @@ test("signals wait is bounded, clears setups after failure, and cancels on unmou
   harness.timeout();
   await settlePolling();
   const failed = harness.render();
-  assert.equal(failed.result, null);
-  assert.equal(failed.top?.length, 0);
-  assert.equal(failed.stale, false);
+  assert.deepEqual(failed.result, signalsPayload.result);
+  assert.deepEqual(failed.top, signalsPayload.top);
+  assert.equal(failed.stale, true);
   assert.equal(failed.lastUpdated, signalsPayload.result.scannedAt);
   assert.equal(failed.loading, false);
   assert.match(failed.error!, /timed out/);

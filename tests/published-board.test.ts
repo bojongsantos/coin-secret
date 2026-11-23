@@ -167,7 +167,7 @@ test("expired, malformed, wrong-watchlist, unknown-source and source-configurati
     let calls = 0;
     const live = board(NOW);
     const reader = createPublishedBoardReader({ now: () => NOW, scan: async () => { calls += 1; return live; } });
-    const response = await reader.read(f.input);
+    const response = await reader.read({ ...f.input, scheduleAfter: undefined });
     assert.deepEqual(response.result, live);
     assert.equal(response.stale, false);
     assert.equal(calls, 1);
@@ -209,7 +209,7 @@ test("a successful scan remains available in memory when durable publication fai
   f.snapshots.save = async () => { throw new Error("database temporarily unavailable"); };
   let calls = 0;
   const reader = createPublishedBoardReader({ now: () => NOW, scan: async () => { calls += 1; return board(NOW); } });
-  assert.equal((await reader.read(f.input)).snapshotPublished, false);
+  assert.equal((await reader.refresh(f.input)).snapshotPublished, false);
   assert.equal((await reader.read(f.input)).result.scannedAt, new Date(NOW).toISOString());
   assert.equal(calls, 1);
   f.activeSetups.loadActive = async () => { throw new Error("active read unavailable"); };
@@ -227,7 +227,7 @@ test("a successful refresh after clock rollback replaces the future memory board
   await reader.refresh(f.input);
   assert.equal(calls, 1);
   clock -= 2 * 60_000;
-  const refreshed = await reader.read(f.input);
+  const refreshed = await reader.read({ ...f.input, scheduleAfter: undefined });
   assert.equal(refreshed.result.scannedAt, new Date(clock).toISOString());
   assert.equal(calls, 2, "a future memory board requires one truthful scan after rollback");
   const cached = await reader.read(f.input);
@@ -282,7 +282,7 @@ test("a failed shared snapshot read retains only usable local memory and keeps i
   assert.equal(calls, 1);
   await f.callbacks[0]();
   clock += 61 * 60_000;
-  await assert.rejects(reader.read(f.input), /provider unavailable/);
+  await assert.rejects(reader.read({ ...f.input, scheduleAfter: undefined }), /provider unavailable/);
   assert.equal(calls, 3, "expired memory cannot be served when both the shared store and provider fail");
 });
 
@@ -359,7 +359,7 @@ test("first-load and after work share the whole refresh through its write comple
   const background = f.callbacks[0]();
   f.stored(null);
   clock += 61 * 60_000;
-  const cold = reader.read(f.input);
+  const cold = reader.read({ ...f.input, scheduleAfter: undefined });
   nextScan.resolve(board(clock));
   await Promise.all([background, cold]);
   assert.equal(calls, 1);
@@ -407,6 +407,159 @@ test("a cold contender with no usable board never starts an unfenced duplicate s
   await assert.rejects(reader.read(f.input), /refresh already in progress/);
   assert.equal(calls, 0);
   assert.equal(f.saved(), 0);
+});
+
+test("a cold HTTP reader schedules one refresh without waiting for the full market scan", async () => {
+  const f = fixture();
+  f.stored(null);
+  let calls = 0;
+  const reader = createPublishedBoardReader({ now: () => NOW, scan: async () => { calls += 1; return board(NOW); } });
+  await assert.rejects(reader.read(f.input), /refresh already in progress/);
+  await assert.rejects(reader.read(f.input), /refresh already in progress/);
+  assert.equal(calls, 0);
+  assert.equal(f.callbacks.length, 1);
+  await f.callbacks[0]();
+  const response = await reader.read(f.input);
+  assert.equal(calls, 1);
+  assert.equal(response.stale, false);
+  assert.equal(response.result.scannedAt, new Date(NOW).toISOString());
+});
+
+test("failed cold background refreshes honor backoff rather than starting a scan on every retry", async () => {
+  const f = fixture();
+  f.stored(null);
+  let clock = NOW;
+  let calls = 0;
+  const reader = createPublishedBoardReader({ now: () => clock, scan: async () => { calls += 1; throw new Error("provider unavailable"); } });
+  await assert.rejects(reader.read(f.input), /refresh already in progress/);
+  await f.callbacks[0]();
+  await assert.rejects(reader.read(f.input), /refresh already in progress/);
+  assert.equal(calls, 1);
+  assert.equal(f.callbacks.length, 1);
+  clock += 15_000;
+  await assert.rejects(reader.read(f.input), /refresh already in progress/);
+  assert.equal(f.callbacks.length, 2);
+});
+
+test("an expired background reservation retries through the native fence without overlapping a held scan", async () => {
+  const f = fixture();
+  let clock = NOW;
+  let held = false;
+  let calls = 0;
+  const scanGate = deferred<SdScanResult>();
+  f.snapshots.coordinateRefresh = async (work) => {
+    if (held) return { acquired: false };
+    held = true;
+    try { return { acquired: true, value: await work(f.activeSetups) }; }
+    finally { held = false; }
+  };
+  const reader = createPublishedBoardReader({ now: () => clock, scan: async () => { calls++; return scanGate.promise; } });
+  await reader.read(f.input);
+  const first = f.callbacks[0]();
+  await new Promise((done) => setImmediate(done));
+  clock += 119_999;
+  await reader.read(f.input);
+  assert.equal(f.callbacks.length, 1);
+  clock++;
+  await reader.read(f.input);
+  assert.equal(f.callbacks.length, 2, "a lost background callback cannot reserve the process forever");
+  await f.callbacks[1]();
+  assert.equal(calls, 1, "the replacement must respect the original database lock");
+  scanGate.resolve(board(clock));
+  await first;
+});
+
+test("an unfenced stalled refresh is never replaced merely because time elapsed", async () => {
+  const f = fixture();
+  let clock = NOW;
+  const gate = deferred<SdScanResult>();
+  const reader = createPublishedBoardReader({ now: () => clock, scan: async () => gate.promise });
+  await reader.read(f.input);
+  const pending = f.callbacks[0]();
+  clock += 120_000;
+  await reader.read(f.input);
+  assert.equal(f.callbacks.length, 1);
+  gate.resolve(board(clock));
+  await pending;
+});
+
+test("a stalled synchronous cron reservation can be retried without bypassing the native fence", async () => {
+  const f = fixture();
+  let clock = NOW;
+  let held = false;
+  let calls = 0;
+  const gate = deferred<SdScanResult>();
+  f.snapshots.coordinateRefresh = async (work) => {
+    if (held) return { acquired: false };
+    held = true;
+    try { return { acquired: true, value: await work(f.activeSetups) }; }
+    finally { held = false; }
+  };
+  const reader = createPublishedBoardReader({ now: () => clock, scan: async () => { calls++; return gate.promise; } });
+  const original = reader.refresh(f.input);
+  await new Promise((done) => setImmediate(done));
+  clock += 120_000;
+  const retried = reader.refresh(f.input);
+  await new Promise((done) => setImmediate(done));
+  // If the old reservation were reused, both promises would remain stuck on gate.
+  let finished = false;
+  void retried.then(() => { finished = true; });
+  await new Promise((done) => setImmediate(done));
+  assert.equal(finished, true);
+  assert.equal((await retried).snapshotPublished, false);
+  assert.equal(calls, 1, "retry must not scan while the original transaction holds its fence");
+  gate.resolve(board(clock));
+  await original;
+});
+
+test("late completion cannot clear a replacement reservation or displace its newer verified memory", async () => {
+  const f = fixture();
+  let clock = NOW;
+  let calls = 0;
+  const firstGate = deferred<SdScanResult>();
+  const secondGate = deferred<SdScanResult>();
+  // A transaction can release its database fence before its post-commit validation resumes.
+  f.snapshots.coordinateRefresh = async (work) => ({ acquired: true, value: await work(f.activeSetups) });
+  const reader = createPublishedBoardReader({ now: () => clock, scan: async () => ++calls === 1 ? firstGate.promise : secondGate.promise });
+  await reader.read(f.input);
+  const first = f.callbacks[0]();
+  clock += 120_000;
+  await reader.read(f.input);
+  assert.equal(f.callbacks.length, 2);
+  const second = f.callbacks[1]();
+  firstGate.resolve(board(NOW));
+  await first;
+  const whileSecondRuns = await reader.read(f.input);
+  assert.equal(whileSecondRuns.refreshing, true);
+  assert.equal(f.callbacks.length, 2, "old cleanup must not remove the replacement reservation");
+  secondGate.resolve(board(clock));
+  await second;
+  assert.equal((await reader.read(f.input)).result.scannedAt, new Date(clock).toISOString());
+});
+
+test("a delayed old reservation cannot replace the newer board after its successor finishes", async () => {
+  const f = fixture();
+  let clock = NOW;
+  let calls = 0;
+  const firstGate = deferred<SdScanResult>();
+  f.snapshots.coordinateRefresh = async (work) => ({ acquired: true, value: await work(f.activeSetups) });
+  // Match the adapter's atomic publication timestamp guard.
+  f.snapshots.save = async (snapshot) => {
+    if (snapshot.result.scannedAt > f.snapshot().result.scannedAt) f.stored(snapshot);
+  };
+  const reader = createPublishedBoardReader({ now: () => clock, scan: async () => ++calls === 1 ? firstGate.promise : board(clock) });
+  await reader.read(f.input);
+  const first = f.callbacks[0]();
+  clock += 120_000;
+  await reader.read(f.input);
+  await f.callbacks[1]();
+  firstGate.resolve(board(NOW));
+  await first;
+  const result = await reader.read(f.input);
+  assert.equal(result.result.scannedAt, new Date(clock).toISOString());
+  assert.equal(result.refreshing, false);
+  assert.equal(f.snapshot().result.scannedAt, result.result.scannedAt);
+  assert.equal(calls, 2);
 });
 
 test("a transaction must commit before fresh memory or a durable snapshot can be published", async () => {

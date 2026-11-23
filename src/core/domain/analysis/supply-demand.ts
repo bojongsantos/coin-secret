@@ -280,6 +280,7 @@ export function detectSupplyDemand(candles: Candle[], options: { pendingOnly?: b
     if (isTerminalSetupStatus(status)) continue;
     // First publication must precede the fill; a historical trade is not an
     // order readers can still place. Stored plans are replayed separately.
+    if (status === "Limit Order" && (isLong ? price <= entry : price >= entry)) continue;
     if (options.pendingOnly && status !== "Limit Order") continue;
 
     const rawRr = Math.abs(target2 - entry) / Math.max(1e-9, Math.abs(entry - stopLoss));
@@ -526,6 +527,7 @@ export function readPublishedSetup(
   if (!status || ![...ACTIVE_SETUP_STATUSES, ...TERMINAL_SETUP_STATUSES].includes(status as Status)) {
     return { status: null, setup: null };
   }
+  if (options.evaluateLifecycle !== false && status === "Limit Order" && (published.direction === "long" ? price <= published.entry : price >= published.entry)) return { status: "Missed", setup: null };
   if (isTerminalSetupStatus(status)) return { status: status as Status, setup: null };
 
   const isLong = published.direction === "long";

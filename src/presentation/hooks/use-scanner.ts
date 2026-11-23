@@ -60,6 +60,7 @@ function usePollingScan<T extends ScanResult | SignalsApiPayload>(path: string, 
   const state = usePollingRead<T>({
     enabled, accessKey, invalidateEvent: AUTH_STATE_CHANGED_EVENT,
     label: path === "/api/scanner" ? "Scanner" : "Signals", refreshMs: SCAN_REFRESH_MS,
+    retainOnError: path === "/api/signals",
     read, updatedAt: scanUpdatedAt, refreshDelay: scanRefreshDelay,
   });
   const data: ScanResult | SignalsApiPayload | null = state.data;

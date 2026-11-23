@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AdminFeedback, AdminPagination, adminJson, isList, useAdminData } from "./admin-data";
 interface AdminUser { id: string; name: string; email: string; emailVerified: boolean; emailRisk?: "reserved" | "disposable" | null; role: "USER" | "ADMIN"; plan: "FREE" | "PREMIUM"; subscription: { status: string; provider: string | null; currentPeriodStart: string | null; currentPeriodEnd: string | null } | null; _count: { sessions: number; payments: number } }
@@ -25,6 +25,18 @@ export function UsersModule() {
   const [query, setQuery] = useState(""); const [page, setPage] = useState(1);
   const [saving, setSaving] = useState(false); const [message, setMessage] = useState<string | null>(null);
   const { data, loading, error, reload } = useAdminData(`/api/admin/users?q=${encodeURIComponent(query)}&page=${page}`, valid);
+  useEffect(() => {
+    if (!data || saving) return;
+    const deadlines = data.users.flatMap(user => user.plan === "PREMIUM" && user.subscription?.currentPeriodEnd ? [Date.parse(user.subscription.currentPeriodEnd)] : []);
+    const nextExpiry = Math.min(...deadlines);
+    const refresh = () => { void reload(); };
+    const timer = Number.isFinite(nextExpiry) ? window.setTimeout(refresh, Math.max(0, Math.min(nextExpiry - Date.now(), 2_147_483_647))) : null;
+    window.addEventListener("focus", refresh);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [data, reload, saving]);
   async function update(id: string, change: UserChange) {
     if (saving || !window.confirm(change.currentPeriodEnd !== undefined ? "Apply this access expiry? This replaces the current paid or trial expiry with a manual admin grant." : change.plan ? "Apply this plan? A new manual Pro grant has no expiry; set its date in Access expiry." : "Apply this role change? Demotion ends the user's current sessions.")) return;
     setSaving(true); setMessage(null);

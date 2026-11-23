@@ -117,6 +117,22 @@ export function traceSetupLifecycle(
       continue;
     }
 
+    const touchesEntry = candle.low <= plan.entry && candle.high >= plan.entry;
+    const passedEntry = long ? candle.high < plan.entry : candle.low > plan.entry;
+    // Once an order is visible, a tape entirely past entry cannot prove a
+    // fill. Cancel now so a later return cannot manufacture that missing fill.
+    if (i > baseIndex && filledIndex === null && passedEntry && (armedIndex !== null || publishedAt !== undefined)) {
+      missed = true;
+      break;
+    }
+    // A gap past invalidation cannot prove an entry trade. An order that
+    // never armed is cancelled, rather than waiting below its own stop.
+    if (i > baseIndex && filledIndex === null && stoppedOn(candle) &&
+      (armedIndex === null ? publishedAt !== undefined : !touchesEntry)) {
+      missed = true;
+      break;
+    }
+
     if (armedIndex === null) {
       // The base and departure bars cannot prove a subsequent entry fill.
       if (i === baseIndex) continue;
@@ -132,8 +148,7 @@ export function traceSetupLifecycle(
     }
 
     if (filledIndex === null) {
-      const touched = long ? candle.low <= plan.entry : candle.high >= plan.entry;
-      if (touched) {
+      if (touchesEntry) {
         filledIndex = i;
         if (stoppedOn(candle)) {
           stopIndex = i;
@@ -163,6 +178,10 @@ export function traceSetupLifecycle(
     }
   }
 
+  if (publishedAt !== undefined && filledIndex === null && (long ? price <= plan.entry : price >= plan.entry)) {
+    missed = true;
+  }
+
   return {
     armedIndex,
     filledIndex,
@@ -183,6 +202,7 @@ function statusFor(
   plan: SetupPlan,
   price: number,
 ): SetupStatus {
+  if (marks.missed) return "Missed";
   // Still forming: the impulse has not finished leaving, so there is no order
   // to speak of yet. Reported as a live limit rather than as nothing, because
   // that is what the reader is being shown on the chart.

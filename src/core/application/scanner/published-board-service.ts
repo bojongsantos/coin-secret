@@ -13,6 +13,7 @@ const FRESH_MS = 60_000;
 const MAX_AGE_MS = 60 * 60_000;
 const FAILURE_BACKOFF_MS = 15_000;
 const METADATA_READ_BUDGET_MS = 25_000;
+const REFRESH_RESERVATION_MS = 120_000;
 const exchange = z.enum(["binance", "bybit"]);
 const finite = z.number().finite();
 const price = finite.positive();
@@ -115,7 +116,7 @@ export function createPublishedBoardReader(options: { scan?: Scan; now?: () => n
   let latest: { identity: Identity; snapshot: SignalsSnapshot } | undefined;
   let retryAfter = 0;
   let pending: { identity: Identity; completion: Promise<SdScanResult | undefined>; run: () => Promise<void>;
-    error?: unknown; busy?: boolean; published?: boolean } | undefined;
+    reservedAt: number; error?: unknown; busy?: boolean; published?: boolean } | undefined;
 
   const coordinatedScan = async (input: PublishedBoardInput, force = true) => {
     const work = (activeSetups: ActiveSetupPort) => scan(input.marketData, input.symbols, force, { activeSetups });
@@ -129,11 +130,23 @@ export function createPublishedBoardReader(options: { scan?: Scan; now?: () => n
     return { acquired: true as const, value: currentBoard(completed.value, current) };
   };
 
+  function expireReservation(input: PublishedBoardInput) {
+    if (pending && sameIdentity(pending.identity, input)
+      && input.snapshots.coordinateRefresh && now() - pending.reservedAt >= REFRESH_RESERVATION_MS) {
+      // Retire only the local reservation. Replacement work must acquire the native
+      // transaction fence; the old job still drains and cannot clear its successor.
+      console.warn("[signals.snapshot]", { operation: "reservation", status: "expired" });
+      pending = undefined;
+    }
+  }
+
   function reserve(input: PublishedBoardInput) {
+    expireReservation(input);
     if (pending && sameIdentity(pending.identity, input)) return pending;
     let finish!: (result: SdScanResult | undefined) => void;
     const job = {
       identity: input,
+      reservedAt: now(),
       completion: new Promise<SdScanResult | undefined>((resolve) => { finish = resolve; }),
       error: undefined as unknown,
       busy: false,
@@ -243,9 +256,19 @@ export function createPublishedBoardReader(options: { scan?: Scan; now?: () => n
       return { result: currentBoard(result, current), stale: false, refreshing: false };
     }
     // There is no usable board yet: keep the first scan's existing bounded deadline.
+    expireReservation(input);
     if (input.force && !input.scheduleAfter) return refresh(input);
     const board = await loadBoard(input);
-    if (!board) return refresh(input);
+    if (!board && !input.scheduleAfter) return refresh(input);
+    if (!board) {
+      if (now() >= retryAfter && (!pending || !sameIdentity(pending.identity, input))) {
+        const job = reserve(input);
+        try { input.scheduleAfter?.(job.run); }
+        catch (error) { if (pending === job) pending = undefined; throw error; }
+      }
+      // Cold requests must not wait for a full scan beyond the hosting gateway deadline.
+      throw new Error("Signals refresh already in progress; retry shortly");
+    }
     if (input.scheduleAfter && (board.stale || input.force) && now() >= retryAfter) {
       if (!pending || !sameIdentity(pending.identity, input)) {
         const job = reserve(input);

@@ -159,6 +159,9 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       archivedAt: null,
       exchange: { in: ["binance", "bybit"] },
       firstStatus: "Limit Order",
+      // Lost or missed plans never earn entry proof. Keep target-two winners
+      // eligible so a delayed sweep can still recover their missing entry.
+      status: { notIn: ["Invalidated (SL hit)", "Missed"] },
       snapshots: { none: { kind: "ENTRY" } },
       OR: eligibleCheck(now),
     },

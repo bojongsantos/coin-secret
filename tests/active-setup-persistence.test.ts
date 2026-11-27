@@ -10,6 +10,7 @@ import { setupSignature } from "@/core/domain/analysis/setup-signature";
 import * as timeframe from "@/core/domain/market/timeframe";
 import * as exchange from "@/core/domain/market/exchange";
 import { mapConcurrent } from "@/shared/lib/async";
+import { createSharedSetupReads } from "@/infrastructure/persistence/shared-setup-reads";
 
 function setup(symbol: string, zoneBaseTime = 1000, status = "Running"): ActiveSetup {
   return { symbol, timeframe: "15m", direction: "long", entry: 100, target1: 110, target2: 120, stopLoss: 90,
@@ -52,6 +53,7 @@ function fixture(initial: StoredSetup[] = [], failure?: Error, wait?: (signature
     "@/core/domain/market/exchange": exchange,
     "@/core/domain/analysis/setup-signature": { setupSignature },
     "@/shared/lib/async": { mapConcurrent },
+    "@/infrastructure/persistence/shared-setup-reads": { createSharedSetupReads },
     "@/infrastructure/database/prisma": { prisma: { trackedSetup: {
       findMany: async ({ where, orderBy, distinct }: { where: { symbol: { in: string[] }; archivedAt?: null; status?: { notIn: string[] };
         zoneBaseTime?: { gte: number }; OR?: Array<{ status?: { in: string[] }; archivedAt?: { not: null } }> };

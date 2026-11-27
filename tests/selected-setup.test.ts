@@ -10,6 +10,7 @@ import * as supplyDemand from "@/core/domain/analysis/supply-demand";
 import * as timeframe from "@/core/domain/market/timeframe";
 import * as exchange from "@/core/domain/market/exchange";
 import { mapConcurrent } from "@/shared/lib/async";
+import { createSharedSetupReads } from "@/infrastructure/persistence/shared-setup-reads";
 
 function source(path: string, modules: Record<string, unknown>) {
   const exports: Record<string, unknown> = {};
@@ -60,6 +61,7 @@ test("identity lookup reads the exact published row from the isolated read pool,
   } } };
   const storeModule = source("src/infrastructure/persistence/active-setup-store.ts", {
     "server-only": {}, "@/infrastructure/database/prisma": { prisma: database, marketReadPrisma: readDatabase },
+    "@/infrastructure/persistence/shared-setup-reads": { createSharedSetupReads },
     "@/core/domain/analysis/setup-lifecycle": lifecycle,
     "@/core/domain/analysis/supply-demand": supplyDemand,
     "@/core/domain/market/timeframe": timeframe,
@@ -80,5 +82,6 @@ test("identity lookup reads the exact published row from the isolated read pool,
   assert.equal(reads, 1);
   assert.equal(await store.loadPublished(symbol, "HYPEUSDT|15m|long|1795437001"), null);
   archived = true;
+  (storeModule.clearSetupReadCache as () => void)();
   assert.equal(await store.loadPublished(symbol, signature), null, "archived publications remain hidden");
 });

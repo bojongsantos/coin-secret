@@ -2,7 +2,7 @@ import "server-only";
 import type { SignalsSnapshotPort } from "@/core/application/ports/signals-snapshot-port";
 import { marketReadPrisma, signalsWritePrisma } from "@/infrastructure/database/prisma";
 import { readSetupRows } from "@/infrastructure/database/setup-read";
-import { createActiveSetupStore } from "@/infrastructure/persistence/active-setup-store";
+import { clearSetupReadCache, createActiveSetupStore } from "@/infrastructure/persistence/active-setup-store";
 
 const SNAPSHOT_KEY = "market.signals.default-board.v1";
 
@@ -12,7 +12,7 @@ export const signalsSnapshotStore: SignalsSnapshotPort = {
     let stage = "begin";
     console.info("[signals.transaction]", { stage });
     try {
-      return await signalsWritePrisma.$transaction(async (transaction) => {
+      const result = await signalsWritePrisma.$transaction(async (transaction) => {
         stage = "lock";
         console.info("[signals.transaction]", { stage, elapsedMs: Math.round(performance.now() - started) });
         const [lock] = await transaction.$queryRaw<Array<{ acquired: boolean }>>`
@@ -25,6 +25,8 @@ export const signalsSnapshotStore: SignalsSnapshotPort = {
         stage = "commit";
         return { acquired: true as const, value };
       }, { maxWait: 10_000, timeout: 65_000 });
+      if (result.acquired) clearSetupReadCache();
+      return result;
     } catch (error) {
       console.warn("[signals.transaction]", { stage, status: "failed", elapsedMs: Math.round(performance.now() - started) });
       throw error;

@@ -59,6 +59,7 @@ function fixture() {
       if (name === "@/infrastructure/database/prisma") return { signalsWritePrisma: database };
       if (name === "@/infrastructure/database/setup-read") return { readSetupRows: async () => { throw new Error("unexpected standalone read"); } };
       if (name === "@/infrastructure/persistence/active-setup-store") return {
+        clearSetupReadCache: () => {},
         createActiveSetupStore: (transaction: Transaction, transactional: boolean): ActiveSetupPort => {
           assert.ok(transactions.includes(transaction), "fenced writes must use the acquired transaction client");
           assert.equal(transactional, true);

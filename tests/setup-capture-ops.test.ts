@@ -163,9 +163,10 @@ function captureService(options: {
   scanErrors?: string[];
   verified?: boolean;
   race?: "archive" | "advance";
+  status?: string;
 } = {}) {
   const row = { id: "setup-1", symbol: "TESTUSDT", timeframe: "15m", direction: "long", exchange: "binance",
-    firstStatus: "Limit Order", status: "Running", archivedAt: null as Date | null, resultAt: null as Date | null,
+    firstStatus: "Limit Order", status: options.status ?? "Running", archivedAt: null as Date | null, resultAt: null as Date | null,
     firstSeenAt: new Date(0),
     zoneBaseTime: 1000, entry: 100, stopLoss: 90, target1: 110, target2: 120, confidence: 75,
     riskReward: 2, zoneTop: 100, zoneBottom: 95 };
@@ -216,8 +217,9 @@ function captureService(options: {
       }) };
       if (name.endsWith("/prisma")) return { prisma: {
         trackedSetup: {
-          findMany: async (query: { where: { firstStatus?: string } }) => {
+          findMany: async (query: { where: { firstStatus?: string; status?: { notIn: string[] } } }) => {
             queries++;
+            if (query.where.status?.notIn.includes(row.status)) return [];
             return (options.kind === "entry" && query.where.firstStatus || options.kind === "result" && !query.where.firstStatus) ? [{ ...row }] : [];
           },
           updateMany: async (input: Parameters<typeof update>[0]) => {
@@ -244,6 +246,24 @@ test("capture only verifies durable readback from a complete successfully saved 
   }
   const f = captureService();
   assert.equal((await f.run()).publication.verified, true);
+});
+
+test("permanently lost or missed setups do not reenter the entry proof write queue", async () => {
+  for (const status of ["Missed", "Invalidated (SL hit)"]) {
+    const f = captureService({ kind: "entry", status });
+    assert.equal((await f.run()).entrySnapshots, 0);
+    assert.equal(f.counts().statusWrites, 0, "closed losing setups must not incur another check-marker update");
+    assert.equal(f.counts().transactions, 0);
+    assert.deepEqual(f.snapshots, []);
+    assert.equal(f.row.status, status);
+  }
+});
+
+test("a terminal target-two winner remains eligible for missing entry proof recovery", async () => {
+  const f = captureService({ kind: "entry", status: "Target 2 reached" });
+  assert.equal((await f.run()).entrySnapshots, 1);
+  assert.deepEqual(f.snapshots, ["ENTRY"]);
+  assert.equal(f.row.status, "Target 2 reached");
 });
 
 test("a busy capture returns before any proof queue or transaction is opened", async () => {

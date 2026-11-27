@@ -15,6 +15,7 @@ import { marketReadPrisma, prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { readSetupRows } from "@/infrastructure/database/setup-read";
 import { mapConcurrent } from "@/shared/lib/async";
+import { createSharedSetupReads } from "@/infrastructure/persistence/shared-setup-reads";
 
 /**
  * Published setups, kept in the same table the result archive reads.
@@ -249,7 +250,9 @@ export function createActiveSetupStore(
   };
 }
 
-export const activeSetupStore = createActiveSetupStore(prisma, false, marketReadPrisma);
+const sharedSetupReads = createSharedSetupReads(createActiveSetupStore(prisma, false, marketReadPrisma));
+export const activeSetupStore = sharedSetupReads.store;
+export const clearSetupReadCache = sharedSetupReads.clear;
 
 const TERMINAL = ["Target 2 reached", "Invalidated (SL hit)", "Missed"];
 

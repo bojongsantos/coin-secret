@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import sharp from "sharp";
 import * as imageRules from "@/core/domain/news/image";
+import * as transactionLocks from "@/infrastructure/database/transaction-lock";
 
 class HttpError extends Error {
   constructor(public status: number, message: string, public code = "REQUEST_ERROR") { super(message); }
@@ -12,7 +13,7 @@ class HttpError extends Error {
 function moduleSource(path: string, imports: Record<string, unknown>) {
   const exports: Record<string, unknown> = {};
   runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText,
-    { exports, Uint8Array, Request, Response, URL, Buffer, process, require: (name: string) => imports[name] ?? {} });
+    { exports, Uint8Array, Request, Response, URL, Buffer, process, require: (name: string) => imports[name] ?? (name === "@/infrastructure/database/transaction-lock" ? transactionLocks : {}) });
   return exports;
 }
 function processing() {
@@ -79,7 +80,7 @@ test("persistent images enforce quota after serializing access and rechecking ad
   let usage = imageRules.NEWS_IMAGE_STORAGE_BYTES;
   let role = "ADMIN";
   const tx = {
-    $executeRaw: async () => { events.push("lock"); },
+    $queryRaw: async () => { events.push("lock"); return [{ key: "news.images.upload" }]; },
     user: { findUnique: async () => { events.push("actor"); return { role, emailVerified: true }; } },
     newsImage: { aggregate: async () => { events.push("quota"); return { _sum: { bytes: usage } }; }, create: async () => { events.push("create"); return { id: "a", width: 10, height: 10 }; } },
     auditLog: { create: async () => { events.push("audit"); } },

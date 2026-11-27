@@ -19,7 +19,7 @@ function missing(variable: string): never {
 function requireIsolatedSandbox(): void {
   let isolated = false;
   try {
-    const database = new URL(process.env.DATABASE_URL ?? "");
+    const database = new URL(process.env.MYSQL_DATABASE_URL ?? process.env.DATABASE_URL ?? "");
     isolated = ["localhost", "127.0.0.1", "[::1]"].includes(database.hostname) &&
       /_(sandbox|test)$/.test(database.pathname);
   } catch { /* Invalid configuration fails closed. */ }

@@ -5,7 +5,7 @@ Coin Secret adalah aplikasi analisis teknikal kripto berbasis aturan. Sistem men
 ## Stack
 
 - Next.js 16 App Router dan React 19.
-- PostgreSQL 17 dan Prisma ORM 7.
+- MariaDB (MySQL) dan Prisma ORM 7. Migrasi aktif berada di `prisma/mysql-migrations`.
 - Better Auth untuk email/password, session database, verifikasi, dan reset password.
 - Midtrans Snap atau NOWPayments untuk pembayaran Premium bulanan, enam bulan, dan tahunan.
 - Brevo untuk email transaksional production.
@@ -72,4 +72,6 @@ npm run check
 npm audit
 ```
 
-Setup yang sudah diterbitkan, identitas, session, paket, pembayaran, feature gate, audit log, dan arsip bukti hasil disimpan di PostgreSQL. Preferensi tema, bahasa, dan sidebar tetap lokal per browser.
+Setup yang sudah diterbitkan, identitas, session, paket, pembayaran, feature gate, audit log, dan arsip bukti hasil disimpan di MariaDB. Preferensi tema, bahasa, dan sidebar tetap lokal per browser.
+
+Runtime dan Prisma CLI mengutamakan `MYSQL_DATABASE_URL`, lalu `DATABASE_URL`. Di Hostinger, gunakan host `127.0.0.1:3306`; host `srv*.hstgr.io` hanya untuk akses eksternal melalui TLS. Histori migrasi PostgreSQL tetap disimpan sebagai referensi, bukan untuk dijalankan pada MySQL.

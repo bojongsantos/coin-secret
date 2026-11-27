@@ -1,7 +1,7 @@
 import "server-only";
 
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import { createDatabaseAdapter, databaseConnectionString, type DatabaseMode } from "@/infrastructure/database/adapter";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -9,31 +9,11 @@ const globalForPrisma = globalThis as unknown as {
   signalsWritePrisma?: PrismaClient;
 };
 
-function createPrismaClient(mode: "app" | "market-read" | "signals-write" = "app"): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL belum dikonfigurasi.");
-  }
+function createPrismaClient(mode: DatabaseMode = "app"): PrismaClient {
+  const connectionString = databaseConnectionString();
 
-  const marketRead = mode === "market-read";
-  const signalsWrite = mode === "signals-write";
   return new PrismaClient({
-    // Native driver/server limits end the actual wait. A promise-only timeout
-    // would let queries keep running after callers release their scan guard.
-    adapter: new PrismaPg({
-      connectionString,
-      connectionTimeoutMillis: 10_000,
-      statement_timeout: 15_000,
-      lock_timeout: 5_000,
-      // Only standalone SELECTs may abandon a response after pg closes the
-      // failed pool connection. Transactional writes retain server cancellation.
-      query_timeout: marketRead ? 10_000 : undefined,
-      options: marketRead ? "-c default_transaction_read_only=on" : undefined,
-      max: marketRead || signalsWrite ? 2 : undefined,
-      // A scan and its publication check out fresh connections.
-      maxUses: signalsWrite ? 1 : undefined,
-      idle_in_transaction_session_timeout: signalsWrite ? 45_000 : undefined,
-    }),
+    adapter: createDatabaseAdapter(connectionString, mode),
   });
 }
 

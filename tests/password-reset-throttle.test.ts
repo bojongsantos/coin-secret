@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
@@ -11,7 +11,11 @@ function fixture() {
   let tail = Promise.resolve();
   let locks = 0;
   const tx = {
-    async $queryRaw() { locks++; },
+    async $executeRaw(sql: TemplateStringsArray, _id: string, key: string, now: bigint) {
+      assert.ok(sql.join("?").includes("ON DUPLICATE KEY UPDATE"));
+      locks++;
+      if (!rows.has(key)) rows.set(key, { key, count: 0, lastRequest: now });
+    },
     rateLimit: {
       async findUnique({ where }: { where: { key: string } }) { return rows.get(where.key) ?? null; },
       async upsert({ where, create, update }: { where: { key: string }; create: Row; update: Partial<Row> }) {
@@ -36,7 +40,7 @@ function fixture() {
       exports,
       require(name: string) {
         if (name === "server-only") return {};
-        if (name === "node:crypto") return { createHash };
+        if (name === "node:crypto") return { createHash, randomUUID };
         if (name === "@/infrastructure/database/prisma") return { prisma };
         throw new Error(`Unexpected import ${name}`);
       },

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/infrastructure/database/prisma";
 
 /** Durable limits survive restarts and apply across IP addresses and app workers. */
@@ -10,7 +10,11 @@ export async function passwordResetThrottle(email: string, action: "send" | "ver
   const maximum = action === "send" ? 3 : 5;
   return prisma.$transaction(async (tx) => {
     // Serialize the read/check/write across workers without a new table.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text`;
+    await tx.$executeRaw`
+      INSERT INTO \`RateLimit\` (\`id\`, \`key\`, \`count\`, \`lastRequest\`)
+      VALUES (${randomUUID()}, ${key}, 0, ${BigInt(now)})
+      ON DUPLICATE KEY UPDATE \`key\` = VALUES(\`key\`)
+    `;
     const window = await tx.rateLimit.findUnique({ where: { key } });
     const startedAt = window ? Number(window.lastRequest) : now;
     if (window && now - startedAt < windowMs && window.count >= maximum) {

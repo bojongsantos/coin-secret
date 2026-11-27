@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const query = url.searchParams.get("q")?.trim().slice(0, 100);
     const { page, skip, take } = adminPage(request);
     const users = await prisma.user.findMany({
-      where: query ? { OR: [{ email: { contains: query, mode: "insensitive" } }, { name: { contains: query, mode: "insensitive" } }] } : undefined,
+      where: query ? { OR: [{ email: { contains: query.toLowerCase() } }, { name: { contains: query } }] } : undefined,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip, take: take + 1,
       select: {

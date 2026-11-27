@@ -13,7 +13,7 @@ permissions:
 # units, and `next build` compiles. They exist because prisma.config.ts
 # resolves DATABASE_URL eagerly and fails the install step without it.
 env:
-  DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+  DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/ci
   BETTER_AUTH_SECRET: ci-placeholder-secret-not-used-for-any-real-session
   BETTER_AUTH_URL: http://localhost:3000
 

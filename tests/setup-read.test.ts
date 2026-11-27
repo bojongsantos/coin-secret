@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { setTimeout as delay } from "node:timers/promises";
-import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createPool } from "mariadb";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "@/generated/prisma/client";
 import ts from "typescript";
 
@@ -31,22 +31,23 @@ function fixture(wait: typeof delay = (async () => undefined) as typeof delay, n
   return { read: exports.readSetupRows!, diagnostics, waits };
 }
 
-test("installed PrismaPg connection failures retry one fresh SELECT and preserve empty success", async () => {
+test("installed PrismaMariaDb connection failures retry one fresh SELECT and preserve empty success", async () => {
   for (const [error, category] of [
-    [new Error("Connection terminated due to connection timeout"), "connect-timeout"],
-    [new Error("timeout exceeded when trying to connect"), "pool-timeout"],
-    [new Error("Connection terminated unexpectedly"), "connection-lost"],
-    [new Error("Query read timeout"), "response-timeout"],
+    [Object.assign(new Error("connection timed out"), { errno: 45012, sqlState: "HY000", sqlMessage: "connection timed out" }), "connect-timeout"],
+    [Object.assign(new Error("checkout timed out"), { errno: 45028, sqlState: "HY000", sqlMessage: "checkout timed out" }), "pool-timeout"],
+    [Object.assign(new Error("connection closed"), { errno: 45013, sqlState: "HY000", sqlMessage: "connection closed" }), "connection-lost"],
+    [Object.assign(new Error("socket timeout"), { errno: 45026, sqlState: "HY000", sqlMessage: "socket timeout" }), "response-timeout"],
     [Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }), "connection-lost"],
   ]) {
     const f = fixture();
-    const pool = new Pool();
+    const pool = createPool({ minimumIdle: 0 });
+    pool.query = (async () => [["11.8.9-MariaDB"]]) as typeof pool.query;
     let queries = 0;
-    pool.query = (async () => {
+    pool.execute = (async () => {
       if (++queries === 1) throw error;
-      return { rows: [], fields: [], rowCount: 0, command: "SELECT", oid: 0 };
-    }) as typeof pool.query;
-    const client = new PrismaClient({ adapter: new PrismaPg(pool) });
+      return [];
+    }) as typeof pool.execute;
+    const client = new PrismaClient({ adapter: new PrismaMariaDb(pool) });
     try {
       const result = await f.read("active", () => client.trackedSetup.findMany({ take: 1 }));
       assert.deepEqual(result, []);
@@ -79,25 +80,26 @@ test("exhausted connection reads are unavailable rather than empty, with sanitiz
   assert.equal((f.diagnostics[1][1] as { attemptElapsedMs: number }).attemptElapsedMs, 10_000);
 });
 
-test("installed PrismaPg server errors retain specific safe categories without broadening retries", async () => {
+test("installed PrismaMariaDb server errors retain specific safe categories without broadening retries", async () => {
   for (const [code, message, category] of [
-    ["57014", "canceling statement due to statement timeout", "statement-timeout"],
-    ["57014", "canceling statement due to user request", "query-cancelled"],
-    ["55P03", "canceling statement due to lock timeout", "lock-timeout"],
-    ["55P03", "could not obtain lock on relation", "lock-unavailable"],
-    ["53300", "too many clients already", "connection-capacity"],
-    ["08006", "connection failure", "connection-lost"],
+    [1969, "Query execution was interrupted (max_statement_time exceeded)", "statement-timeout"],
+    [1317, "Query execution was interrupted", "query-cancelled"],
+    [1205, "Lock wait timeout exceeded", "lock-timeout"],
+    [3572, "Statement aborted because lock could not be acquired with NOWAIT", "lock-unavailable"],
+    [1040, "Too many connections", "connection-capacity"],
+    [1213, "Deadlock found", "query-error"],
   ]) {
     let elapsed = 0;
     const f = fixture(undefined, () => elapsed);
-    const pool = new Pool();
+    const pool = createPool({ minimumIdle: 0 });
+    pool.query = (async () => [["11.8.9-MariaDB"]]) as typeof pool.query;
     let queries = 0;
-    pool.query = (async () => {
+    pool.execute = (async () => {
       queries += 1;
       elapsed += 15_000;
-      throw Object.assign(new Error(`${message} private-query-canary private-secret-canary`), { code, severity: "ERROR" });
-    }) as typeof pool.query;
-    const client = new PrismaClient({ adapter: new PrismaPg(pool) });
+      throw Object.assign(new Error(`${message} private-query-canary private-secret-canary`), { errno: code, sqlState: "HY000", sqlMessage: message });
+    }) as typeof pool.execute;
+    const client = new PrismaClient({ adapter: new PrismaMariaDb(pool) });
     try {
       await assert.rejects(f.read("active", () => client.trackedSetup.findMany({ take: 1 })), {
         status: 503, code: "SETUP_STORE_UNAVAILABLE",
@@ -117,21 +119,22 @@ test("installed PrismaPg server errors retain specific safe categories without b
   }
 });
 
-test("installed PrismaPg socket causes remain observable even when the outer code is generic", async () => {
+test("installed PrismaMariaDb socket causes remain observable without leaking exception values", async () => {
   for (const [code, category, attempts] of [
-    ["ETIMEDOUT", "socket-timeout", 1],
-    ["ECONNREFUSED", "connection-unreachable", 2],
+    ["ETIMEDOUT", "connection-lost", 2],
+    ["ECONNREFUSED", "connection-lost", 2],
     ["ECONNRESET", "connection-lost", 2],
     ["CERT_HAS_EXPIRED", "tls-connection", 1],
   ] as const) {
     const f = fixture();
-    const pool = new Pool();
+    const pool = createPool({ minimumIdle: 0 });
+    pool.query = (async () => [["11.8.9-MariaDB"]]) as typeof pool.query;
     let queries = 0;
-    pool.query = (async () => {
+    pool.execute = (async () => {
       queries += 1;
       throw Object.assign(new Error("private-query-canary private-host-canary"), { code, syscall: "connect", errno: -1 });
-    }) as typeof pool.query;
-    const client = new PrismaClient({ adapter: new PrismaPg(pool) });
+    }) as typeof pool.execute;
+    const client = new PrismaClient({ adapter: new PrismaMariaDb(pool) });
     try {
       await assert.rejects(f.read("snapshot", () => client.trackedSetup.findMany({ take: 1 })), { status: 503 });
       assert.equal(queries, attempts, "diagnosis must preserve the existing retry policy");

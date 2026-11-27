@@ -44,7 +44,7 @@ Aturan wajib:
 - Perencanaan histori chart dan kebijakan failover provider: `core/application/market-data`.
 - Adapter bursa dan agregasi market context: `infrastructure/market-data`.
 - Sweep penangkapan hasil setup terjadwal: `infrastructure/monitoring`.
-- PostgreSQL/Prisma: `infrastructure/database` dan `prisma/`.
+- MariaDB/MySQL dan Prisma: `infrastructure/database` dan `prisma/`.
 - Auth/session: `infrastructure/auth`.
 - Payment gateway: port di `core/application/ports`, adapter di `infrastructure/billing`.
 - localStorage hanya untuk snapshot setup chart yang bersifat perangkat-lokal.

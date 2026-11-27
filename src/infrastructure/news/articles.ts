@@ -39,7 +39,7 @@ export async function articleList(query: ArticleQuery, admin = false, status?: A
   const where: Prisma.NewsArticleWhereInput = {
     ...(admin ? (status ? { status } : {}) : { status: "PUBLISHED", publishedAt: { lte: new Date() } }),
     ...(query.category ? { category: query.category } : {}),
-    ...(query.q ? { OR: [{ title: { contains: query.q, mode: "insensitive" } }, { summary: { contains: query.q, mode: "insensitive" } }] } : {}),
+    ...(query.q ? { OR: [{ title: { contains: query.q } }, { summary: { contains: query.q } }] } : {}),
   };
   const size = admin ? 20 : 12;
   const rows = await prisma.newsArticle.findMany({ where, orderBy: admin ? [{ updatedAt: "desc" }, { id: "desc" }] : [{ publishedAt: "desc" }, { id: "desc" }],

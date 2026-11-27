@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import type { SignalsSnapshotPort } from "@/core/application/ports/signals-snapshot-port";
 import type { ActiveSetup, ActiveSetupPort } from "@/core/application/ports/active-setup-port";
+import * as transactionLocks from "@/infrastructure/database/transaction-lock";
 
 function deferred() {
   let resolve!: () => void;
@@ -12,7 +13,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function fixture() {
+function fixture(missingRow = false) {
   type Transaction = { open: boolean; held: boolean; $queryRaw: (sql: TemplateStringsArray) => Promise<Array<{ acquired: boolean }>> };
   let owner: Transaction | undefined;
   const transactions: Transaction[] = [];
@@ -31,7 +32,8 @@ function fixture() {
       options.push(limits);
       const transaction: Transaction = { open: true, held: false, $queryRaw: async (sql) => {
         lockQueries.push(sql.join("$"));
-        if (owner) return [{ acquired: false }];
+        if (missingRow) return [];
+        if (owner) throw { code: "1205" };
         owner = transaction;
         transaction.held = true;
         return [{ acquired: true }];
@@ -58,6 +60,7 @@ function fixture() {
       if (name === "server-only") return {};
       if (name === "@/infrastructure/database/prisma") return { signalsWritePrisma: database };
       if (name === "@/infrastructure/database/setup-read") return { readSetupRows: async () => { throw new Error("unexpected standalone read"); } };
+      if (name === "@/infrastructure/database/transaction-lock") return transactionLocks;
       if (name === "@/infrastructure/persistence/active-setup-store") return {
         clearSetupReadCache: () => {},
         createActiveSetupStore: (transaction: Transaction, transactional: boolean): ActiveSetupPort => {
@@ -84,7 +87,7 @@ function setup(status = "Running"): ActiveSetup {
     zoneTop: 100, zoneBottom: 95, zoneBaseTime: 1000, status };
 }
 
-test("native transaction advisory locking makes a competing refresh busy and holds ownership through commit", async () => {
+test("native transaction row locking makes a competing refresh busy and holds ownership through commit", async () => {
   const f = fixture();
   const gate = deferred();
   const first = f.store.coordinateRefresh!(async (active) => {
@@ -106,7 +109,26 @@ test("native transaction advisory locking makes a competing refresh busy and hol
   assert.equal(f.writes.length, 1);
   assert.equal(f.options[0].maxWait, 10_000);
   assert.equal(f.options[0].timeout, 65_000);
-  assert.ok(f.lockQueries.every((query) => query.includes("pg_try_advisory_xact_lock(98321401, 1)")));
+  assert.ok(f.lockQueries.every((query) => query.includes("FOR UPDATE NOWAIT") && query.includes("CoordinationLock")));
+});
+
+test("a missing coordination row fails closed before scan writes", async () => {
+  const f = fixture(true);
+  let ran = false;
+  await assert.rejects(f.store.coordinateRefresh!(async () => { ran = true; }), /coordination row is missing/);
+  assert.equal(ran, false);
+  assert.ok(f.events.includes("rollback"));
+});
+
+test("only native lock conflicts qualify as a busy refresh", () => {
+  for (const code of [1205, "1205", 3572, "3572", "ER_LOCK_WAIT_TIMEOUT", "ER_LOCK_NOWAIT"]) {
+    assert.equal(transactionLocks.isMariaDbLockBusy({ code }), true);
+  }
+  assert.equal(transactionLocks.isMariaDbLockBusy({ code: "P2010", meta: { code: "1205" } }), true);
+  assert.equal(transactionLocks.isMariaDbLockBusy({ meta: { driverAdapterError: { cause: { originalCode: "3572" } } } }), true);
+  for (const error of [null, { code: "P2034" }, { code: "P2002" }, { code: "ECONNRESET" }, { code: "HY000" }, new Error("timeout")]) {
+    assert.equal(transactionLocks.isMariaDbLockBusy(error), false);
+  }
 });
 
 test("a disconnected owner cannot resume writes after a new transaction acquires refresh ownership", async () => {

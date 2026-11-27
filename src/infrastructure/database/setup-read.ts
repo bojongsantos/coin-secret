@@ -5,18 +5,30 @@ import { HttpError } from "@/shared/server/http";
 
 type SetupRead = "active" | "retired" | "snapshot";
 
+function nativeError(error: unknown): { code: unknown; message: string; kind: unknown; name: unknown } {
+  if (typeof error !== "object" || error === null) return { code: undefined, message: "", kind: undefined, name: undefined };
+  const details = error as { code?: unknown; errno?: unknown; message?: unknown; name?: unknown;
+    meta?: { driverAdapterError?: { cause?: { kind?: unknown; originalCode?: unknown; originalMessage?: unknown } } } };
+  const cause = details.meta?.driverAdapterError?.cause;
+  return {
+    code: cause?.originalCode ?? details.errno ?? details.code,
+    message: typeof cause?.originalMessage === "string" ? cause.originalMessage : typeof details.message === "string" ? details.message : "",
+    kind: cause?.kind,
+    name: details.name,
+  };
+}
+
 function connectionFailure(error: unknown): string | null {
-  if (typeof error !== "object" || error === null) return null;
-  const code = "code" in error ? error.code : undefined;
+  const { code, message } = nativeError(error);
+  if (["45012", "ER_CONNECTION_TIMEOUT"].includes(String(code))) return "connect-timeout";
+  if (["45028", "ER_GET_CONNECTION_TIMEOUT"].includes(String(code))) return "pool-timeout";
+  if (["45026", "ER_SOCKET_TIMEOUT"].includes(String(code))) return "response-timeout";
+  if (["45001", "45004", "45009", "45013", "2006", "2013", "1053"].includes(String(code))) return "connection-lost";
   if (["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "08000", "08001", "08003", "08006", "57P01", "P1001", "P1017"].includes(String(code))) {
     return "connection-lost";
   }
-  // Native pg connect/checkout errors have no code, including when Prisma
-  // preserves them. Match only known driver text, never arbitrary timeouts.
+  // Retain exact legacy connection messages during the database cutover.
   if (code !== undefined) return null;
-  const message = "message" in error && typeof error.message === "string" ? error.message : "";
-  // Only the isolated SELECT pool has this timeout. pg-pool removes the failed
-  // connection before rejecting, so the one retry uses a fresh socket.
   if (message === "Query read timeout") return "response-timeout";
   if (message.includes("Connection terminated due to connection timeout")) return "connect-timeout";
   if (message.includes("timeout exceeded when trying to connect")) return "pool-timeout";
@@ -27,27 +39,22 @@ function connectionFailure(error: unknown): string | null {
 }
 
 function failureCategory(error: unknown): string {
-  if (typeof error !== "object" || error === null) return "query-error";
-  // PrismaPg preserves server SQLSTATE in this adapter-specific cause. Read
-  // only known fields; neither the cause nor its message is emitted to logs.
-  const details = error as {
-    code?: unknown; message?: unknown; name?: unknown;
-    meta?: { driverAdapterError?: { cause?: { kind?: unknown; originalCode?: unknown; originalMessage?: unknown } } };
-  };
-  const cause = details.meta?.driverAdapterError?.cause;
-  if (cause?.kind === "SocketTimeout") return "socket-timeout";
-  if (cause?.kind === "DatabaseNotReachable") return "connection-unreachable";
-  if (cause?.kind === "TlsConnectionError") return "tls-connection";
-  const code = cause?.originalCode ?? details.code;
-  const message = typeof cause?.originalMessage === "string" ? cause.originalMessage
-    : typeof details.message === "string" ? details.message : "";
-  const connection = connectionFailure({ code, message });
+  const { code, message, kind, name } = nativeError(error);
+  if (kind === "SocketTimeout") return "socket-timeout";
+  if (kind === "DatabaseNotReachable") return "connection-unreachable";
+  if (kind === "TlsConnectionError" || ["45008", "45023", "CERT_HAS_EXPIRED", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN", "ERR_TLS_CERT_ALTNAME_INVALID"].includes(String(code))) return "tls-connection";
+  const connection = connectionFailure(error);
   if (connection) return connection;
+  if (String(code) === "1969") return "statement-timeout";
+  if (String(code) === "1317") return "query-cancelled";
+  if (String(code) === "1205") return "lock-timeout";
+  if (String(code) === "3572") return "lock-unavailable";
+  if (["1040", "1203"].includes(String(code))) return "connection-capacity";
   if (code === "57014") return message.includes("canceling statement due to statement timeout") ? "statement-timeout" : "query-cancelled";
   if (code === "55P03") return message.includes("canceling statement due to lock timeout") ? "lock-timeout" : "lock-unavailable";
   if (code === "53300" || code === "P2037") return "connection-capacity";
-  if (details.name === "TimeoutError") return "read-deadline";
-  if (details.name === "AbortError") return "read-aborted";
+  if (name === "TimeoutError") return "read-deadline";
+  if (name === "AbortError") return "read-aborted";
   return "query-error";
 }
 

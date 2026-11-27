@@ -166,7 +166,7 @@ async function captureEntries(now: Date, report: SetupCaptureReport): Promise<nu
       snapshots: { none: { kind: "ENTRY" } },
       OR: eligibleCheck(now),
     },
-    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
+    orderBy: [{ resultCheckedAt: "asc" }, { id: "asc" }],
     take: MAX_ENTRY_CANDIDATES,
   });
   if (candidates.length === 0) return 0;
@@ -301,7 +301,7 @@ async function resolveResults(now: Date): Promise<number> {
     },
     // Nulls first: a setup never checked before takes priority over one
     // checked an hour ago.
-    orderBy: [{ resultCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
+    orderBy: [{ resultCheckedAt: "asc" }, { id: "asc" }],
     take: MAX_RESULT_CHECKS_PER_RUN,
   });
   if (pending.length === 0) return 0;

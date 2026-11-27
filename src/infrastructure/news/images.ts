@@ -1,6 +1,7 @@
 import "server-only";
 import { NEWS_IMAGE_STORAGE_BYTES, NEWS_IMAGE_TYPES, newsImagePath, validNewsImageId } from "@/core/domain/news/image";
 import { prisma } from "@/infrastructure/database/prisma";
+import { lockTransaction } from "@/infrastructure/database/transaction-lock";
 import { getCurrentUser } from "@/infrastructure/auth/current-user";
 import { HttpError } from "@/shared/server/http";
 import { optimizeNewsImage, readNewsImageBody } from "./image-processing";
@@ -11,7 +12,7 @@ export async function uploadNewsImage(actorId: string, request: Request) {
   const image = await optimizeNewsImage(await readNewsImageBody(request), contentType);
   const row = await prisma.$transaction(async (tx) => {
     // Serialize quota checks across processes, without touching market scanner locks.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(98321402, 1)`;
+    await lockTransaction(tx, "news.images.upload", "bounded");
     const actor = await tx.user.findUnique({ where: { id: actorId }, select: { role: true, emailVerified: true } });
     if (actor?.role !== "ADMIN" || !actor.emailVerified) throw new HttpError(403, "Admin access required.", "FORBIDDEN");
     const usage = await tx.newsImage.aggregate({ _sum: { bytes: true } });

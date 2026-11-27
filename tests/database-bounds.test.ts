@@ -1,95 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
-import { runInNewContext } from "node:vm";
-import { Client, Pool, type PoolConfig } from "pg";
-import ts from "typescript";
+import { databaseAdapterOptions, databaseConnectionString } from "@/infrastructure/database/adapter";
 
-function adapterConfig(mode: "app" | "read" | "write" = "app"): PoolConfig {
-  const configs: PoolConfig[] = [];
-  const dependencies: Record<string, unknown> = {
-    "server-only": {},
-    "@prisma/adapter-pg": { PrismaPg: class { constructor(value: PoolConfig) { configs.push(value); } } },
-    "@/generated/prisma/client": { PrismaClient: class {} },
-  };
-  runInNewContext(ts.transpileModule(readFileSync("src/infrastructure/database/prisma.ts", "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText, {
-    exports: {}, process: { env: { DATABASE_URL: "postgresql://test-user:test-password@127.0.0.1/test-database", NODE_ENV: "production" } },
-    require: (name: string) => dependencies[name] ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
-  });
-  const config = configs[["app", "read", "write"].indexOf(mode)];
-  assert.ok(config, "standalone market reads must have their own native adapter");
-  return config;
-}
+const local = "mysql://test-user:test-password@127.0.0.1:3306/test-database";
 
-test("standalone market reads have a native response deadline isolated from write transactions", () => {
-  assert.equal(adapterConfig("read").query_timeout, 10_000);
-  const client = new Client(adapterConfig("read")) as unknown as { getStartupConf(): Record<string, unknown> };
-  assert.equal(client.getStartupConf().options, "-c default_transaction_read_only=on");
-  assert.equal(adapterConfig().query_timeout, undefined);
+test("a staged MySQL connection takes precedence without changing the rollback connection", () => {
+  const original = "postgresql://legacy@localhost/legacy";
+  const environment = { DATABASE_URL: original, MYSQL_DATABASE_URL: local };
+  assert.equal(databaseConnectionString(environment), local);
+  assert.equal(environment.DATABASE_URL, original);
+  assert.equal(databaseConnectionString({ DATABASE_URL: local }), local);
+  assert.throws(() => databaseConnectionString({}));
 });
 
-test("a scan writer uses a fresh connection and PostgreSQL closes an abandoned idle transaction", () => {
-  const config = adapterConfig("write");
-  assert.equal(config.maxUses, 1);
-  assert.equal(config.query_timeout, undefined);
-  const client = new Client(config) as unknown as { getStartupConf(): Record<string, unknown> };
-  assert.equal(client.getStartupConf().idle_in_transaction_session_timeout, "45000");
-  assert.equal(adapterConfig().maxUses, undefined);
+test("MariaDB pool options bound actual connect, checkout, statements and lock waits", () => {
+  const options = databaseAdapterOptions(local);
+  assert.equal(options.connectTimeout, 10_000);
+  assert.equal(options.acquireTimeout, 10_000);
+  assert.equal(options.connectionLimit, 5);
+  assert.equal(options.timezone, "Z");
+  assert.deepEqual(options.initSql, ["SET SESSION max_statement_time=15", "SET SESSION innodb_lock_wait_timeout=5"]);
+  assert.equal(options.queryTimeout, undefined, "server cancellation owns write deadlines");
+  assert.equal(options.socketTimeout, undefined);
 });
 
-test("database wait limits reach native pg startup parameters without replacing server cancellation with a promise race", () => {
-  const config = adapterConfig();
-  assert.equal(config.connectionTimeoutMillis, 10_000);
-  const client = new Client(config) as unknown as { getStartupConf(): Record<string, unknown> };
-  const startup = client.getStartupConf();
-  assert.equal(startup.statement_timeout, "15000");
-  assert.equal(startup.lock_timeout, "5000");
-  assert.equal(config.query_timeout, undefined, "a client callback timeout alone does not cancel an already-sent write");
+test("market SELECTs use a separate server-enforced read-only pool", () => {
+  const options = databaseAdapterOptions(local, "market-read");
+  assert.equal(options.connectionLimit, 2);
+  assert.equal(options.socketTimeout, 20_000);
+  assert.ok(Array.isArray(options.initSql));
+  assert.ok(options.initSql.includes("SET SESSION TRANSACTION READ ONLY"));
+  assert.equal(options.resetAfterUse, true, "native reset reapplies initialization SQL before connection reuse");
 });
 
-test("the installed pg pool terminates a stalled connection at the configured native deadline", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  let destroyed = false;
-  class StalledClient extends EventEmitter {
-    callback?: (error?: Error) => void;
-    connection = { stream: { destroy: () => { destroyed = true; this.callback?.(new Error("socket closed")); } } };
-    connect(callback: (error?: Error) => void) { this.callback = callback; }
-    end() { this.emit("end"); }
-  }
-  const pool = new Pool({ ...adapterConfig(), Client: StalledClient } as unknown as PoolConfig);
-  let settled = false;
-  const pending = pool.connect();
-  pending.then(() => { settled = true; }, () => { settled = true; });
-  t.mock.timers.tick(9_999);
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.equal(settled, false);
-  t.mock.timers.tick(1);
-  await assert.rejects(pending, /connection timeout/);
-  assert.equal(destroyed, true, "the actual stalled socket is closed, not abandoned in a background promise");
-  assert.equal(pool.totalCount, 0);
-  await pool.end();
+test("scan transactions retain server idle cancellation and their own small pool", () => {
+  const options = databaseAdapterOptions(local, "signals-write");
+  assert.equal(options.connectionLimit, 2);
+  assert.ok(Array.isArray(options.initSql));
+  assert.ok(options.initSql.includes("SET SESSION idle_transaction_timeout=45"));
+  assert.equal(options.socketTimeout, undefined);
 });
 
-test("the installed pg pool removes a waiting checkout when all clients remain busy", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  class ReadyClient extends EventEmitter {
-    _queryable = true;
-    connect(callback: (error?: Error) => void) { callback(); }
-    end(callback?: () => void) { this.emit("end"); callback?.(); }
-    ref() {}
-    unref() {}
-  }
-  const pool = new Pool({ ...adapterConfig(), max: 1, Client: ReadyClient } as unknown as PoolConfig);
-  const held = await pool.connect();
-  const waiting = pool.connect();
-  waiting.catch(() => {});
-  assert.equal(pool.waitingCount, 1);
-  t.mock.timers.tick(10_000);
-  await assert.rejects(waiting, /timeout exceeded when trying to connect/);
-  assert.equal(pool.waitingCount, 0, "a timed-out request must not remain queued and consume a future client");
-  held.release();
-  await pool.end();
+test("remote database connections validate TLS and credentials never enter SQL", () => {
+  const options = databaseAdapterOptions("mysql://user:p%40ss%3Aword@srv.example.com:3307/data");
+  assert.equal(options.password, "p@ss:word");
+  assert.equal(options.port, 3307);
+  assert.deepEqual(options.ssl, { rejectUnauthorized: true });
+  assert.doesNotMatch(JSON.stringify(options.initSql), /user|p@ss/);
+  assert.equal(databaseAdapterOptions(local).ssl, undefined);
+  assert.throws(() => databaseAdapterOptions("postgresql://user:secret@127.0.0.1/data"), /MySQL/);
 });

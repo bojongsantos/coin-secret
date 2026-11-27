@@ -135,7 +135,10 @@ function configuredAuth(sent: { email: string; html: string }[], throttle: (emai
   return load("src/infrastructure/auth/auth.ts", {
     "server-only": {}, "better-auth": { betterAuth: (options: unknown) => options },
     "better-auth/api": { APIError, createAuthMiddleware }, zod,
-    "better-auth/adapters/prisma": { prismaAdapter: () => undefined }, "better-auth/plugins": { emailOTP },
+    "better-auth/adapters/prisma": { prismaAdapter: (_client: unknown, options: { provider: string }) => {
+      assert.equal(options.provider, "mysql", "authentication must use the target database dialect");
+      return undefined;
+    } }, "better-auth/plugins": { emailOTP },
     "@/infrastructure/database/prisma": { prisma: {} },
     "@/infrastructure/email/email-service": { sendTransactionalEmail: async (mail: { email: string; html: string }) => sent.push(mail) },
     "@/infrastructure/auth/local-addresses": { localIPv4Addresses: () => [] },

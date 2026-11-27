@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 enum UserRole {
@@ -42,10 +42,10 @@ enum SetupCaptureKind {
 
 model User {
   id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
+  name          String   @db.Text
+  email         String   @unique @db.VarChar(254)
   emailVerified Boolean  @default(false)
-  image         String?
+  image         String?  @db.LongText
   role          UserRole @default(USER)
   plan          Plan     @default(FREE)
   createdAt     DateTime @default(now())
@@ -67,7 +67,7 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   ipAddress String?
-  userAgent String?
+  userAgent String?  @db.Text
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -80,13 +80,13 @@ model Account {
   accountId             String
   providerId            String
   userId                String
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
+  accessToken           String?   @db.LongText
+  refreshToken          String?   @db.LongText
+  idToken               String?   @db.LongText
   accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
+  scope                 String?   @db.Text
+  password              String?   @db.Text
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -97,8 +97,8 @@ model Account {
 
 model Verification {
   id         String   @id @default(cuid())
-  identifier String
-  value      String
+  identifier String   @db.VarChar(320)
+  value      String   @db.LongText
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -140,9 +140,9 @@ model Payment {
   /// while an order is still open.
   planPeriod            String        @default("monthly")
   status                PaymentStatus @default(PENDING)
-  checkoutToken         String?
-  checkoutUrl           String?
-  rawStatus             String?
+  checkoutToken         String?       @db.Text
+  checkoutUrl           String?       @db.Text
+  rawStatus             String?       @db.Text
   paidAt                DateTime?
   /// Exact credited interval. Refunds remove only this payment's unused time.
   /// Null on legacy/manual grants; never infer a historical entitlement.
@@ -266,16 +266,16 @@ enum NewsArticleStatus {
 model NewsArticle {
   id             String @id @default(cuid())
   slug           String @unique
-  title          String
-  summary        String @default("")
-  body           String @default("")
-  category       String @default("News")
-  coverUrl       String @default("")
-  coverAlt       String @default("")
-  seoTitle       String @default("")
-  seoDescription String @default("")
+  title          String @db.VarChar(180)
+  summary        String @default("") @db.VarChar(500)
+  body           String @default("") @db.LongText
+  category       String @default("News") @db.VarChar(60)
+  coverUrl       String @default("") @db.VarChar(2000)
+  coverAlt       String @default("") @db.VarChar(180)
+  seoTitle       String @default("") @db.VarChar(70)
+  seoDescription String @default("") @db.VarChar(180)
   status         NewsArticleStatus @default(DRAFT)
-  authorName     String
+  authorName     String @db.Text
   authorId       String?
   author         User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
   publishedAt    DateTime?
@@ -303,9 +303,13 @@ model AuditLog {
 
 model NewsImage {
   id        String   @id @default(uuid())
-  data      Bytes
+  data      Bytes    @db.LongBlob
   width     Int
   height    Int
   bytes     Int
   createdAt DateTime @default(now())
+}
+
+model CoordinationLock {
+  key String @id @db.VarChar(100)
 }

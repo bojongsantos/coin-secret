@@ -1,11 +1,11 @@
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createDatabaseAdapter } from "../src/infrastructure/database/adapter";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const targets = ["free@coinsecret.local", "premium@coinsecret.local", "free@chartsense.local"];
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.MYSQL_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL required.");
-const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const db = new PrismaClient({ adapter: createDatabaseAdapter(connectionString) });
 
 async function main() {
   await db.$transaction(async (tx) => {

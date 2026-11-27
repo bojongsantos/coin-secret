@@ -1,9 +1,9 @@
 import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createDatabaseAdapter } from "../src/infrastructure/database/adapter";
 import { PrismaClient, type Plan, type UserRole } from "../src/generated/prisma/client";
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.MYSQL_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL wajib untuk seed.");
 if (process.env.NODE_ENV === "production") {
   throw new Error("Seed demo tidak boleh dijalankan pada production.");
@@ -11,7 +11,7 @@ if (process.env.NODE_ENV === "production") {
 if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(connectionString).hostname)) {
   throw new Error("Demo seed requires a local database. Remote databases are never seeded with demo credentials.");
 }
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const prisma = new PrismaClient({ adapter: createDatabaseAdapter(connectionString) });
 
 function required(name: "SEED_USER_PASSWORD" | "SEED_ADMIN_PASSWORD"): string {
   const value = process.env[name];

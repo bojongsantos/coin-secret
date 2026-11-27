@@ -40,7 +40,7 @@ export const auth = betterAuth({
     development,
     lanAddresses: development ? localIPv4Addresses() : [],
   }),
-  database: prismaAdapter(prisma, { provider: "postgresql" }),
+  database: prismaAdapter(prisma, { provider: "mysql" }),
   databaseHooks: {
     user: { create: { after: async (user) => initializeRegistrationTrial(user.id) } },
   },

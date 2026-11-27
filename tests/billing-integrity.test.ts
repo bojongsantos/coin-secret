@@ -414,6 +414,7 @@ test("sandbox cannot use production mode, a remote database or production keys",
     }, { process: { env } }).getBillingGateway as (provider: string) => Gateway)("nowpayments-sandbox");
   }
   const keys = { NOWPAYMENTS_SANDBOX_API_KEY: "dummy-sandbox", NOWPAYMENTS_SANDBOX_IPN_SECRET: "dummy-ipn", BETTER_AUTH_URL: "https://dev.example.test/" };
+  assert.throws(() => gateway({ ...keys, NODE_ENV: "development", DATABASE_URL: "mysql://localhost/coinsecret_test", MYSQL_DATABASE_URL: "mysql://remote.test/coinsecret" }), /database lokal terpisah/);
   assert.throws(() => gateway({ ...keys, NODE_ENV: "production", DATABASE_URL: "postgresql://localhost/coinsecret_sandbox" }), /database lokal terpisah/);
   assert.throws(() => gateway({ ...keys, NODE_ENV: "development", DATABASE_URL: "postgresql://remote.test/coinsecret_sandbox" }), /database lokal terpisah/);
   assert.throws(() => gateway({ ...keys, NODE_ENV: "development", DATABASE_URL: "postgresql://localhost/coinsecret" }), /database lokal terpisah/);

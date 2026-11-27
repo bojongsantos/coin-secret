@@ -101,6 +101,7 @@ interface EntryRecord {
  * every run.
  */
 export async function runSetupCapture(): Promise<SetupCaptureReport> {
+  if (process.env.COINSECRET_MIGRATION_PAUSED === "1") throw new Error("Setup capture paused for database migration");
   const report: SetupCaptureReport = {
     scanned: 0,
     tracked: 0,

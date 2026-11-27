@@ -188,7 +188,7 @@ function captureService(options: {
   runInNewContext(ts.transpileModule(readFileSync("src/infrastructure/monitoring/setup-capture-service.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, {
-    exports, Date, AbortSignal,
+    exports, Date, AbortSignal, process: { env: {} },
     require: (name: string) => {
       if (name === "server-only") return {};
       if (name.endsWith("/default-watchlist")) return { DEFAULT_WATCHLIST: [] };

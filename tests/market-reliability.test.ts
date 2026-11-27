@@ -16,7 +16,7 @@ function load(path: string, globals: Record<string, unknown>, dependencies: Reco
   runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, {
-    exports, Response, Date, Error, DOMException, AbortSignal, AbortController, performance, setTimeout, clearTimeout,
+    exports, Response, Date, Error, DOMException, AbortSignal, AbortController, performance, setTimeout, clearTimeout, process: { env: {} },
     require: (name: string) => name === "server-only" ? {} : dependencies[name] ?? (name === "@/core/domain/analysis/setup-signature" ? signatures : undefined) ?? (() => { throw new Error(`Unexpected import ${name}`); })(),
     ...globals,
   });

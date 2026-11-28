@@ -222,6 +222,7 @@ export function ChartPanel({
   const priceLineRef = useRef<IPriceLine[]>([]);
   const fittedKeyRef = useRef<string | null>(null);
   const pendingFitKeyRef = useRef<string | null>(null);
+  const followLiveRef = useRef(false);
   const visibleRangeRef = useRef<{ from: number; to: number } | null>(null);
   const historyRequestArmedRef = useRef(true);
   const loadMoreHistoryRef = useRef(onLoadMoreHistory);
@@ -436,6 +437,7 @@ export function ChartPanel({
 
     const key = `${symbol}|${timeframe}|${range}`;
     const isNewView = key !== fittedKeyRef.current;
+    followLiveRef.current = false;
 
     // Keep the user's scroll position across live updates. Only re-fit when the
     // symbol or timeframe changes; otherwise restore the saved visible range —
@@ -461,26 +463,16 @@ export function ChartPanel({
       pendingFitKeyRef.current = key;
       fittedKeyRef.current = key;
 
-      // Center the price scale vertically on the recent price action so the
-      // current price / entry zone is visible without scrolling up or down.
-      const window = data.candles.slice(-40);
-      if (window.length > 0) {
-        let hi = -Infinity;
-        let lo = Infinity;
-        for (const c of window) {
-          if (c.high > hi) hi = c.high;
-          if (c.low < lo) lo = c.low;
-        }
-        const pad = (hi - lo) * 0.15 || hi * 0.01;
-        chart.priceScale("right").setVisibleRange({ from: lo - pad, to: hi + pad });
-      }
+      // A fixed recent-price range hides historical candles when panning.
+      // Reset it only for a new view, preserving deliberate vertical zooms.
+      chart.priceScale("right").applyOptions({ autoScale: true });
       return;
     }
 
     if (!savedRange) return;
     const atRightEdge = savedRange.to >= prevLen - 1 - 0.5;
     if (atRightEdge && data.candles.length > prevLen) {
-      chart.timeScale().scrollToRealTime();
+      followLiveRef.current = true;
     } else {
       chart.timeScale().setVisibleLogicalRange({
         from: savedRange.from + prependedBars,
@@ -492,6 +484,7 @@ export function ChartPanel({
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
+    const overlayRange = chart.timeScale().getVisibleLogicalRange();
     for (const s of patternSeriesRef.current) chart.removeSeries(s);
     patternSeriesRef.current = [];
     if (zoneLabelPrimitiveRef.current) {
@@ -614,6 +607,13 @@ export function ChartPanel({
       const visibleLen = Math.round(chart.timeScale().width() / chart.options().timeScale.barSpacing);
       const from = Math.max(0, lastIdx - Math.round(visibleLen * 0.82));
       chart.timeScale().setVisibleLogicalRange({ from, to: lastIdx + ZONE_EXTEND_BARS });
+    } else if (followLiveRef.current) {
+      followLiveRef.current = false;
+      // Start the animation after overlay mutations, which can cancel it.
+      chart.timeScale().scrollToRealTime();
+    } else if (overlayRange) {
+      // Removing future zone points temporarily shifts the shared time scale.
+      chart.timeScale().setVisibleLogicalRange(overlayRange);
     }
   }, [data, pattern, timeframe]);
 
